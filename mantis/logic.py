@@ -64,13 +64,14 @@ def execute(manager, command, params=''):
             '--shell': 'shell',
             '--ssh': 'ssh',
             '--manage': 'manage',
+            '--exec': 'exec',
             '--psql': 'psql',
             '--pg-dump': 'pg_dump',
             '--pg-restore': 'pg_restore',
             '--send-test-email': 'send_test_email',
         }.get(command)
 
-        methods_with_params = ['build', 'ssh', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove']
+        methods_with_params = ['build', 'ssh', 'exec', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove']
 
         if manager_method is None or not hasattr(manager, manager_method):
             CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
@@ -91,6 +92,7 @@ def execute(manager, command, params=''):
                       '\n--manage | '
                       '\n--shell | '
                       '\n--ssh | '
+                      '\n--exec | '
                       '\n--psql | '
                       '\n--pg-dump | '
                       '\n--pg-restore | '

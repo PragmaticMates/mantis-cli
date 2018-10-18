@@ -395,6 +395,11 @@ class Mantis(object):
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
+    def exec(self, params):
+        container, command = params.split(' ', maxsplit=1)
+        CLI.info(f'Executing command "{command}" in container {container}...')
+        os.system(f'docker {self.docker_ssh} exec -it {container} {command}')
+
     def pg_dump(self):
         now = datetime.datetime.now()
         # filename = now.strftime("%Y%m%d%H%M%S")
