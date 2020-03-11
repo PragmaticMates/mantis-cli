@@ -7,7 +7,7 @@ setup(
     version='0.1.0',
     description='Management command to build and deploy webapps, especially based on Django',
     long_description=open('README.md').read(),
-    author='Pragmatic Mates',
+    author='Erik Telepovský',
     author_email='info@pragmaticmates.com',
     maintainer='Pragmatic Mates',
     maintainer_email='info@pragmaticmates.com',
@@ -15,6 +15,9 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[],
+    entry_points={
+        'console_scripts': ['mantis=mantis.command_line:main'],
+    },
     classifiers=[
         'Programming Language :: Python',
         'Programming Language :: Python :: 3.6',
