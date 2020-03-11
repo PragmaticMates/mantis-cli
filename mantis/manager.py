@@ -105,7 +105,7 @@ class Mantis(object):
         steps = 4
 
         CLI.step(1, steps, 'Stopping and removing Docker app container...')
-        
+
         for container in self.get_containers():
             if container == self.CONTAINER_APP:
                 os.popen(f'docker {self.docker_ssh} container stop {container}').read()
