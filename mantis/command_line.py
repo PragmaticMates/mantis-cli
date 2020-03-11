@@ -1,4 +1,6 @@
 #!/usr/bin/env python
-from mantis.logic import main as execute_from_command_line
+from mantis.logic import main
 
-execute_from_command_line()
+
+def run():
+    main()

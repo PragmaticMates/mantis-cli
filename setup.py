@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='mantis-cli',
-    version='0.2.0',
+    version='0.3.0',
     description='Management command to build and deploy webapps, especially based on Django',
     long_description=open('README.md').read(),
     author='Erik Telepovský',
@@ -16,7 +16,7 @@ setup(
     include_package_data=True,
     install_requires=[],
     entry_points={
-        'console_scripts': ['mantis=mantis.command_line:main'],
+        'console_scripts': ['mantis=mantis.command_line:run'],
     },
     classifiers=[
         'Programming Language :: Python',
