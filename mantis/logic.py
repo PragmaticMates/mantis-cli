@@ -1,5 +1,6 @@
 import sys
-from manager import CLI, Mantis
+
+from mantis.manager import CLI, Mantis
 
 
 def main():
