@@ -49,6 +49,8 @@ def execute(manager, command, params=''):
             '-d': 'deploy',
             '--stop': 'stop',
             '--start': 'start',
+            '--clean': 'clean',
+            '-c': 'clean',
             '--remove': 'remove',
             '--reload-webserver': 'reload_webserver',
             '--restart-proxy': 'restart_proxy',
@@ -74,6 +76,7 @@ def execute(manager, command, params=''):
                       '--start | '
                       '--restart/-r | '
                       '--remove | '
+                      '--clean/-c | '
                       '--status/-s | '
                       '--networks/-n | '
                       '--logs/-l | '

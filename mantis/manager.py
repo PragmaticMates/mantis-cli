@@ -180,6 +180,13 @@ class Mantis(object):
             CLI.step(index + 1, steps, f'Removing {container}')
             os.system(f'docker {self.docker_ssh} container rm {container}')
 
+    def clean(self):
+        CLI.info('Cleaning...')
+        steps = 1
+
+        CLI.step(1, steps, 'Prune Docker images and volumes')
+        os.system(f'docker {self.docker_ssh} system prune --volumes --force')
+
     def reload_webserver(self):
         CLI.info('Reloading webserver...')
         os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_NGINX} nginx -s reload')
