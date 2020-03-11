@@ -39,49 +39,50 @@ def execute(manager, command, params=''):
     elif manager.environment_id is None:
         CLI.error('Missing environment')
 
-    manager_method = {
-        '--upload': 'upload',
-        '-u': 'upload',
-        '--restart': 'restart',
-        '-r': 'restart',
-        '--deploy': 'deploy',
-        '-d': 'deploy',
-        '--stop': 'stop',
-        '--start': 'start',
-        '--remove': 'remove',
-        '--reload-webserver': 'reload_webserver',
-        '--restart-proxy': 'restart_proxy',
-        '--status': 'status',
-        '-s': 'status',
-        '--networks': 'networks',
-        '-n': 'networks',
-        '--logs': 'logs',
-        '-l': 'logs',
-        '--shell': 'shell',
-        '--ssh': 'ssh',
-        '--manage': 'manage',
-        '--psql': 'psql',
-        '--send-test-email': 'send_test_email',
-    }.get(command)
-
-    if not hasattr(manager, manager_method):
-        CLI.error(f'Invalid command "{command}" \n\nUsage: python deploy.py <ENVIRONMENT> '
-                  '--build/-b/--build-no-cache | '
-                  '--upload/-u | '
-                  '--deploy/-d | '
-                  '--stop | '
-                  '--start | '
-                  '--restart/-r | '
-                  '--remove | '
-                  '--status/-s | '
-                  '--networks/-n | '
-                  '--logs/-l | '
-                  '--reload-webserver | '
-                  '--restart-proxy | '
-                  '--manage | '
-                  '--shell | '
-                  '--ssh | '
-                  '--psql | '
-                  '--send-test-email')
     else:
-        getattr(manager, manager_method)(params) if manager_method in ['ssh', 'manage'] else getattr(manager, manager_method)()
+        manager_method = {
+            '--upload': 'upload',
+            '-u': 'upload',
+            '--restart': 'restart',
+            '-r': 'restart',
+            '--deploy': 'deploy',
+            '-d': 'deploy',
+            '--stop': 'stop',
+            '--start': 'start',
+            '--remove': 'remove',
+            '--reload-webserver': 'reload_webserver',
+            '--restart-proxy': 'restart_proxy',
+            '--status': 'status',
+            '-s': 'status',
+            '--networks': 'networks',
+            '-n': 'networks',
+            '--logs': 'logs',
+            '-l': 'logs',
+            '--shell': 'shell',
+            '--ssh': 'ssh',
+            '--manage': 'manage',
+            '--psql': 'psql',
+            '--send-test-email': 'send_test_email',
+        }.get(command)
+
+        if not hasattr(manager, manager_method):
+            CLI.error(f'Invalid command "{command}" \n\nUsage: python deploy.py <ENVIRONMENT> '
+                      '--build/-b/--build-no-cache | '
+                      '--upload/-u | '
+                      '--deploy/-d | '
+                      '--stop | '
+                      '--start | '
+                      '--restart/-r | '
+                      '--remove | '
+                      '--status/-s | '
+                      '--networks/-n | '
+                      '--logs/-l | '
+                      '--reload-webserver | '
+                      '--restart-proxy | '
+                      '--manage | '
+                      '--shell | '
+                      '--ssh | '
+                      '--psql | '
+                      '--send-test-email')
+        else:
+            getattr(manager, manager_method)(params) if manager_method in ['ssh', 'manage'] else getattr(manager, manager_method)()
