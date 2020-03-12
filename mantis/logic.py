@@ -67,7 +67,7 @@ def execute(manager, command, params=''):
             '--send-test-email': 'send_test_email',
         }.get(command)
 
-        if not hasattr(manager, manager_method):
+        if not hasattr(manager, manager_method) or manager_method is None:
             CLI.error(f'Invalid command "{command}" \n\nUsage: python deploy.py <ENVIRONMENT> '
                       '--build/-b/--build-no-cache | '
                       '--upload/-u | '
