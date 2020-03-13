@@ -264,7 +264,8 @@ class Mantis(object):
         # https://stackoverflow.com/questions/19331497/set-environment-variables-from-file-of-key-value-pairs/19331521
 
         os.system(f'set -a; source configs/environments/{self.environment_id}.env; set +a;'  # loaded environment
-                  f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} PGPASSWORD=$POSTGRES_PASS psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DB')
+                  f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DB -W')
+        # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
     def send_test_email(self):
         CLI.info('Sending test email...')
