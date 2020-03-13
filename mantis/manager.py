@@ -253,18 +253,9 @@ class Mantis(object):
 
     def psql(self):
         CLI.info('Starting psql...')
-        # postgresql_user = os.environ['POSTGRES_USER']
-        # postgresql_database = os.environ['POSTGRES_DB']
-
-        # print(f'POSTGRES_USER = {postgresql_user}')
-        # print(f'POSTGRES_DB = {postgresql_database}')
-
-        # print('Loading environment')
-        # os.system(f'set -a; source configs/environments/{self.environment_id}.env; set +a;')
-        # https://stackoverflow.com/questions/19331497/set-environment-variables-from-file-of-key-value-pairs/19331521
 
         os.system(f'set -a; source configs/environments/{self.environment_id}.env; set +a;'  # loaded environment
-                  f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DB -W')
+                  f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DBNAME -W')
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
     def send_test_email(self):
