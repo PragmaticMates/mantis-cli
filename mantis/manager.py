@@ -67,7 +67,6 @@ class Mantis(object):
         self.CONTAINER_DB = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_DB}'
         self.CONTAINER_CACHE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_CACHE}'
         self.CONTAINER_NGINX = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_NGINX}'
-        self.MANAGE_FILE = variables[f'{prefix}MANAGE_FILE'] if f'{prefix}MANAGE_FILE' in variables else 'manage.py'
 
     def build(self, no_cache='', params={}):
         CLI.info(f'Building...')
@@ -119,7 +118,7 @@ class Mantis(object):
         os.system(f'docker {self.docker_ssh} system prune --volumes --force')
 
         CLI.step(4, steps, 'Collecting static files')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python {self.MANAGE_FILE} collectstatic --noinput')
+        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput')
 
     def deploy(self):
         CLI.info('Deploying...')
@@ -136,7 +135,7 @@ class Mantis(object):
         os.system(f'docker {self.docker_ssh} container rename {self.CONTAINER_APP}_new {self.CONTAINER_APP}')
 
         CLI.step(4, steps, 'Collecting static files')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python {self.MANAGE_FILE} collectstatic --noinput')
+        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput')
 
         CLI.step(5, steps, 'Reloading webserver...')
         # sed -i '' "2s/.*/    server e-max-web_app:8000;/" configs/nginx/stage.conf
@@ -242,7 +241,7 @@ class Mantis(object):
 
     def shell(self):
         CLI.info('Connecting to Django shell...')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python {self.MANAGE_FILE} shell')
+        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py shell')
 
     def ssh(self, params):
         CLI.info('Logging to container...')
@@ -250,7 +249,7 @@ class Mantis(object):
 
     def manage(self, params):
         CLI.info('Django manage...')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python {self.MANAGE_FILE} {params}')
+        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py {params}')
 
     def psql(self):
         CLI.info('Starting psql...')
@@ -261,7 +260,7 @@ class Mantis(object):
 
     def send_test_email(self):
         CLI.info('Sending test email...')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python {self.MANAGE_FILE} sendtestemail --admins')
+        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py sendtestemail --admins')
 
     def get_containers(self):
         containers = os.popen(f'docker {self.docker_ssh} container ls -a --format \'{{{{.Names}}}}\'').read()
