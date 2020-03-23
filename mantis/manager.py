@@ -1,4 +1,5 @@
 import os
+from distutils.util import strtobool
 
 
 class CLI(object):
@@ -67,6 +68,8 @@ class Mantis(object):
         self.CONTAINER_DB = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_DB}'
         self.CONTAINER_CACHE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_CACHE}'
         self.CONTAINER_NGINX = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_NGINX}'
+        self.SWARM = strtobool(variables[f'{prefix}SWARM']) if f'{prefix}SWARM' in variables else False
+        self.SWARM_STACK = variables['SWARM_STACK'] if 'SWARM_STACK' in variables else self.CONTAINER_PREFIX
 
     def build(self, no_cache='', params={}):
         CLI.info(f'Building...')
@@ -104,29 +107,51 @@ class Mantis(object):
         CLI.info('Restarting...')
         steps = 4
 
-        CLI.step(1, steps, 'Stopping and removing Docker app container...')
+        if self.SWARM:
+            CLI.step(1, steps, 'Stopping and removing Docker app service...')
 
-        for container in self.get_containers():
-            if container == self.CONTAINER_APP:
-                os.popen(f'docker {self.docker_ssh} container stop {container}').read()
-                os.system(f'docker {self.docker_ssh} container rm {container}')
+            for service in self.get_services():
+                if service == self.CONTAINER_APP:
+                    os.system(f'docker service rm {service}')
 
-        CLI.step(2, steps, 'Recreating Docker containers...')
-        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.yml -f configs/docker/docker-compose.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up -d')
+            CLI.step(2, steps, 'Recreating Docker swarm stack...')
+            os.system(f'docker stack deploy -c configs/docker/docker-compose.yml -c configs/docker/docker-compose.{self.environment_id}.yml {self.PROJECT_NAME}')
 
-        CLI.step(3, steps, 'Prune Docker images and volumes')
-        os.system(f'docker {self.docker_ssh} system prune --volumes --force')
+            CLI.step(3, steps, 'Prune Docker images and volumes')  # todo prune on every node
+            os.system(f'docker {self.docker_ssh} system prune --volumes --force')
 
-        CLI.step(4, steps, 'Collecting static files')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput')
+            CLI.step(4, steps, 'Collecting static files')  # todo collect static
+            app_container = self.get_containers_starts_with(self.CONTAINER_APP)
 
-    def deploy(self):
+            if app_container:
+                os.system(f'docker {self.docker_ssh} exec -i {app_container[0]} python manage.py collectstatic --noinput')
+
+        else:
+            CLI.step(1, steps, 'Stopping and removing Docker app container...')
+
+            for container in self.get_containers():
+                if container == self.CONTAINER_APP:
+                    os.popen(f'docker {self.docker_ssh} container stop {container}').read()
+                    os.system(f'docker {self.docker_ssh} container rm {container}')
+
+            CLI.step(2, steps, 'Recreating Docker containers...')
+            os.system(
+                f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.yml -f configs/docker/docker-compose.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up -d')
+
+            CLI.step(3, steps, 'Prune Docker images and volumes')
+            os.system(f'docker {self.docker_ssh} system prune --volumes --force')
+
+            CLI.step(4, steps, 'Collecting static files')
+            os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput')
+
+    def deploy(self):  # todo deploy swarm
         CLI.info('Deploying...')
         steps = 7
 
         CLI.step(1, steps, 'Creating new app container...')
         # timestamp = 'now'
-        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.yml -f configs/docker/docker-compose.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={self.CONTAINER_APP}_new app')
+        os.system(
+            f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.yml -f configs/docker/docker-compose.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={self.CONTAINER_APP}_new app')
 
         CLI.step(2, steps, 'Renaming old app container...')
         os.system(f'docker {self.docker_ssh} container rename {self.CONTAINER_APP} {self.CONTAINER_APP}_old')
@@ -148,39 +173,53 @@ class Mantis(object):
         os.system(f'docker {self.docker_ssh} container rm {self.CONTAINER_APP}_old')
 
     def stop(self):
-        CLI.info('Stopping containers...')
+        if self.SWARM:  # todo can stop service ?
+            CLI.info('Removing services...')
+            os.system(f'docker stack rm {self.PROJECT_NAME}')
 
-        containers = self.get_containers()
+        else:
+            CLI.info('Stopping containers...')
+            containers = self.get_containers()
 
-        steps = len(containers)
+            steps = len(containers)
 
-        for index, container in enumerate(containers):
-            CLI.step(index + 1, steps, f'Stopping {container}')
-            os.system(f'docker {self.docker_ssh} container stop {container}')
+            for index, container in enumerate(containers):
+                CLI.step(index + 1, steps, f'Stopping {container}')
+                os.system(f'docker {self.docker_ssh} container stop {container}')
 
     def start(self):
-        CLI.info('Starting containers...')
+        if self.SWARM:
+            CLI.info('Starting services...')
+            os.system(f'docker stack deploy -c configs/docker/docker-compose.yml -c configs/docker/docker-compose.{self.environment_id}.yml {self.PROJECT_NAME}')
 
-        containers = self.get_containers()
+        else:
+            CLI.info('Starting containers...')
 
-        steps = len(containers)
+            containers = self.get_containers()
 
-        for index, container in enumerate(containers):
-            CLI.step(index + 1, steps, f'Starting {container}')
-            os.system(f'docker {self.docker_ssh} container start {container}')
+            steps = len(containers)
+
+            for index, container in enumerate(containers):
+                CLI.step(index + 1, steps, f'Starting {container}')
+                os.system(f'docker {self.docker_ssh} container start {container}')
 
     def remove(self):
-        CLI.info('Removing containers...')
+        if self.SWARM:  # todo remove containers as well ?
+            CLI.info('Removing services...')
+            os.system(f'docker stack rm {self.PROJECT_NAME}')
 
-        containers = self.get_containers()
+        else:
+            CLI.info('Removing containers...')
 
-        steps = len(containers)
+            containers = self.get_containers()
 
-        for index, container in enumerate(containers):
-            CLI.step(index + 1, steps, f'Removing {container}')
-            os.system(f'docker {self.docker_ssh} container rm {container}')
+            steps = len(containers)
 
-    def clean(self):
+            for index, container in enumerate(containers):
+                CLI.step(index + 1, steps, f'Removing {container}')
+                os.system(f'docker {self.docker_ssh} container rm {container}')
+
+    def clean(self):  # todo clean on all nodes
         CLI.info('Cleaning...')
         steps = 1
 
@@ -199,16 +238,22 @@ class Mantis(object):
         os.system(f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.{self.environment_id}.proxy.yml --project-name=reverse up -d')
 
     def status(self):
-        CLI.info('Getting status...')
-        steps = 2
+        if self.SWARM:  # todo remove containers as well ?
+            CLI.info('Getting status...')
+            os.system(f'docker stack services {self.PROJECT_NAME}')
 
-        CLI.step(1, steps, 'List of Docker images')
-        os.system(f'docker {self.docker_ssh} image ls')
+        else:
+            CLI.info('Getting status...')
+            steps = 2
 
-        CLI.step(2, steps, 'Docker containers')
-        os.system(f'docker {self.docker_ssh} container ls -a --size')
+            CLI.step(1, steps, 'List of Docker images')
+            os.system(f'docker {self.docker_ssh} image ls')
+
+            CLI.step(2, steps, 'Docker containers')
+            os.system(f'docker {self.docker_ssh} container ls -a --size')
 
     def networks(self):
+        # todo for swarm
         CLI.info('Getting networks...')
         steps = 1
 
@@ -229,15 +274,27 @@ class Mantis(object):
                 print(f'{network}\t{containers}'.strip())
 
     def logs(self):
-        CLI.info('Reading logs...')
+        if self.SWARM:
+            CLI.info('Reading logs...')
 
-        containers = self.get_containers()
+            services = self.get_services()
 
-        steps = len(containers)
+            steps = len(services)
 
-        for index, container in enumerate(containers):
-            CLI.step(index + 1, steps, f'{container} logs')
-            os.system(f'docker {self.docker_ssh} logs {container} --tail 10')
+            for index, service in enumerate(services):
+                CLI.step(index + 1, steps, f'{service} logs')
+                os.system(f'docker service logs {service} --tail 10')
+
+        else:
+            CLI.info('Reading logs...')
+
+            containers = self.get_containers()
+
+            steps = len(containers)
+
+            for index, container in enumerate(containers):
+                CLI.step(index + 1, steps, f'{container} logs')
+                os.system(f'docker {self.docker_ssh} logs {container} --tail 10')
 
     def shell(self):
         CLI.info('Connecting to Django shell...')
@@ -267,3 +324,12 @@ class Mantis(object):
         containers = containers.strip().split('\n')
         containers = list(filter(lambda x: x.startswith(self.CONTAINER_PREFIX), containers))
         return containers
+
+    def get_services(self):
+        services = os.popen(f'docker stack services {self.SWARM_STACK} --format \'{{{{.Name}}}}\'').read()
+        services = services.strip().split('\n')
+        services = list(filter(lambda x: x.startswith(self.CONTAINER_PREFIX), services))
+        return services
+
+    def get_containers_starts_with(self, start_with):
+        return [i for i in self.get_containers() if i.startswith(start_with)]
