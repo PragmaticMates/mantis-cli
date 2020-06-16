@@ -256,6 +256,7 @@ class Mantis(object):
 
         os.system(f'set -a; source configs/environments/{self.environment_id}.env; set +a;'  # loaded environment
                   f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DBNAME -W')
+        # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
     def send_test_email(self):

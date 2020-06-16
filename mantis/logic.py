@@ -67,25 +67,25 @@ def execute(manager, command, params=''):
             '--send-test-email': 'send_test_email',
         }.get(command)
 
-        if not hasattr(manager, manager_method) or manager_method is None:
-            CLI.error(f'Invalid command "{command}" \n\nUsage: python deploy.py <ENVIRONMENT> '
-                      '--build/-b/--build-no-cache | '
-                      '--upload/-u | '
-                      '--deploy/-d | '
-                      '--stop | '
-                      '--start | '
-                      '--restart/-r | '
-                      '--remove | '
-                      '--clean/-c | '
-                      '--status/-s | '
-                      '--networks/-n | '
-                      '--logs/-l | '
-                      '--reload-webserver | '
-                      '--restart-proxy | '
-                      '--manage | '
-                      '--shell | '
-                      '--ssh | '
-                      '--psql | '
-                      '--send-test-email')
+        if manager_method is None or not hasattr(manager, manager_method):
+            CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
+                      '\n--build/-b/--build-no-cache |'
+                      '\n--upload/-u | '
+                      '\n--deploy/-d | '
+                      '\n--stop | '
+                      '\n--start | '
+                      '\n--restart/-r | '
+                      '\n--remove | '
+                      '\n--clean/-c | '
+                      '\n--status/-s | '
+                      '\n--networks/-n | '
+                      '\n--logs/-l | '
+                      '\n--reload-webserver | '
+                      '\n--restart-proxy | '
+                      '\n--manage | '
+                      '\n--shell | '
+                      '\n--ssh | '
+                      '\n--psql | '
+                      '\n--send-test-email')
         else:
             getattr(manager, manager_method)(params) if manager_method in ['ssh', 'manage'] else getattr(manager, manager_method)()
