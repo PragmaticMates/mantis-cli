@@ -63,13 +63,14 @@ class Mantis(object):
         self.CONTAINER_SUFFIX_DB = variables[f'{prefix}CONTAINER_SUFFIX_DB']
         self.CONTAINER_SUFFIX_CACHE = variables[f'{prefix}CONTAINER_SUFFIX_CACHE']
         self.CONTAINER_SUFFIX_APP = variables[f'{prefix}CONTAINER_SUFFIX_APP']
-        self.CONTAINER_SUFFIX_NGINX = variables[f'{prefix}CONTAINER_SUFFIX_NGINX']  # TODO: rename to webserver?
+        self.CONTAINER_SUFFIX_WEBSERVER = variables[f'{prefix}CONTAINER_SUFFIX_WEBSERVER']
         self.CONTAINER_APP = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_APP}'
         self.CONTAINER_DB = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_DB}'
         self.CONTAINER_CACHE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_CACHE}'
-        self.CONTAINER_NGINX = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_NGINX}'
-        self.SWARM = strtobool(variables[f'{prefix}SWARM']) if f'{prefix}SWARM' in variables else False
-        self.SWARM_STACK = variables['SWARM_STACK'] if 'SWARM_STACK' in variables else self.CONTAINER_PREFIX
+        self.CONTAINER_WEBSERVER = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_WEBSERVER}'
+        self.WEBSERVER = variables.get(f'{prefix}WEBSERVER', 'nginx')
+        self.SWARM = strtobool(variables.get(f'{prefix}SWARM', 'False'))
+        self.SWARM_STACK = variables.get(f'{prefix}SWARM_STACK', self.CONTAINER_PREFIX)
 
     def build(self, no_cache='', params={}):
         CLI.info(f'Building...')
@@ -93,12 +94,12 @@ class Mantis(object):
         CLI.info('Uploading...')
         steps = 2
 
-        CLI.step(1, steps, 'Uploading nginx server configs...')
+        CLI.step(1, steps, 'Uploading webserver server configs...')
 
         if self.environment_id == 'dev':
             print('Skippipng...')
         else:
-            os.system(f'rsync -rvzh --progress configs/nginx/{self.environment_id}.conf {self.user}@{self.host}:/home/{self.user}/public_html/{self.IMAGE_NAME}/configs/nginx/')
+            os.system(f'rsync -rvzh --progress configs/{self.WEBSERVER}/{self.environment_id}.conf {self.user}@{self.host}:/home/{self.user}/public_html/{self.IMAGE_NAME}/configs/{self.WEBSERVER}/')
 
         CLI.step(2, steps, 'Pulling docker image...')
         os.system(f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.yml -f configs/docker/docker-compose.{self.environment_id}.yml pull')
@@ -124,7 +125,7 @@ class Mantis(object):
             app_container = self.get_containers_starts_with(self.CONTAINER_APP)
 
             if app_container:
-                os.system(f'docker {self.docker_ssh} exec -i {app_container[0]} python manage.py collectstatic --noinput')
+                os.system(f'docker {self.docker_ssh} exec -i {app_container[0]} python manage.py collectstatic --noinput --verbosity 0')
 
         else:
             CLI.step(1, steps, 'Stopping and removing Docker app container...')
@@ -136,13 +137,13 @@ class Mantis(object):
 
             CLI.step(2, steps, 'Recreating Docker containers...')
             os.system(
-                f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.yml -f configs/docker/docker-compose.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up -d')
+                f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.yml -f configs/docker/docker-compose.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up --remove-orphans -d')
 
             CLI.step(3, steps, 'Prune Docker images and volumes')
             os.system(f'docker {self.docker_ssh} system prune --volumes --force')
 
             CLI.step(4, steps, 'Collecting static files')
-            os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput')
+            os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput --verbosity 0')
 
     def deploy(self):  # todo deploy swarm
         CLI.info('Deploying...')
@@ -160,11 +161,10 @@ class Mantis(object):
         os.system(f'docker {self.docker_ssh} container rename {self.CONTAINER_APP}_new {self.CONTAINER_APP}')
 
         CLI.step(4, steps, 'Collecting static files')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput')
+        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput --verbosity 0')
 
         CLI.step(5, steps, 'Reloading webserver...')
-        # sed -i '' "2s/.*/    server e-max-web_app:8000;/" configs/nginx/stage.conf
-        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_NGINX} nginx -s reload')
+        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
         CLI.step(6, steps, 'Stopping old app container...')
         os.system(f'docker {self.docker_ssh} container stop {self.CONTAINER_APP}_old')
@@ -228,7 +228,7 @@ class Mantis(object):
 
     def reload_webserver(self):
         CLI.info('Reloading webserver...')
-        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_NGINX} nginx -s reload')
+        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
     def restart_proxy(self):
         CLI.info('Restarting proxy...')
