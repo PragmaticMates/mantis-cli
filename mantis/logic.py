@@ -14,9 +14,10 @@ def main():
     environment_id = None
 
     # first argument could be environment
-    if commands[0].lower() in ['dev', 'stage', 'production', 'test']:
-        environment_id = commands[0].lower()
-        commands = commands[1:]
+    # if commands[0].lower() in ['dev', 'stage', 'production', 'test']:
+    # first argument is environment
+    environment_id = commands[0].lower()
+    commands = commands[1:]
 
     # setup manager
     manager = Mantis(environment_id=environment_id)
@@ -64,8 +65,12 @@ def execute(manager, command, params=''):
             '--ssh': 'ssh',
             '--manage': 'manage',
             '--psql': 'psql',
+            '--pg_dump': 'pg_dump',
+            '--pg_restore': 'pg_restore',
             '--send-test-email': 'send_test_email',
         }.get(command)
+
+        methods_with_params = ['ssh', 'manage', 'pg_restore', 'stop', 'logs']
 
         if manager_method is None or not hasattr(manager, manager_method):
             CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
@@ -86,6 +91,8 @@ def execute(manager, command, params=''):
                       '\n--shell | '
                       '\n--ssh | '
                       '\n--psql | '
+                      '\n--pg_dump | '
+                      '\n--pg_restore | '
                       '\n--send-test-email')
         else:
-            getattr(manager, manager_method)(params) if manager_method in ['ssh', 'manage'] else getattr(manager, manager_method)()
+            getattr(manager, manager_method)(params) if manager_method in methods_with_params else getattr(manager, manager_method)()

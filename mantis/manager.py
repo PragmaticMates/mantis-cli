@@ -1,4 +1,5 @@
 import os
+import datetime
 from distutils.util import strtobool
 
 
@@ -10,6 +11,10 @@ class CLI(object):
     @staticmethod
     def error(text):
         exit(f'{Colors.RED}{text}{Colors.ENDC}')
+
+    @staticmethod
+    def underline(text):
+        print(f'{Colors.UNDERLINE}{text}{Colors.ENDC}')
 
     @staticmethod
     def step(index, total, text):
@@ -172,14 +177,15 @@ class Mantis(object):
         CLI.step(7, steps, 'Removing old app container...')
         os.system(f'docker {self.docker_ssh} container rm {self.CONTAINER_APP}_old')
 
-    def stop(self):
+    def stop(self, params=None):
         if self.SWARM:  # todo can stop service ?
             CLI.info('Removing services...')
             os.system(f'docker stack rm {self.PROJECT_NAME}')
 
         else:
             CLI.info('Stopping containers...')
-            containers = self.get_containers()
+
+            containers = self.get_containers() if not params else params.split(' ')
 
             steps = len(containers)
 
@@ -273,28 +279,28 @@ class Mantis(object):
                 containers = ', '.join(containers.split())
                 print(f'{network}\t{containers}'.strip())
 
-    def logs(self):
+    def logs(self, params=None):
         if self.SWARM:
             CLI.info('Reading logs...')
 
-            services = self.get_services()
-
+            services = params.split(' ') if params else self.get_services()
+            lines = '-f' if params else '--tail 10'
             steps = len(services)
 
             for index, service in enumerate(services):
                 CLI.step(index + 1, steps, f'{service} logs')
-                os.system(f'docker service logs {service} --tail 10')
+                os.system(f'docker service logs {service} {lines}')
 
         else:
             CLI.info('Reading logs...')
 
-            containers = self.get_containers()
-
+            containers = params.split(' ') if params else self.get_containers()
+            lines = '-f' if params else '--tail 10'
             steps = len(containers)
 
             for index, container in enumerate(containers):
                 CLI.step(index + 1, steps, f'{container} logs')
-                os.system(f'docker {self.docker_ssh} logs {container} --tail 10')
+                os.system(f'docker {self.docker_ssh} logs {container} {lines}')
 
     def shell(self):
         CLI.info('Connecting to Django shell...')
@@ -306,13 +312,33 @@ class Mantis(object):
 
     def manage(self, params):
         CLI.info('Django manage...')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py {params}')
+        os.system(f'docker {self.docker_ssh} exec -ti {self.CONTAINER_APP} python manage.py {params}')
 
     def psql(self):
         CLI.info('Starting psql...')
 
         os.system(f'set -a; source configs/environments/{self.environment_id}.env; set +a;'  # loaded environment
                   f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DBNAME -W')
+        # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
+        # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
+
+    def pg_dump(self):
+        now = datetime.datetime.now()
+        # filename = now.strftime("%Y%m%d%H%M%S")
+        filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M.pg")
+        CLI.info(f'Backuping database into file {filename}')
+
+        os.system(f'set -a; source configs/environments/{self.environment_id}.env; set +a;'  # loaded environment
+                  f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_dump -Fc -h $POSTGRES_HOST -U $POSTGRES_USER $POSTGRES_DBNAME -W > /backups/{filename}\'')
+        # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
+        # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
+
+    def pg_restore(self, params):
+        CLI.info(f'Restoring database from file {params}')
+        CLI.underline("Don't forget to drop database at first to prevent constraints collisions!")
+
+        os.system(f'set -a; source configs/environments/{self.environment_id}.env; set +a;'  # loaded environment
+                  f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DBNAME -W < /backups/{params}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
