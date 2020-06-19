@@ -76,7 +76,9 @@ class Mantis(object):
         self.WEBSERVER = variables.get(f'{prefix}WEBSERVER', 'nginx')
         self.SWARM = strtobool(variables.get(f'{prefix}SWARM', 'False'))
         self.SWARM_STACK = variables.get(f'{prefix}SWARM_STACK', self.CONTAINER_PREFIX)
-
+        self.compose_name = variables.get(f'{prefix}COMPOSE_NAME', '')
+        self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
+        
     def build(self, no_cache='', params={}):
         CLI.info(f'Building...')
         steps = 3
@@ -107,7 +109,7 @@ class Mantis(object):
             os.system(f'rsync -rvzh --progress configs/{self.WEBSERVER}/{self.environment_id}.conf {self.user}@{self.host}:/home/{self.user}/public_html/{self.IMAGE_NAME}/configs/{self.WEBSERVER}/')
 
         CLI.step(2, steps, 'Pulling docker image...')
-        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.yml -f configs/docker/docker-compose.{self.environment_id}.yml pull')
+        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
     def restart(self):
         CLI.info('Restarting...')
@@ -121,7 +123,7 @@ class Mantis(object):
                     os.system(f'docker service rm {service}')
 
             CLI.step(2, steps, 'Recreating Docker swarm stack...')
-            os.system(f'docker stack deploy -c configs/docker/docker-compose.yml -c configs/docker/docker-compose.{self.environment_id}.yml {self.PROJECT_NAME}')
+            os.system(f'docker stack deploy -c configs/docker/{self.COMPOSE_PREFIX}.yml -c configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
 
             CLI.step(3, steps, 'Prune Docker images and volumes')  # todo prune on every node
             os.system(f'docker {self.docker_ssh} system prune --volumes --force')
@@ -142,7 +144,7 @@ class Mantis(object):
 
             CLI.step(2, steps, 'Recreating Docker containers...')
             os.system(
-                f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.yml -f configs/docker/docker-compose.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up --remove-orphans -d')
+                f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up --remove-orphans -d')
 
             CLI.step(3, steps, 'Prune Docker images and volumes')
             os.system(f'docker {self.docker_ssh} system prune --volumes --force')
@@ -152,29 +154,31 @@ class Mantis(object):
 
     def deploy(self):  # todo deploy swarm
         CLI.info('Deploying...')
-        steps = 7
+        steps = 8
 
-        CLI.step(1, steps, 'Creating new app container...')
+        CLI.step(1, steps, 'Pulling docker image...')
+        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
+
+        CLI.step(2, steps, 'Creating new app container...')
         # timestamp = 'now'
-        os.system(
-            f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.yml -f configs/docker/docker-compose.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={self.CONTAINER_APP}_new app')
+        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={self.CONTAINER_APP}_new app')
 
-        CLI.step(2, steps, 'Renaming old app container...')
+        CLI.step(3, steps, 'Renaming old app container...')
         os.system(f'docker {self.docker_ssh} container rename {self.CONTAINER_APP} {self.CONTAINER_APP}_old')
 
-        CLI.step(3, steps, 'Renaming new app container...')
+        CLI.step(4, steps, 'Renaming new app container...')
         os.system(f'docker {self.docker_ssh} container rename {self.CONTAINER_APP}_new {self.CONTAINER_APP}')
 
-        CLI.step(4, steps, 'Collecting static files')
+        CLI.step(5, steps, 'Collecting static files')
         os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput --verbosity 0')
 
-        CLI.step(5, steps, 'Reloading webserver...')
+        CLI.step(6, steps, 'Reloading webserver...')
         os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
-        CLI.step(6, steps, 'Stopping old app container...')
+        CLI.step(7, steps, 'Stopping old app container...')
         os.system(f'docker {self.docker_ssh} container stop {self.CONTAINER_APP}_old')
 
-        CLI.step(7, steps, 'Removing old app container...')
+        CLI.step(8, steps, 'Removing old app container...')
         os.system(f'docker {self.docker_ssh} container rm {self.CONTAINER_APP}_old')
 
     def stop(self, params=None):
@@ -196,7 +200,7 @@ class Mantis(object):
     def start(self):
         if self.SWARM:
             CLI.info('Starting services...')
-            os.system(f'docker stack deploy -c configs/docker/docker-compose.yml -c configs/docker/docker-compose.{self.environment_id}.yml {self.PROJECT_NAME}')
+            os.system(f'docker stack deploy -c configs/docker/{self.COMPOSE_PREFIX}.yml -c configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
 
         else:
             CLI.info('Starting containers...')
