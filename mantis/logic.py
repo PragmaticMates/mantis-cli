@@ -33,15 +33,13 @@ def main():
 
 
 def execute(manager, command, params=''):
-    if command in ['--build', '-b', '--build-no-cache']:
-        no_cache = '--no-cache' if command == '--build-no-cache' else ''
-        manager.build(no_cache, params)
-
-    elif manager.environment_id is None:
+    if manager.environment_id is None:
         CLI.error('Missing environment')
 
     else:
         manager_method = {
+            '--build': 'build',
+            '-b': 'build',
             '--upload': 'upload',
             '-u': 'upload',
             '--restart': 'restart',
@@ -70,11 +68,11 @@ def execute(manager, command, params=''):
             '--send-test-email': 'send_test_email',
         }.get(command)
 
-        methods_with_params = ['ssh', 'manage', 'pg_restore', 'stop', 'logs']
+        methods_with_params = ['build', 'ssh', 'manage', 'pg_restore', 'stop', 'logs']
 
         if manager_method is None or not hasattr(manager, manager_method):
             CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
-                      '\n--build/-b/--build-no-cache |'
+                      '\n--build/-b |'
                       '\n--upload/-u | '
                       '\n--deploy/-d | '
                       '\n--stop | '

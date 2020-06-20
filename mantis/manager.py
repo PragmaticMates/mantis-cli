@@ -78,17 +78,27 @@ class Mantis(object):
         self.SWARM_STACK = variables.get(f'{prefix}SWARM_STACK', self.CONTAINER_PREFIX)
         self.compose_name = variables.get(f'{prefix}COMPOSE_NAME', '')
         self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
-        
-    def build(self, no_cache='', params={}):
+        self.environment_file_prefix = variables.get(f'{prefix}ENVIRONMENT_FILE_PREFIX', '')
+        self.environment_file = f'configs/environments/{self.environment_file_prefix}{self.environment_id}.env'
+        self.webserver_config = f'configs/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
+        self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
+
+    def build(self, params=''):
         CLI.info(f'Building...')
+        CLI.info(f'Params = {params}')
         steps = 3
 
         CLI.step(1, steps, 'Building Docker image...')
-        FONTAWESOME_NPM_AUTH_TOKEN = os.environ.get('FONTAWESOME_NPM_AUTH_TOKEN')  # TODO: move to arguments
+
+        # TODO: custom build-arg
+        FONTAWESOME_NPM_AUTH_TOKEN = os.environ.get('FONTAWESOME_NPM_AUTH_TOKEN')
+        ULTRALIST_THEME = os.environ.get('ULTRALIST_THEME')
+
         # now = datetime.datetime.now()
         # CACHE_DATE = now.strftime("%Y%m%d%H%M%S")
+
         # os.system(f'docker build . --build-arg FONTAWESOME_NPM_AUTH_TOKEN={FONTAWESOME_NPM_AUTH_TOKEN} --build-arg CACHE_DATE={CACHE_DATE} -t {IMAGE_NAME} -f configs/docker/Dockerfile {no_cache}')
-        os.system(f'docker build . --build-arg FONTAWESOME_NPM_AUTH_TOKEN={FONTAWESOME_NPM_AUTH_TOKEN} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {no_cache}')
+        os.system(f'docker build . --build-arg FONTAWESOME_NPM_AUTH_TOKEN={FONTAWESOME_NPM_AUTH_TOKEN} --build-arg ULTRALIST_THEME={ULTRALIST_THEME} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
 
         CLI.step(2, steps, 'Tagging Docker image...')
         os.system(f'docker tag {self.IMAGE_NAME} {self.DOCKER_REPOSITORY}:{self.DOCKER_TAG}')
@@ -106,7 +116,8 @@ class Mantis(object):
         if self.environment_id == 'dev':
             print('Skippipng...')
         else:
-            os.system(f'rsync -rvzh --progress configs/{self.WEBSERVER}/{self.environment_id}.conf {self.user}@{self.host}:/home/{self.user}/public_html/{self.IMAGE_NAME}/configs/{self.WEBSERVER}/')
+            os.system(f'rsync -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/{self.IMAGE_NAME}/configs/{self.WEBSERVER}/')
+            os.system(f'rsync -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
 
         CLI.step(2, steps, 'Pulling docker image...')
         os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
@@ -161,7 +172,8 @@ class Mantis(object):
 
         CLI.step(2, steps, 'Creating new app container...')
         # timestamp = 'now'
-        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={self.CONTAINER_APP}_new app')
+        os.system(
+            f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={self.CONTAINER_APP}_new app')
 
         CLI.step(3, steps, 'Renaming old app container...')
         os.system(f'docker {self.docker_ssh} container rename {self.CONTAINER_APP} {self.CONTAINER_APP}_old')
@@ -321,7 +333,7 @@ class Mantis(object):
     def psql(self):
         CLI.info('Starting psql...')
 
-        os.system(f'set -a; source configs/environments/{self.environment_id}.env; set +a;'  # loaded environment
+        os.system(f'set -a; source {self.environment_file}; set +a;'  # loaded environment
                   f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DBNAME -W')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
@@ -332,7 +344,7 @@ class Mantis(object):
         filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M.pg")
         CLI.info(f'Backuping database into file {filename}')
 
-        os.system(f'set -a; source configs/environments/{self.environment_id}.env; set +a;'  # loaded environment
+        os.system(f'set -a; source {self.environment_file}; set +a;'  # loaded environment
                   f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_dump -Fc -h $POSTGRES_HOST -U $POSTGRES_USER $POSTGRES_DBNAME -W > /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
@@ -341,7 +353,7 @@ class Mantis(object):
         CLI.info(f'Restoring database from file {params}')
         CLI.underline("Don't forget to drop database at first to prevent constraints collisions!")
 
-        os.system(f'set -a; source configs/environments/{self.environment_id}.env; set +a;'  # loaded environment
+        os.system(f'set -a; source {self.environment_file}; set +a;'  # loaded environment
                   f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DBNAME -W < /backups/{params}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
