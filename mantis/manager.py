@@ -86,7 +86,7 @@ class Mantis(object):
     def load_environment(self):
         with open(self.environment_file) as fh:
             return dict(
-                (line.split('=')[0], line.split('=')[1].rstrip("\n"))
+                (line.split('=', maxsplit=1)[0], line.split('=', maxsplit=1)[1].rstrip("\n"))
                 for line in fh.readlines() if not line.startswith('#')
             )
 
@@ -97,15 +97,16 @@ class Mantis(object):
 
         CLI.step(1, steps, 'Building Docker image...')
 
-        # TODO: custom build-arg
-        FONTAWESOME_NPM_AUTH_TOKEN = os.environ.get('FONTAWESOME_NPM_AUTH_TOKEN')
-        ULTRALIST_THEME = os.environ.get('ULTRALIST_THEME')
+        env = self.load_environment()
+        build_args = env.get('MANTIS_BUILD_ARGS', '')
+        build_args = build_args.split(',')
+        build_args_params = [f'--build-arg {arg}' for arg in build_args]
+        build_args_params = ' '.join(build_args_params)
 
         # now = datetime.datetime.now()
         # CACHE_DATE = now.strftime("%Y%m%d%H%M%S")
 
-        # os.system(f'docker build . --build-arg FONTAWESOME_NPM_AUTH_TOKEN={FONTAWESOME_NPM_AUTH_TOKEN} --build-arg CACHE_DATE={CACHE_DATE} -t {IMAGE_NAME} -f configs/docker/Dockerfile {no_cache}')
-        os.system(f'docker build . --build-arg FONTAWESOME_NPM_AUTH_TOKEN={FONTAWESOME_NPM_AUTH_TOKEN} --build-arg ULTRALIST_THEME={ULTRALIST_THEME} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
+        os.system(f'docker build . {build_args_params} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
 
         CLI.step(2, steps, 'Tagging Docker image...')
         os.system(f'docker tag {self.IMAGE_NAME} {self.DOCKER_REPOSITORY}:{self.DOCKER_TAG}')
