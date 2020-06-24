@@ -99,14 +99,13 @@ class Mantis(object):
 
         env = self.load_environment()
         build_args = env.get('MANTIS_BUILD_ARGS', '')
-        build_args = build_args.split(',')
-        build_args_params = [f'--build-arg {arg}' for arg in build_args]
-        build_args_params = ' '.join(build_args_params)
 
-        # now = datetime.datetime.now()
-        # CACHE_DATE = now.strftime("%Y%m%d%H%M%S")
+        if build_args != '':
+            build_args = build_args.split(',')
+            build_args = [f'--build-arg {arg}' for arg in build_args]
+            build_args = ' '.join(build_args)
 
-        os.system(f'docker build . {build_args_params} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
+        os.system(f'docker build . {build_args} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
 
     def push(self):
         CLI.info(f'Pushing...')
