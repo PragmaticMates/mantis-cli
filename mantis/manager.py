@@ -237,7 +237,7 @@ class Mantis(object):
                 CLI.step(index + 1, steps, f'Starting {container}')
                 os.system(f'docker {self.docker_ssh} container start {container}')
 
-    def remove(self):
+    def remove(self, params=''):
         if self.SWARM:  # todo remove containers as well ?
             CLI.info('Removing services...')
             os.system(f'docker stack rm {self.PROJECT_NAME}')
@@ -245,7 +245,7 @@ class Mantis(object):
         else:
             CLI.info('Removing containers...')
 
-            containers = self.get_containers()
+            containers = self.get_containers() if params == '' else params.split(' ')
 
             steps = len(containers)
 
