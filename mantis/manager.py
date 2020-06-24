@@ -83,6 +83,13 @@ class Mantis(object):
         self.webserver_config = f'configs/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
 
+    def load_environment(self):
+        with open(self.environment_file) as fh:
+            return dict(
+                (line.split('=')[0], line.split('=')[1].rstrip("\n"))
+                for line in fh.readlines() if not line.startswith('#')
+            )
+
     def build(self, params=''):
         CLI.info(f'Building...')
         CLI.info(f'Params = {params}')
@@ -332,9 +339,8 @@ class Mantis(object):
 
     def psql(self):
         CLI.info('Starting psql...')
-
-        os.system(f'set -a; source {self.environment_file}; set +a;'  # loaded environment
-                  f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DBNAME -W')
+        env = self.load_environment()
+        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} psql -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
@@ -343,18 +349,16 @@ class Mantis(object):
         # filename = now.strftime("%Y%m%d%H%M%S")
         filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M.pg")
         CLI.info(f'Backuping database into file {filename}')
-
-        os.system(f'set -a; source {self.environment_file}; set +a;'  # loaded environment
-                  f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_dump -Fc -h $POSTGRES_HOST -U $POSTGRES_USER $POSTGRES_DBNAME -W > /backups/{filename}\'')
+        env = self.load_environment()
+        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_dump -Fc -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
     def pg_restore(self, params):
         CLI.info(f'Restoring database from file {params}')
         CLI.underline("Don't forget to drop database at first to prevent constraints collisions!")
-
-        os.system(f'set -a; source {self.environment_file}; set +a;'  # loaded environment
-                  f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DBNAME -W < /backups/{params}\'')
+        env = self.load_environment()
+        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W -W < /backups/{params}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
