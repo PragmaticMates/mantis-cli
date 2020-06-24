@@ -93,7 +93,7 @@ class Mantis(object):
     def build(self, params=''):
         CLI.info(f'Building...')
         CLI.info(f'Params = {params}')
-        steps = 3
+        steps = 1
 
         CLI.step(1, steps, 'Building Docker image...')
 
@@ -108,11 +108,15 @@ class Mantis(object):
 
         os.system(f'docker build . {build_args_params} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
 
-        CLI.step(2, steps, 'Tagging Docker image...')
+    def push(self):
+        CLI.info(f'Pushing...')
+
+        steps = 2
+        CLI.step(1, steps, 'Tagging Docker image...')
         os.system(f'docker tag {self.IMAGE_NAME} {self.DOCKER_REPOSITORY}:{self.DOCKER_TAG}')
         print(f'Successfully tagged {self.DOCKER_REPOSITORY}:{self.DOCKER_TAG}')
 
-        CLI.step(3, steps, 'Pushing Docker image...')
+        CLI.step(2, steps, 'Pushing Docker image...')
         os.system(f'docker push {self.DOCKER_REPOSITORY}:{self.DOCKER_TAG}')
 
     def upload(self):

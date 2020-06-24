@@ -40,6 +40,8 @@ def execute(manager, command, params=''):
         manager_method = {
             '--build': 'build',
             '-b': 'build',
+            '--push': 'push',
+            '-p': 'push',
             '--upload': 'upload',
             '-u': 'upload',
             '--restart': 'restart',
@@ -63,8 +65,8 @@ def execute(manager, command, params=''):
             '--ssh': 'ssh',
             '--manage': 'manage',
             '--psql': 'psql',
-            '--pg_dump': 'pg_dump',
-            '--pg_restore': 'pg_restore',
+            '--pg-dump': 'pg_dump',
+            '--pg-restore': 'pg_restore',
             '--send-test-email': 'send_test_email',
         }.get(command)
 
@@ -73,6 +75,7 @@ def execute(manager, command, params=''):
         if manager_method is None or not hasattr(manager, manager_method):
             CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
                       '\n--build/-b |'
+                      '\n--push/-p |'
                       '\n--upload/-u | '
                       '\n--deploy/-d | '
                       '\n--stop | '
@@ -89,8 +92,8 @@ def execute(manager, command, params=''):
                       '\n--shell | '
                       '\n--ssh | '
                       '\n--psql | '
-                      '\n--pg_dump | '
-                      '\n--pg_restore | '
+                      '\n--pg-dump | '
+                      '\n--pg-restore | '
                       '\n--send-test-email')
         else:
             getattr(manager, manager_method)(params) if manager_method in methods_with_params else getattr(manager, manager_method)()
