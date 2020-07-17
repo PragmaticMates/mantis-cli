@@ -186,17 +186,17 @@ class Mantis(object):
 
     def deploy(self):  # todo deploy swarm
         CLI.info('Deploying...')
-        containers = [self.CONTAINER_APP, self.CONTAINER_QUEUE]
+        containers = {'app': self.CONTAINER_APP, 'queue': self.CONTAINER_QUEUE}
         steps = 5 * len(containers) + 3
     
         step = 1
         CLI.step(step, steps, 'Pulling docker image...')
         os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
-        for container in containers:
+        for service, container in containers.items():
             step += 1
             CLI.step(step, steps, f'Creating new container [{container}]...')
-            os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new app')
+            os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
 
             step += 1
             CLI.step(step, steps, f'Renaming old container [{container}]...')
@@ -214,7 +214,7 @@ class Mantis(object):
         CLI.step(step, steps, 'Reloading webserver...')
         os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
-        for container in containers:
+        for service, container in containers.items():
             step += 1
             CLI.step(step, steps, f'Stopping old container [{container}]...')
             os.system(f'docker {self.docker_ssh} container stop {container}_old')
