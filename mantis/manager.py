@@ -45,8 +45,12 @@ class Mantis(object):
             variables = config
             prefix = ''
         else:
-            variables = os.environ
             prefix = 'MANTIS_'
+            # self.environment_file_prefix = variables.get(f'{prefix}ENVIRONMENT_FILE_PREFIX', '')
+            self.environment_file_prefix = os.environ.get(f'{prefix}ENVIRONMENT_FILE_PREFIX', '')
+            self.environment_file = f'configs/environments/{self.environment_file_prefix}{self.environment_id}.env'
+            # variables = os.environ
+            variables = self.load_environment()
 
         self.user = variables[f'{prefix}USER']
 
@@ -55,8 +59,9 @@ class Mantis(object):
             if self.environment_id == 'dev':
                 self.host = 'localhost'
             else:
-                self.host = variables[f'{prefix}HOST_{self.environment_id.upper()}']
-                self.docker_ssh = f'-H "ssh://{self.user}@{self.host}"'
+                self.host = variables[f'{prefix}HOST']
+                self.port = variables[f'{prefix}PORT']
+                self.docker_ssh = f'-H "ssh://{self.user}@{self.host}:{self.port}"'
 
             print(f'Deploying to {Colors.BOLD}{self.environment_id}{Colors.ENDC}: {Colors.RED}{self.host}{Colors.ENDC}')
 
@@ -68,8 +73,10 @@ class Mantis(object):
         self.CONTAINER_SUFFIX_DB = variables[f'{prefix}CONTAINER_SUFFIX_DB']
         self.CONTAINER_SUFFIX_CACHE = variables[f'{prefix}CONTAINER_SUFFIX_CACHE']
         self.CONTAINER_SUFFIX_APP = variables[f'{prefix}CONTAINER_SUFFIX_APP']
+        self.CONTAINER_SUFFIX_QUEUE = variables[f'{prefix}CONTAINER_SUFFIX_QUEUE']
         self.CONTAINER_SUFFIX_WEBSERVER = variables[f'{prefix}CONTAINER_SUFFIX_WEBSERVER']
         self.CONTAINER_APP = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_APP}'
+        self.CONTAINER_QUEUE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_QUEUE}'
         self.CONTAINER_DB = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_DB}'
         self.CONTAINER_CACHE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_CACHE}'
         self.CONTAINER_WEBSERVER = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_WEBSERVER}'
@@ -78,8 +85,6 @@ class Mantis(object):
         self.SWARM_STACK = variables.get(f'{prefix}SWARM_STACK', self.CONTAINER_PREFIX)
         self.compose_name = variables.get(f'{prefix}COMPOSE_NAME', '')
         self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
-        self.environment_file_prefix = variables.get(f'{prefix}ENVIRONMENT_FILE_PREFIX', '')
-        self.environment_file = f'configs/environments/{self.environment_file_prefix}{self.environment_id}.env'
         self.webserver_config = f'configs/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
 
@@ -118,6 +123,10 @@ class Mantis(object):
         CLI.step(2, steps, 'Pushing Docker image...')
         os.system(f'docker push {self.DOCKER_REPOSITORY}:{self.DOCKER_TAG}')
 
+    def pull(self):
+        CLI.info('Pulling docker image...')
+        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
+
     def upload(self):
         CLI.info('Uploading...')
         steps = 2
@@ -127,8 +136,9 @@ class Mantis(object):
         if self.environment_id == 'dev':
             print('Skippipng...')
         else:
-            os.system(f'rsync -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/{self.IMAGE_NAME}/configs/{self.WEBSERVER}/')
-            os.system(f'rsync -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
+            # rsync -arvz -e 'ssh -p <port-number>' --progress --delete user@remote-server:/path/to/remote/folder /path/to/local/folder
+            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/{self.IMAGE_NAME}/configs/{self.WEBSERVER}/')
+            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
 
         CLI.step(2, steps, 'Pulling docker image...')
         os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
@@ -176,33 +186,42 @@ class Mantis(object):
 
     def deploy(self):  # todo deploy swarm
         CLI.info('Deploying...')
-        steps = 8
-
-        CLI.step(1, steps, 'Pulling docker image...')
+        containers = [self.CONTAINER_APP, self.CONTAINER_QUEUE]
+        steps = 5 * len(containers) + 3
+    
+        step = 1
+        CLI.step(step, steps, 'Pulling docker image...')
         os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
-        CLI.step(2, steps, 'Creating new app container...')
-        # timestamp = 'now'
-        os.system(
-            f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={self.CONTAINER_APP}_new app')
+        for container in containers:
+            step += 1
+            CLI.step(step, steps, f'Creating new container [{container}]...')
+            os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new app')
 
-        CLI.step(3, steps, 'Renaming old app container...')
-        os.system(f'docker {self.docker_ssh} container rename {self.CONTAINER_APP} {self.CONTAINER_APP}_old')
+            step += 1
+            CLI.step(step, steps, f'Renaming old container [{container}]...')
+            os.system(f'docker {self.docker_ssh} container rename {container} {container}_old')
 
-        CLI.step(4, steps, 'Renaming new app container...')
-        os.system(f'docker {self.docker_ssh} container rename {self.CONTAINER_APP}_new {self.CONTAINER_APP}')
+            step += 1
+            CLI.step(step, steps, f'Renaming new container [{container}]...')
+            os.system(f'docker {self.docker_ssh} container rename {container}_new {container}')
 
-        CLI.step(5, steps, 'Collecting static files')
+        step += 1
+        CLI.step(step, steps, 'Collecting static files')
         os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput --verbosity 0')
 
-        CLI.step(6, steps, 'Reloading webserver...')
+        step += 1
+        CLI.step(step, steps, 'Reloading webserver...')
         os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
-        CLI.step(7, steps, 'Stopping old app container...')
-        os.system(f'docker {self.docker_ssh} container stop {self.CONTAINER_APP}_old')
-
-        CLI.step(8, steps, 'Removing old app container...')
-        os.system(f'docker {self.docker_ssh} container rm {self.CONTAINER_APP}_old')
+        for container in containers:
+            step += 1
+            CLI.step(step, steps, f'Stopping old container [{container}]...')
+            os.system(f'docker {self.docker_ssh} container stop {container}_old')
+    
+            step += 1
+            CLI.step(step, steps, f'Removing old container [{container}]...')
+            os.system(f'docker {self.docker_ssh} container rm {container}_old')
 
     def stop(self, params=None):
         if self.SWARM:  # todo can stop service ?
@@ -362,7 +381,7 @@ class Mantis(object):
         CLI.info(f'Restoring database from file {params}')
         CLI.underline("Don't forget to drop database at first to prevent constraints collisions!")
         env = self.load_environment()
-        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W -W < /backups/{params}\'')
+        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W < /backups/{params}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
