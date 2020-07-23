@@ -47,8 +47,9 @@ class Mantis(object):
         else:
             prefix = 'MANTIS_'
             # self.environment_file_prefix = variables.get(f'{prefix}ENVIRONMENT_FILE_PREFIX', '')
+            self.configs_path = os.environ.get(f'{prefix}CONFIGS_FOLDER_PATH', '')
             self.environment_file_prefix = os.environ.get(f'{prefix}ENVIRONMENT_FILE_PREFIX', '')
-            self.environment_file = f'configs/environments/{self.environment_file_prefix}{self.environment_id}.env'
+            self.environment_file = f'{self.configs_path}configs/environments/{self.environment_file_prefix}{self.environment_id}.env'
             # variables = os.environ
             variables = self.load_environment()
 
@@ -85,7 +86,7 @@ class Mantis(object):
         self.SWARM_STACK = variables.get(f'{prefix}SWARM_STACK', self.CONTAINER_PREFIX)
         self.compose_name = variables.get(f'{prefix}COMPOSE_NAME', '')
         self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
-        self.webserver_config = f'configs/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
+        self.webserver_config = f'{self.configs_path}configs/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
 
     def load_environment(self):
@@ -125,7 +126,7 @@ class Mantis(object):
 
     def pull(self):
         CLI.info('Pulling docker image...')
-        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
+        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
     def upload(self):
         CLI.info('Uploading...')
@@ -141,7 +142,7 @@ class Mantis(object):
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
 
         CLI.step(2, steps, 'Pulling docker image...')
-        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
+        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
     def restart(self):
         CLI.info('Restarting...')
@@ -175,8 +176,7 @@ class Mantis(object):
                     os.system(f'docker {self.docker_ssh} container rm {container}')
 
             CLI.step(2, steps, 'Recreating Docker containers...')
-            os.system(
-                f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up --remove-orphans -d')
+            os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up --remove-orphans -d')
 
             CLI.step(3, steps, 'Prune Docker images and volumes')
             os.system(f'docker {self.docker_ssh} system prune --volumes --force')
@@ -191,12 +191,12 @@ class Mantis(object):
     
         step = 1
         CLI.step(step, steps, 'Pulling docker image...')
-        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
+        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
         for service, container in containers.items():
             step += 1
             CLI.step(step, steps, f'Creating new container [{container}]...')
-            os.system(f'docker-compose {self.docker_ssh} -f configs/docker/{self.COMPOSE_PREFIX}.yml -f configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
+            os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
 
             step += 1
             CLI.step(step, steps, f'Renaming old container [{container}]...')
