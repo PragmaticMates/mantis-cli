@@ -70,7 +70,7 @@ def execute(manager, command, params=''):
             '--send-test-email': 'send_test_email',
         }.get(command)
 
-        methods_with_params = ['build', 'ssh', 'manage', 'pg_restore', 'stop', 'logs', 'remove']
+        methods_with_params = ['build', 'ssh', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove']
 
         if manager_method is None or not hasattr(manager, manager_method):
             CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '

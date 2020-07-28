@@ -171,7 +171,7 @@ class Mantis(object):
             CLI.step(1, steps, 'Stopping and removing Docker app container...')
 
             for container in self.get_containers():
-                if container == self.CONTAINER_APP:
+                if container in [self.CONTAINER_APP, self.CONTAINER_QUEUE]:
                     os.popen(f'docker {self.docker_ssh} container stop {container}').read()
                     os.system(f'docker {self.docker_ssh} container rm {container}')
 
@@ -200,7 +200,11 @@ class Mantis(object):
 
             step += 1
             CLI.step(step, steps, f'Renaming old container [{container}]...')
-            os.system(f'docker {self.docker_ssh} container rename {container} {container}_old')
+
+            if container in self.get_containers():
+                os.system(f'docker {self.docker_ssh} container rename {container} {container}_old')
+            else:
+                CLI.info(f'{container}_old was not running')
 
             step += 1
             CLI.step(step, steps, f'Renaming new container [{container}]...')
@@ -217,11 +221,15 @@ class Mantis(object):
         for service, container in containers.items():
             step += 1
             CLI.step(step, steps, f'Stopping old container [{container}]...')
-            os.system(f'docker {self.docker_ssh} container stop {container}_old')
-    
-            step += 1
-            CLI.step(step, steps, f'Removing old container [{container}]...')
-            os.system(f'docker {self.docker_ssh} container rm {container}_old')
+
+            if container in self.get_containers():
+                os.system(f'docker {self.docker_ssh} container stop {container}_old')
+
+                step += 1
+                CLI.step(step, steps, f'Removing old container [{container}]...')
+                os.system(f'docker {self.docker_ssh} container rm {container}_old')
+            else:
+                CLI.info(f'{container}_old was not running')
 
     def stop(self, params=None):
         if self.SWARM:  # todo can stop service ?
@@ -239,7 +247,7 @@ class Mantis(object):
                 CLI.step(index + 1, steps, f'Stopping {container}')
                 os.system(f'docker {self.docker_ssh} container stop {container}')
 
-    def start(self):
+    def start(self, params):
         if self.SWARM:
             CLI.info('Starting services...')
             os.system(f'docker stack deploy -c configs/docker/{self.COMPOSE_PREFIX}.yml -c configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
@@ -247,7 +255,7 @@ class Mantis(object):
         else:
             CLI.info('Starting containers...')
 
-            containers = self.get_containers()
+            containers = self.get_containers() if not params else params.split(' ')
 
             steps = len(containers)
 
