@@ -186,28 +186,29 @@ class Mantis(object):
 
     def deploy(self):  # todo deploy swarm
         CLI.info('Deploying...')
-        containers = {'app': self.CONTAINER_APP, 'queue': self.CONTAINER_QUEUE}
-        steps = 5 * len(containers) + 3
+        zero_downtime_containers = {'app': self.CONTAINER_APP}
+        restart_containers = {'queue': self.CONTAINER_QUEUE}
+        steps = 2 * len(zero_downtime_containers) + len(restart_containers) + 3
     
         step = 1
         CLI.step(step, steps, 'Pulling docker image...')
         os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
-        for service, container in containers.items():
+        for service, container in zero_downtime_containers.items():
             step += 1
-            CLI.step(step, steps, f'Creating new container [{container}]...')
+            CLI.step(step, steps, f'Zero downtime deployment of container [{container}]...')
+
+            CLI.info(f'Creating new container [{container}_new]...')
             os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
 
-            step += 1
-            CLI.step(step, steps, f'Renaming old container [{container}]...')
+            CLI.info(f'Renaming old container [{container}_old]...')
 
             if container in self.get_containers():
                 os.system(f'docker {self.docker_ssh} container rename {container} {container}_old')
             else:
                 CLI.info(f'{container}_old was not running')
 
-            step += 1
-            CLI.step(step, steps, f'Renaming new container [{container}]...')
+            CLI.info(f'Renaming new container [{container}]...')
             os.system(f'docker {self.docker_ssh} container rename {container}_new {container}')
 
         step += 1
@@ -218,18 +219,34 @@ class Mantis(object):
         CLI.step(step, steps, 'Reloading webserver...')
         os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
-        for service, container in containers.items():
+        for service, container in zero_downtime_containers.items():
             step += 1
-            CLI.step(step, steps, f'Stopping old container [{container}]...')
+            CLI.step(step, steps, f'Stopping old container [{container}_old]...')
 
             if container in self.get_containers():
+                CLI.info(f'Stopping old container [{container}_old]...')
                 os.system(f'docker {self.docker_ssh} container stop {container}_old')
 
-                step += 1
-                CLI.step(step, steps, f'Removing old container [{container}]...')
+                CLI.info(f'Removing old container [{container}_old]...')
                 os.system(f'docker {self.docker_ssh} container rm {container}_old')
             else:
                 CLI.info(f'{container}_old was not running')
+
+        for service, container in restart_containers.items():
+            step += 1
+            CLI.step(step, steps, f'Recreating container [{container}]...')
+
+            if container in self.get_containers():
+                CLI.info(f'Stopping container [{container}]...')
+                os.system(f'docker {self.docker_ssh} container stop {container}')
+
+                CLI.info(f'Removing container [{container}]...')
+                os.system(f'docker {self.docker_ssh} container rm {container}')
+
+                CLI.info(f'Creating new container [{container}]...')
+                os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
+            else:
+                CLI.info(f'{container} was not running')
 
     def stop(self, params=None):
         if self.SWARM:  # todo can stop service ?
