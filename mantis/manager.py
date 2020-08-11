@@ -245,7 +245,7 @@ class Mantis(object):
                 os.system(f'docker {self.docker_ssh} container rm {container}')
 
                 CLI.info(f'Waiting 3 seconds...')
-                sleep(3000)
+                sleep(3)
 
                 CLI.info(f'Creating new container [{container}]...')
                 os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
