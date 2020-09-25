@@ -139,7 +139,7 @@ class Mantis(object):
             print('Skippipng...')
         else:
             # rsync -arvz -e 'ssh -p <port-number>' --progress --delete user@remote-server:/path/to/remote/folder /path/to/local/folder
-            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/{self.IMAGE_NAME}/configs/{self.WEBSERVER}/')
+            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.WEBSERVER}/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
 
         CLI.step(2, steps, 'Pulling docker image...')
@@ -244,11 +244,19 @@ class Mantis(object):
                 CLI.info(f'Removing container [{container}]...')
                 os.system(f'docker {self.docker_ssh} container rm {container}')
 
-                CLI.info(f'Waiting 5 seconds...')
-                sleep(5)
-
                 CLI.info(f'Creating new container [{container}]...')
                 os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
+
+                # Temporary workaround for existing rqworker
+                sleep_seconds = 10
+                CLI.info(f'Waiting {sleep_seconds} seconds...')
+                sleep(sleep_seconds)
+
+                CLI.info(f'Stopping container [{container}]...')
+                os.system(f'docker {self.docker_ssh} container stop {container}')
+
+                CLI.info(f'Starting container [{container}]...')
+                os.system(f'docker {self.docker_ssh} container start {container}')
             else:
                 CLI.info(f'{container} was not running')
 
