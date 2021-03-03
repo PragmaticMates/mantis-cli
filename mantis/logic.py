@@ -10,11 +10,6 @@ def main():
 
     commands = sys.argv[1:]
 
-    # get environment ID
-    environment_id = None
-
-    # first argument could be environment
-    # if commands[0].lower() in ['dev', 'stage', 'production', 'test']:
     # first argument is environment
     environment_id = commands[0].lower()
     commands = commands[1:]
@@ -42,6 +37,7 @@ def execute(manager, command, params=''):
             '-b': 'build',
             '--push': 'push',
             '-p': 'push',
+            '--pull': 'pull',
             '--upload': 'upload',
             '-u': 'upload',
             '--restart': 'restart',
@@ -77,6 +73,7 @@ def execute(manager, command, params=''):
             CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
                       '\n--build/-b |'
                       '\n--push/-p |'
+                      '\n--pull |'
                       '\n--upload/-u | '
                       '\n--deploy/-d | '
                       '\n--stop | '
