@@ -53,7 +53,7 @@ class Mantis(object):
             self.environment_file = f'{self.configs_path}configs/environments/{self.environment_file_prefix}{self.environment_id}.env'
             # variables = os.environ
             variables = self.load_environment()
-
+            
         self.user = variables[f'{prefix}USER']
 
         if self.environment_id is not None:
@@ -82,11 +82,13 @@ class Mantis(object):
         self.CONTAINER_DB = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_DB}'
         self.CONTAINER_CACHE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_CACHE}'
         self.CONTAINER_WEBSERVER = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_WEBSERVER}'
+        self.CACHE = variables.get(f'{prefix}CACHE', 'redis')
         self.WEBSERVER = variables.get(f'{prefix}WEBSERVER', 'nginx')
         self.SWARM = strtobool(variables.get(f'{prefix}SWARM', 'False'))
         self.SWARM_STACK = variables.get(f'{prefix}SWARM_STACK', self.CONTAINER_PREFIX)
         self.compose_name = variables.get(f'{prefix}COMPOSE_NAME', '')
         self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
+        self.cache_config = f'{self.configs_path}configs/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config = f'{self.configs_path}configs/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
         self.htpasswd = f'secrets/.htpasswd'
@@ -107,13 +109,15 @@ class Mantis(object):
 
         env = self.load_environment()
         build_args = env.get('MANTIS_BUILD_ARGS', '')
+        build_kit = strtobool(env.get('MANTIS_BUILD_KIT', 'False'))
+        build_kit = 'DOCKER_BUILDKIT=1' if build_kit else ''
 
         if build_args != '':
             build_args = build_args.split(',')
             build_args = [f'--build-arg {arg}' for arg in build_args]
             build_args = ' '.join(build_args)
 
-        os.system(f'docker build . {build_args} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
+        os.system(f'time {build_kit} docker build . {build_args} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
 
     def push(self):
         CLI.info(f'Pushing...')
@@ -140,6 +144,7 @@ class Mantis(object):
             print('Skippipng...')
         else:
             # rsync -arvz -e 'ssh -p <port-number>' --progress --delete user@remote-server:/path/to/remote/folder /path/to/local/folder
+            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.CACHE}/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.WEBSERVER}/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.htpasswd} {self.user}@{self.host}:/etc/nginx/conf.d/')
