@@ -1,3 +1,4 @@
+import json
 import os
 import datetime
 from distutils.util import strtobool
@@ -42,56 +43,54 @@ class Mantis(object):
         self.init_config(config)
 
     def init_config(self, config):
-        if config is not None:
-            variables = config
-            prefix = ''
-        else:
-            prefix = 'MANTIS_'
-            # self.environment_file_prefix = variables.get(f'{prefix}ENVIRONMENT_FILE_PREFIX', '')
-            self.configs_path = os.environ.get(f'{prefix}CONFIGS_FOLDER_PATH', '')
-            self.environment_file_prefix = os.environ.get(f'{prefix}ENVIRONMENT_FILE_PREFIX', '')
-            self.environment_file = f'{self.configs_path}configs/environments/{self.environment_file_prefix}{self.environment_id}.env'
-            # variables = os.environ
-            variables = self.load_environment()
-            
-        self.user = variables[f'{prefix}USER']
+        self.config = config or self.load_config()
+
+        self.configs_path = self.config.get('configs_folder_path', '')
+        self.environment_file_prefix = self.config.get('environment_file_prefix', '')
+        self.environment_file = f'{self.configs_path}configs/environments/{self.environment_file_prefix}{self.environment_id}.env'
 
         if self.environment_id is not None:
             # Get environment settings
             if self.environment_id == 'dev':
                 self.host = 'localhost'
             else:
-                self.host = variables[f'{prefix}HOST']
-                self.port = variables[f'{prefix}PORT']
+                self.host = self.config['hosts'][self.environment_id]
+                self.user = self.config['hosts']['user']
+                self.port = self.config['hosts']['port']
                 self.docker_ssh = f'-H "ssh://{self.user}@{self.host}:{self.port}"'
 
-            print(f'Deploying to {Colors.BOLD}{self.environment_id}{Colors.ENDC}: {Colors.RED}{self.host}{Colors.ENDC}')
+            print(f'Mantis attached to {Colors.BOLD}{self.environment_id}{Colors.ENDC}: {Colors.RED}{self.host}{Colors.ENDC}')
 
-        self.PROJECT_NAME = variables[f'{prefix}PROJECT_NAME']
-        self.IMAGE_NAME = variables[f'{prefix}IMAGE_NAME']
-        self.DOCKER_REPOSITORY = variables[f'{prefix}DOCKER_REPOSITORY']
-        self.DOCKER_TAG = variables[f'{prefix}DOCKER_TAG']
-        self.CONTAINER_PREFIX = variables[f'{prefix}CONTAINER_PREFIX']
-        self.CONTAINER_SUFFIX_DB = variables[f'{prefix}CONTAINER_SUFFIX_DB']
-        self.CONTAINER_SUFFIX_CACHE = variables[f'{prefix}CONTAINER_SUFFIX_CACHE']
-        self.CONTAINER_SUFFIX_APP = variables[f'{prefix}CONTAINER_SUFFIX_APP']
-        self.CONTAINER_SUFFIX_QUEUE = variables[f'{prefix}CONTAINER_SUFFIX_QUEUE']
-        self.CONTAINER_SUFFIX_WEBSERVER = variables[f'{prefix}CONTAINER_SUFFIX_WEBSERVER']
+        self.PROJECT_NAME = self.config['project_name']
+        self.IMAGE_NAME = self.config['build']['image']
+        self.DOCKER_REPOSITORY = self.config['build']['repository']
+        self.DOCKER_TAG = self.config['build']['tag']
+        self.CONTAINER_PREFIX = self.config['containers']['prefix']
+        self.CONTAINER_SUFFIX_DB = self.config['containers']['suffixes']['db']
+        self.CONTAINER_SUFFIX_CACHE = self.config['containers']['suffixes']['cache']
+        self.CONTAINER_SUFFIX_APP = self.config['containers']['suffixes']['app']
+        self.CONTAINER_SUFFIX_QUEUE = self.config['containers']['suffixes']['queue']
+        self.CONTAINER_SUFFIX_WEBSERVER = self.config['containers']['suffixes']['webserver']
         self.CONTAINER_APP = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_APP}'
         self.CONTAINER_QUEUE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_QUEUE}'
         self.CONTAINER_DB = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_DB}'
         self.CONTAINER_CACHE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_CACHE}'
         self.CONTAINER_WEBSERVER = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_WEBSERVER}'
-        self.CACHE = variables.get(f'{prefix}CACHE', 'redis')
-        self.WEBSERVER = variables.get(f'{prefix}WEBSERVER', 'nginx')
-        self.SWARM = strtobool(variables.get(f'{prefix}SWARM', 'False'))
-        self.SWARM_STACK = variables.get(f'{prefix}SWARM_STACK', self.CONTAINER_PREFIX)
-        self.compose_name = variables.get(f'{prefix}COMPOSE_NAME', '')
+        self.CACHE = self.config.get('cache', 'redis')
+        self.WEBSERVER = self.config.get('webserver', 'nginx')
+        self.SWARM = self.config.get('swarm', False)
+        self.SWARM_STACK = self.config.get(f'swarm_stack', self.CONTAINER_PREFIX)  # project name?
+        self.compose_name = self.config['compose']['name']
         self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
         self.cache_config = f'{self.configs_path}configs/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config = f'{self.configs_path}configs/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
         self.htpasswd = f'secrets/.htpasswd'
+
+    def load_config(self):
+        config_file_path = os.environ.get('MANTIS_CONFIG', 'mantis.json')
+        with open(config_file_path) as config_file:
+            return json.load(config_file)
 
     def load_environment(self):
         with open(self.environment_file) as fh:
@@ -100,6 +99,10 @@ class Mantis(object):
                 for line in fh.readlines() if not line.startswith('#')
             )
 
+    def get_container_name(self, service):
+        suffix = self.config['containers']['suffixes'].get(service, f'_{service}')
+        return f'{self.CONTAINER_PREFIX}{suffix}'
+        
     def build(self, params=''):
         CLI.info(f'Building...')
         CLI.info(f'Params = {params}')
@@ -194,19 +197,22 @@ class Mantis(object):
 
     def deploy(self):  # todo deploy swarm
         CLI.info('Deploying...')
-        zero_downtime_containers = {'app': self.CONTAINER_APP}
-        restart_containers = {'queue': self.CONTAINER_QUEUE}
-        steps = 2 * len(zero_downtime_containers) + len(restart_containers) + 3
+        # zero_downtime_containers = {'app': self.CONTAINER_APP}
+        zero_downtime_services = self.config['containers']['deploy']['zero_downtime']
+        restart_services = self.config['containers']['deploy']['restart']
+
+        steps = 6
     
         step = 1
         CLI.step(step, steps, 'Pulling docker image...')
         os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
-        for service, container in zero_downtime_containers.items():
-            step += 1
-            CLI.step(step, steps, f'Zero downtime deployment of container [{container}]...')
+        step += 1
+        CLI.step(step, steps, f'Zero downtime services: {zero_downtime_services}')
 
-            CLI.info(f'Creating new container [{container}_new]...')
+        for service in zero_downtime_services:
+            container = self.get_container_name(service)
+
             os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
 
             CLI.info(f'Renaming old container [{container}_old]...')
@@ -227,9 +233,11 @@ class Mantis(object):
         CLI.step(step, steps, 'Reloading webserver...')
         os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
-        for service, container in zero_downtime_containers.items():
-            step += 1
-            CLI.step(step, steps, f'Stopping old container [{container}_old]...')
+        step += 1
+        CLI.step(step, steps, f'Stopping old zero downtime services: {zero_downtime_services}')
+
+        for service in zero_downtime_services:
+            container = self.get_container_name(service)
 
             if container in self.get_containers():
                 CLI.info(f'Stopping old container [{container}_old]...')
@@ -240,9 +248,13 @@ class Mantis(object):
             else:
                 CLI.info(f'{container}_old was not running')
 
-        for service, container in restart_containers.items():
-            step += 1
-            CLI.step(step, steps, f'Recreating container [{container}]...')
+        step += 1
+        CLI.step(step, steps, f'Restart services: {restart_services}')
+
+        for service in restart_services:
+            container = self.get_container_name(service)
+
+            CLI.underline(f'Recreating {service} container ({container})...')
 
             if container in self.get_containers():
                 CLI.info(f'Stopping container [{container}]...')
