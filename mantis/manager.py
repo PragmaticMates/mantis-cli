@@ -110,9 +110,9 @@ class Mantis(object):
 
         CLI.step(1, steps, 'Building Docker image...')
 
-        env = self.load_environment()
-        build_args = env.get('MANTIS_BUILD_ARGS', '')
-        build_kit = strtobool(env.get('MANTIS_BUILD_KIT', 'False'))
+        build_args = self.config['build']['args']
+        build_args = ','.join(map('='.join, build_args.items()))
+        build_kit = self.config['build']['kit']
         build_kit = 'DOCKER_BUILDKIT=1' if build_kit else ''
 
         if build_args != '':
@@ -120,6 +120,9 @@ class Mantis(object):
             build_args = [f'--build-arg {arg}' for arg in build_args]
             build_args = ' '.join(build_args)
 
+        CLI.info(f'Kit = {build_kit}')
+        CLI.info(f'Args = {build_args}')
+        
         os.system(f'time {build_kit} docker build . {build_args} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
 
     def push(self):
@@ -179,15 +182,16 @@ class Mantis(object):
                 os.system(f'docker {self.docker_ssh} exec -i {app_container[0]} python manage.py collectstatic --noinput --verbosity 0')
 
         else:
-            CLI.step(1, steps, 'Stopping and removing Docker app container...')
+            CLI.step(1, steps, 'Stopping and removing Docker containers...')
 
-            for container in self.get_containers():
-                if container in [self.CONTAINER_APP, self.CONTAINER_QUEUE]:
-                    os.popen(f'docker {self.docker_ssh} container stop {container}').read()
-                    os.system(f'docker {self.docker_ssh} container rm {container}')
+            for service in self.config['containers']['deploy']['zero_downtime'] + self.config['containers']['deploy']['restart']:
+                container = self.get_container_name(service)
+                os.popen(f'docker {self.docker_ssh} container stop {container}').read()
+                os.system(f'docker {self.docker_ssh} container rm {container}')
 
             CLI.step(2, steps, 'Recreating Docker containers...')
-            os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up --remove-orphans -d')
+            os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up -d')
+            # os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up --remove-orphans -d')
 
             CLI.step(3, steps, 'Prune Docker images and volumes')
             os.system(f'docker {self.docker_ssh} system prune --volumes --force')
