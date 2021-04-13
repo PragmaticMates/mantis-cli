@@ -102,7 +102,7 @@ class Mantis(object):
     def get_container_name(self, service):
         suffix = self.config['containers']['suffixes'].get(service, f'_{service}')
         return f'{self.CONTAINER_PREFIX}{suffix}'
-        
+
     def build(self, params=''):
         CLI.info(f'Building...')
         CLI.info(f'Params = {params}')
@@ -122,7 +122,7 @@ class Mantis(object):
 
         CLI.info(f'Kit = {build_kit}')
         CLI.info(f'Args = {build_args}')
-        
+
         os.system(f'time {build_kit} docker build . {build_args} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
 
     def push(self):
@@ -206,7 +206,7 @@ class Mantis(object):
         restart_services = self.config['containers']['deploy']['restart']
 
         steps = 6
-    
+
         step = 1
         CLI.step(step, steps, 'Pulling docker image...')
         os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
@@ -232,10 +232,6 @@ class Mantis(object):
         step += 1
         CLI.step(step, steps, 'Collecting static files')
         os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput --verbosity 0')
-
-        step += 1
-        CLI.step(step, steps, 'Reloading webserver...')
-        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
         step += 1
         CLI.step(step, steps, f'Stopping old zero downtime services: {zero_downtime_services}')
@@ -271,6 +267,10 @@ class Mantis(object):
                 os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
             else:
                 CLI.info(f'{container} was not running')
+
+        step += 1
+        CLI.step(step, steps, 'Reloading webserver...')
+        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
     def stop(self, params=None):
         if self.SWARM:  # todo can stop service ?
