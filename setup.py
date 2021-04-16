@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='mantis-cli',
-    version='1.5.0',
+    version='1.5.1',
     description='Management command to build and deploy webapps, especially based on Django',
     long_description=open('README.md').read(),
     author='Erik Telepovský',
