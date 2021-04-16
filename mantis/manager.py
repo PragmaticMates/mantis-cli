@@ -44,6 +44,7 @@ class Mantis(object):
         self.init_config(config)
 
     def init_config(self, config):
+        self.config_file = os.environ.get('MANTIS_CONFIG', 'mantis.json')
         self.config = config or self.load_config()
 
         self.configs_path = self.config.get('configs_folder_path', '')
@@ -96,9 +97,8 @@ class Mantis(object):
         self.htpasswd = f'secrets/.htpasswd'
 
     def load_config(self):
-        config_file_path = os.environ.get('MANTIS_CONFIG', 'mantis.json')
-        with open(config_file_path) as config_file:
-            return json.load(config_file)
+        with open(self.config_file) as config:
+            return json.load(config)
 
     def load_environment(self):
         with open(self.environment_file) as fh:
@@ -179,6 +179,7 @@ class Mantis(object):
         if self.environment_id == 'dev':
             print('Skippipng...')
         else:
+            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.environment_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/environments/')
 
             for config in self.compose_configs:
