@@ -38,8 +38,9 @@ class Mantis(object):
     environment_id = None
     docker_ssh = ''
 
-    def __init__(self, config=None, environment_id=None):
+    def __init__(self, config=None, environment_id=None, no_ssh=False):
         self.environment_id = environment_id
+        self.no_ssh = no_ssh
         self.init_config(config)
 
     def init_config(self, config):
@@ -55,9 +56,11 @@ class Mantis(object):
                 self.host = 'localhost'
             else:
                 self.host = self.config['hosts'][self.environment_id]
-                self.user = self.config['hosts']['user']
-                self.port = self.config['hosts']['port']
-                self.docker_ssh = f'-H "ssh://{self.user}@{self.host}:{self.port}"'
+
+                if not self.no_ssh:
+                    self.user = self.config['hosts']['user']
+                    self.port = self.config['hosts']['port']
+                    self.docker_ssh = f'-H "ssh://{self.user}@{self.host}:{self.port}"'
 
             print(f'Mantis attached to {Colors.BOLD}{self.environment_id}{Colors.ENDC}: {Colors.RED}{self.host}{Colors.ENDC}')
 
@@ -83,6 +86,11 @@ class Mantis(object):
         self.compose_name = self.config['compose']['name']
         self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
         self.cache_config = f'{self.configs_path}configs/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
+        self.compose_configs = [
+            f'{self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml',
+            f'{self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml',
+            f'{self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.proxy.yml'
+        ]
         self.webserver_config = f'{self.configs_path}configs/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
         self.htpasswd = f'secrets/.htpasswd'
@@ -144,7 +152,7 @@ class Mantis(object):
         CLI.info('Uploading...')
         steps = 2
 
-        CLI.step(1, steps, 'Uploading webserver server configs...')
+        CLI.step(1, steps, 'Uploading webserver configs...')
 
         if self.environment_id == 'dev':
             print('Skippipng...')
@@ -154,6 +162,10 @@ class Mantis(object):
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.WEBSERVER}/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.htpasswd} {self.user}@{self.host}:/etc/nginx/conf.d/')
+            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.environment_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/environments/')
+
+            for config in self.compose_configs:
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/docker/')
 
         CLI.step(2, steps, 'Pulling docker image...')
         os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
@@ -216,9 +228,7 @@ class Mantis(object):
 
         for service in zero_downtime_services:
             container = self.get_container_name(service)
-
             os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
-
             CLI.info(f'Renaming old container [{container}_old]...')
 
             if container in self.get_containers():
@@ -233,6 +243,10 @@ class Mantis(object):
         CLI.step(step, steps, 'Collecting static files')
         os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput --verbosity 0')
 
+        step += 1
+        CLI.step(step, steps, 'Reloading webserver...')
+        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
+        
         step += 1
         CLI.step(step, steps, f'Stopping old zero downtime services: {zero_downtime_services}')
 
@@ -267,10 +281,6 @@ class Mantis(object):
                 os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
             else:
                 CLI.info(f'{container} was not running')
-
-        step += 1
-        CLI.step(step, steps, 'Reloading webserver...')
-        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
     def stop(self, params=None):
         if self.SWARM:  # todo can stop service ?

@@ -13,9 +13,14 @@ def main():
     # first argument is environment
     environment_id = commands[0].lower()
     commands = commands[1:]
+    no_ssh = False
+
+    if '--no-ssh' in commands:
+        no_ssh = True
+        commands.remove('--no-ssh')
 
     # setup manager
-    manager = Mantis(environment_id=environment_id)
+    manager = Mantis(environment_id=environment_id, no_ssh=no_ssh)
 
     # execute all commands
     for command in commands:
@@ -71,6 +76,7 @@ def execute(manager, command, params=''):
 
         if manager_method is None or not hasattr(manager, manager_method):
             CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
+                      '\n--no-ssh |'
                       '\n--build/-b |'
                       '\n--push/-p |'
                       '\n--pull |'
