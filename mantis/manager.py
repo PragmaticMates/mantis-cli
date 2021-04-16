@@ -154,7 +154,7 @@ class Mantis(object):
 
         CLI.step(1, steps, 'Uploading webserver configs...')
 
-        if self.environment_id == 'dev':
+        if self.environment_id == 'dev' or self.no_ssh:
             print('Skippipng...')
         else:
             # rsync -arvz -e 'ssh -p <port-number>' --progress --delete user@remote-server:/path/to/remote/folder /path/to/local/folder
@@ -176,7 +176,7 @@ class Mantis(object):
 
         CLI.step(1, steps, 'Uploading docker compose configs and environment...')
 
-        if self.environment_id == 'dev':
+        if self.environment_id == 'dev' or self.no_ssh:
             print('Skippipng...')
         else:
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/')
