@@ -44,6 +44,7 @@ def execute(manager, command, params=''):
             '-p': 'push',
             '--pull': 'pull',
             '--upload': 'upload',
+            '--upload-docker-configs': 'upload_docker_configs',
             '-u': 'upload',
             '--restart': 'restart',
             '-r': 'restart',
@@ -81,6 +82,7 @@ def execute(manager, command, params=''):
                       '\n--push/-p |'
                       '\n--pull |'
                       '\n--upload/-u | '
+                      '\n--upload-docker-configs | '
                       '\n--deploy/-d | '
                       '\n--stop | '
                       '\n--start | '
