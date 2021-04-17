@@ -10,10 +10,9 @@ class Mantis(object):
     environment_id = None
     docker_ssh = ''
 
-    def __init__(self, config=None, environment_id=None, mode='docker-host', origin='remote'):
+    def __init__(self, config=None, environment_id=None, mode='docker-host'):
         self.environment_id = environment_id
         self.mode = mode
-        self.origin = origin
         self.init_config(config)
 
     def init_config(self, config):
@@ -36,10 +35,8 @@ class Mantis(object):
                 self.port = self.config['hosts']['port']
                 self.project_path = self.config['hosts']['project_path']
 
-                if self.mode == 'docker-host' and self.origin == 'remote':
+                if self.mode == 'docker-host':
                     self.docker_ssh = f'-H "ssh://{self.user}@{self.host}:{self.port}"'
-
-            print(f'Mantis attached to {Colors.BOLD}{self.environment_id}{Colors.ENDC}: {Colors.RED}{self.host}{Colors.ENDC}')
 
         self.PROJECT_NAME = self.config['project_name']
         self.IMAGE_NAME = self.config['build']['image']
@@ -132,8 +129,8 @@ class Mantis(object):
 
         if self.environment_id == 'dev':
             print('Skipping for dev...')
-        elif self.origin == 'host':
-            CLI.warning('Not uploading due to host origin! Be sure your configs on host are up to date!')
+        elif self.mode == 'host':
+            CLI.warning('Not uploading due to host mode! Be sure your configs on host are up to date!')
         else:
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.CACHE}/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.WEBSERVER}/')
@@ -152,8 +149,8 @@ class Mantis(object):
 
         if self.environment_id == 'dev':
             print('Skipping for dev...')
-        elif self.origin == 'host':
-            CLI.warning('Not uploading due to host origin! Be sure your configs on host are up to date!')
+        elif self.mode == 'host':
+            CLI.warning('Not uploading due to host mode! Be sure your configs on host are up to date!')
         else:
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.environment_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/environments/')

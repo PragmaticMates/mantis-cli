@@ -36,21 +36,21 @@ def main():
     environment_id = params['environment_id']
     commands = params['commands']
     mode = params['settings'].get('mode', 'docker-host')
-    origin = params['settings'].get('origin', 'remote')
-    hostname = os.popen('hostname').read()
-    
-    CLI.bold('MANTIS')
-    print(f'Mode: {Colors.GREEN}{mode}{Colors.ENDC}')
-    print(f'Origin: {Colors.PINK}{origin}{Colors.ENDC}')
-    print(f'Hostname: {Colors.BLUE}{hostname}{Colors.ENDC}')
+    hostname = os.popen('hostname').read().rstrip("\n")
 
     # setup manager
-    manager = Mantis(environment_id=environment_id, mode=mode, origin=origin)
+    manager = Mantis(environment_id=environment_id, mode=mode)
+
+    print(f'Mantis attached to '
+          f'{Colors.BOLD}{manager.environment_id}{Colors.ENDC}: '
+          f'{Colors.RED}{manager.host}{Colors.ENDC}, '
+          f'mode: {Colors.GREEN}{manager.mode}{Colors.ENDC}, '
+          f'hostname: {Colors.BLUE}{hostname}{Colors.ENDC}')
 
     if mode == 'ssh':
         cmds = [
             f'cd {manager.project_path}',
-            f'mantis {environment_id} --origin=host {" ".join(commands)}'
+            f'mantis {environment_id} --mode=host {" ".join(commands)}'
         ]
         cmd = ';'.join(cmds)
         exec = f"ssh -t {manager.user}@{manager.host} -p {manager.port} '{cmd}'"
