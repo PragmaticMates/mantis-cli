@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 from setuptools import setup, find_packages
 
+from mantis import VERSION
 
 setup(
     name='mantis-cli',
-    version='1.6.0',
+    version=VERSION,
     description='Management command to build and deploy webapps, especially based on Django',
     long_description=open('README.md').read(),
     author='Erik Telepovský',

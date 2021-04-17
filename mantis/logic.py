@@ -1,5 +1,6 @@
 import os, sys
 
+from mantis import VERSION
 from mantis.helpers import Colors, CLI
 from mantis.manager import Mantis
 
@@ -41,7 +42,7 @@ def main():
     # setup manager
     manager = Mantis(environment_id=environment_id, mode=mode)
 
-    print(f'Mantis attached to '
+    print(f'Mantis (v{VERSION}) attached to '
           f'{Colors.BOLD}{manager.environment_id}{Colors.ENDC}: '
           f'{Colors.RED}{manager.host}{Colors.ENDC}, '
           f'mode: {Colors.GREEN}{manager.mode}{Colors.ENDC}, '
