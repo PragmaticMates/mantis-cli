@@ -150,7 +150,7 @@ class Mantis(object):
 
     def upload(self):
         CLI.info('Uploading...')
-        steps = 2
+        steps = 1
 
         CLI.step(1, steps, 'Uploading webserver configs...')
 
@@ -166,9 +166,6 @@ class Mantis(object):
 
             # for config in self.compose_configs:
             #     os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/docker/')
-
-        CLI.step(2, steps, 'Pulling docker image...')
-        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
     def upload_docker_configs(self):
         CLI.info('Uploading...')
@@ -226,19 +223,23 @@ class Mantis(object):
             CLI.step(4, steps, 'Collecting static files')
             os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput --verbosity 0')
 
-    def deploy(self):  # todo deploy swarm
+    def deploy(self):
         CLI.info('Deploying...')
-        # zero_downtime_containers = {'app': self.CONTAINER_APP}
+        self.clean()
+        self.upload()
+        self.pull()
+        self.reload()
+        self.logs()
+        self.status()
+        
+    def reload(self):  # todo deploy swarm
+        CLI.info('Reloading containers...')
         zero_downtime_services = self.config['containers']['deploy']['zero_downtime']
         restart_services = self.config['containers']['deploy']['restart']
 
-        steps = 6
+        steps = 5
 
         step = 1
-        CLI.step(step, steps, 'Pulling docker image...')
-        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
-
-        step += 1
         CLI.step(step, steps, f'Zero downtime services: {zero_downtime_services}')
 
         for service in zero_downtime_services:

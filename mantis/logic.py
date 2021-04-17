@@ -41,13 +41,13 @@ def execute(manager, command, params=''):
             '--build': 'build',
             '-b': 'build',
             '--push': 'push',
-            '-p': 'push',
             '--pull': 'pull',
+            '-p': 'pull',
             '--upload': 'upload',
             '--upload-docker-configs': 'upload_docker_configs',
             '-u': 'upload',
+            '--reload': 'reload',
             '--restart': 'restart',
-            '-r': 'restart',
             '--deploy': 'deploy',
             '-d': 'deploy',
             '--stop': 'stop',
@@ -79,14 +79,15 @@ def execute(manager, command, params=''):
             CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
                       '\n--no-ssh |'
                       '\n--build/-b |'
-                      '\n--push/-p |'
-                      '\n--pull |'
+                      '\n--push |'
+                      '\n--pull/-p |'
                       '\n--upload/-u | '
                       '\n--upload-docker-configs | '
                       '\n--deploy/-d | '
                       '\n--stop | '
                       '\n--start | '
-                      '\n--restart/-r | '
+                      '\n--reload | '
+                      '\n--restart | '
                       '\n--remove | '
                       '\n--clean/-c | '
                       '\n--status/-s | '
