@@ -3,44 +3,17 @@ import os
 import datetime
 from distutils.util import strtobool
 from time import sleep
-
-
-class CLI(object):
-    @staticmethod
-    def info(text):
-        print(f'{Colors.BLUE}{text}{Colors.ENDC}')
-
-    @staticmethod
-    def error(text):
-        exit(f'{Colors.RED}{text}{Colors.ENDC}')
-
-    @staticmethod
-    def underline(text):
-        print(f'{Colors.UNDERLINE}{text}{Colors.ENDC}')
-
-    @staticmethod
-    def step(index, total, text):
-        print(f'{Colors.YELLOW}[{index}/{total}] {text}{Colors.ENDC}')
-
-
-class Colors:
-    BLUE = '\033[94m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    PINK = '\033[95m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
+from mantis.helpers import Colors, CLI
 
 
 class Mantis(object):
     environment_id = None
     docker_ssh = ''
 
-    def __init__(self, config=None, environment_id=None, mode='docker-host'):
+    def __init__(self, config=None, environment_id=None, mode='docker-host', origin='remote'):
         self.environment_id = environment_id
         self.mode = mode
+        self.origin = origin
         self.init_config(config)
 
     def init_config(self, config):
@@ -63,7 +36,7 @@ class Mantis(object):
                 self.port = self.config['hosts']['port']
                 self.project_path = self.config['hosts']['project_path']
 
-                if self.mode == 'docker-host':
+                if self.mode == 'docker-host' and self.origin == 'remote':
                     self.docker_ssh = f'-H "ssh://{self.user}@{self.host}:{self.port}"'
 
             print(f'Mantis attached to {Colors.BOLD}{self.environment_id}{Colors.ENDC}: {Colors.RED}{self.host}{Colors.ENDC}')
@@ -155,12 +128,13 @@ class Mantis(object):
         CLI.info('Uploading...')
         steps = 1
 
-        CLI.step(1, steps, 'Uploading webserver configs...')
+        CLI.step(1, steps, 'Uploading configs [webserver, cache, htpasswd]')
 
-        if self.environment_id == 'dev' or self.mode == 'ssh':
-            print('Skippipng...')
+        if self.environment_id == 'dev':
+            print('Skipping for dev...')
+        elif self.origin == 'host':
+            CLI.warning('Not uploading due to host origin! Be sure your configs on host are up to date!')
         else:
-            # rsync -arvz -e 'ssh -p <port-number>' --progress --delete user@remote-server:/path/to/remote/folder /path/to/local/folder
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.CACHE}/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.WEBSERVER}/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
@@ -176,8 +150,10 @@ class Mantis(object):
 
         CLI.step(1, steps, 'Uploading docker compose configs and environment...')
 
-        if self.environment_id == 'dev' or self.mode == 'ssh':
-            print('Skippipng...')
+        if self.environment_id == 'dev':
+            print('Skipping for dev...')
+        elif self.origin == 'host':
+            CLI.warning('Not uploading due to host origin! Be sure your configs on host are up to date!')
         else:
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/')
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.environment_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/environments/')

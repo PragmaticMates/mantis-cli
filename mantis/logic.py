@@ -1,6 +1,7 @@
 import os, sys
 
-from mantis.manager import CLI, Mantis
+from mantis.helpers import Colors, CLI
+from mantis.manager import Mantis
 
 
 def parse_args():
@@ -16,13 +17,10 @@ def parse_args():
     for arg in sys.argv:
         if not arg.startswith('-'):
             d['environment_id'] = arg
-        # elif ':' in arg:
-        #     d['commands'].append(command.split(':'))
         elif '=' in arg:
             s, v = arg.split('=')
             d['settings'][s.strip('-')] = v
         else:
-            # d['commands'].append(arg.split(':'))
             d['commands'].append(arg)
 
     return d
@@ -38,21 +36,25 @@ def main():
     environment_id = params['environment_id']
     commands = params['commands']
     mode = params['settings'].get('mode', 'docker-host')
-    print(f'Mode: {mode}')
+    origin = params['settings'].get('origin', 'remote')
+    hostname = os.popen('hostname').read()
+    
+    CLI.bold('MANTIS')
+    print(f'Mode: {Colors.GREEN}{mode}{Colors.ENDC}')
+    print(f'Origin: {Colors.PINK}{origin}{Colors.ENDC}')
+    print(f'Hostname: {Colors.BLUE}{hostname}{Colors.ENDC}')
 
     # setup manager
-    manager = Mantis(environment_id=environment_id, mode=mode)
+    manager = Mantis(environment_id=environment_id, mode=mode, origin=origin)
 
     if mode == 'ssh':
         cmds = [
-            'pwd',
             f'cd {manager.project_path}',
-            'pwd',
-            f'mantis {environment_id} {" ".join(commands)}'
+            f'mantis {environment_id} --origin=host {" ".join(commands)}'
         ]
         cmd = ';'.join(cmds)
         exec = f"ssh -t {manager.user}@{manager.host} -p {manager.port} '{cmd}'"
-        print(exec)
+        # print(exec)
         os.system(exec)
     else:
         # execute all commands
