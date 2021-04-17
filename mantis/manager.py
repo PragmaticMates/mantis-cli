@@ -38,18 +38,20 @@ class Mantis(object):
     environment_id = None
     docker_ssh = ''
 
-    def __init__(self, config=None, environment_id=None, no_ssh=False):
+    def __init__(self, config=None, environment_id=None, mode='docker-host'):
         self.environment_id = environment_id
-        self.no_ssh = no_ssh
+        self.mode = mode
         self.init_config(config)
 
     def init_config(self, config):
-        self.config_file = os.environ.get('MANTIS_CONFIG', 'mantis.json')
+        self.config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
         self.config = config or self.load_config()
 
-        self.configs_path = self.config.get('configs_folder_path', '')
+        configs_folder_path = self.config.get('configs_folder_path', '')
+        configs_folder_name = self.config.get('configs_folder_name', 'configs')
+        self.configs_path = f'{configs_folder_path}{configs_folder_name}'
         self.environment_file_prefix = self.config.get('environment_file_prefix', '')
-        self.environment_file = f'{self.configs_path}configs/environments/{self.environment_file_prefix}{self.environment_id}.env'
+        self.environment_file = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env'
 
         if self.environment_id is not None:
             # Get environment settings
@@ -57,10 +59,11 @@ class Mantis(object):
                 self.host = 'localhost'
             else:
                 self.host = self.config['hosts'][self.environment_id]
+                self.user = self.config['hosts']['user']
+                self.port = self.config['hosts']['port']
+                self.project_path = self.config['hosts']['project_path']
 
-                if not self.no_ssh:
-                    self.user = self.config['hosts']['user']
-                    self.port = self.config['hosts']['port']
+                if self.mode == 'docker-host':
                     self.docker_ssh = f'-H "ssh://{self.user}@{self.host}:{self.port}"'
 
             print(f'Mantis attached to {Colors.BOLD}{self.environment_id}{Colors.ENDC}: {Colors.RED}{self.host}{Colors.ENDC}')
@@ -86,13 +89,13 @@ class Mantis(object):
         self.SWARM_STACK = self.config.get(f'swarm_stack', self.CONTAINER_PREFIX)  # project name?
         self.compose_name = self.config['compose']['name']
         self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
-        self.cache_config = f'{self.configs_path}configs/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
+        self.cache_config = f'{self.configs_path}/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.compose_configs = [
-            f'{self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml',
-            f'{self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml',
-            f'{self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.proxy.yml'
+            f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml',
+            f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml',
+            f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.proxy.yml'
         ]
-        self.webserver_config = f'{self.configs_path}configs/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
+        self.webserver_config = f'{self.configs_path}/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
         self.htpasswd = f'secrets/.htpasswd'
 
@@ -146,7 +149,7 @@ class Mantis(object):
 
     def pull(self):
         CLI.info('Pulling docker image...')
-        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
+        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
     def upload(self):
         CLI.info('Uploading...')
@@ -154,7 +157,7 @@ class Mantis(object):
 
         CLI.step(1, steps, 'Uploading webserver configs...')
 
-        if self.environment_id == 'dev' or self.no_ssh:
+        if self.environment_id == 'dev' or self.mode == 'ssh':
             print('Skippipng...')
         else:
             # rsync -arvz -e 'ssh -p <port-number>' --progress --delete user@remote-server:/path/to/remote/folder /path/to/local/folder
@@ -173,7 +176,7 @@ class Mantis(object):
 
         CLI.step(1, steps, 'Uploading docker compose configs and environment...')
 
-        if self.environment_id == 'dev' or self.no_ssh:
+        if self.environment_id == 'dev' or self.mode == 'ssh':
             print('Skippipng...')
         else:
             os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/')
@@ -214,8 +217,8 @@ class Mantis(object):
                 os.system(f'docker {self.docker_ssh} container rm {container}')
 
             CLI.step(2, steps, 'Recreating Docker containers...')
-            os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up -d')
-            # os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up --remove-orphans -d')
+            os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up -d')
+            # os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up --remove-orphans -d')
 
             CLI.step(3, steps, 'Prune Docker images and volumes')
             os.system(f'docker {self.docker_ssh} system prune --volumes --force')
@@ -244,7 +247,7 @@ class Mantis(object):
 
         for service in zero_downtime_services:
             container = self.get_container_name(service)
-            os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
+            os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
             CLI.info(f'Renaming old container [{container}_old]...')
 
             if container in self.get_containers():
@@ -294,7 +297,7 @@ class Mantis(object):
                 os.system(f'docker {self.docker_ssh} container rm {container}')
 
                 CLI.info(f'Creating new container [{container}]...')
-                os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
+                os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
             else:
                 CLI.info(f'{container} was not running')
 

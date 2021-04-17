@@ -1,35 +1,68 @@
-import sys
+import os, sys
 
 from mantis.manager import CLI, Mantis
 
 
+def parse_args():
+    import sys
+    from collections import defaultdict
+
+    d = {
+        'environment_id': None,
+        'commands': [],
+        'settings': {}
+    }
+
+    for arg in sys.argv:
+        if not arg.startswith('-'):
+            d['environment_id'] = arg
+        # elif ':' in arg:
+        #     d['commands'].append(command.split(':'))
+        elif '=' in arg:
+            s, v = arg.split('=')
+            d['settings'][s.strip('-')] = v
+        else:
+            # d['commands'].append(arg.split(':'))
+            d['commands'].append(arg)
+
+    return d
+
 def main():
     # check params
-    if len(sys.argv) <= 1:
-        CLI.error('Missing params')
+    params = parse_args()
 
-    commands = sys.argv[1:]
+    # print(params)
+    if len(params['commands']) == 0:
+        CLI.error('Missing commands')
 
-    # first argument is environment
-    environment_id = commands[0].lower()
-    commands = commands[1:]
-    no_ssh = False
-
-    if '--no-ssh' in commands:
-        no_ssh = True
-        commands.remove('--no-ssh')
+    environment_id = params['environment_id']
+    commands = params['commands']
+    mode = params['settings'].get('mode', 'docker-host')
+    print(f'Mode: {mode}')
 
     # setup manager
-    manager = Mantis(environment_id=environment_id, no_ssh=no_ssh)
+    manager = Mantis(environment_id=environment_id, mode=mode)
 
-    # execute all commands
-    for command in commands:
-        if ':' in command:
-            command, params = command.split(':')
-        else:
-            params = ''
+    if mode == 'ssh':
+        cmds = [
+            'pwd',
+            f'cd {manager.project_path}',
+            'pwd',
+            f'mantis {environment_id} {" ".join(commands)}'
+        ]
+        cmd = ';'.join(cmds)
+        exec = f"ssh -t {manager.user}@{manager.host} -p {manager.port} '{cmd}'"
+        print(exec)
+        os.system(exec)
+    else:
+        # execute all commands
+        for command in commands:
+            if ':' in command:
+                command, params = command.split(':')
+            else:
+                params = ''
 
-        execute(manager, command, params)
+            execute(manager, command, params)
 
 
 def execute(manager, command, params=''):
@@ -104,4 +137,7 @@ def execute(manager, command, params=''):
                       '\n--pg-restore | '
                       '\n--send-test-email')
         else:
-            getattr(manager, manager_method)(params) if manager_method in methods_with_params else getattr(manager, manager_method)()
+            if manager_method in methods_with_params:
+                getattr(manager, manager_method)(params)
+            else:
+                getattr(manager, manager_method)()
