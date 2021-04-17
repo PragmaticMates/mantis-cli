@@ -55,7 +55,6 @@ def main():
         ]
         cmd = ';'.join(cmds)
         exec = f"ssh -t {manager.user}@{manager.host} -p {manager.port} '{cmd}'"
-        # print(exec)
         os.system(exec)
     else:
         # execute all commands
@@ -63,12 +62,12 @@ def main():
             if ':' in command:
                 command, params = command.split(':')
             else:
-                params = ''
+                params = None
 
             execute(manager, command, params)
 
 
-def execute(manager, command, params=''):
+def execute(manager, command, params=None):
     if manager.environment_id is None:
         CLI.error('Missing environment')
 
@@ -109,7 +108,7 @@ def execute(manager, command, params=''):
             '--send-test-email': 'send_test_email',
         }.get(command)
 
-        methods_with_params = ['build', 'ssh', 'exec', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove']
+        methods_with_params = ['build', 'ssh', 'exec', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove', 'upload']
 
         if manager_method is None or not hasattr(manager, manager_method):
             CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
@@ -118,7 +117,6 @@ def execute(manager, command, params=''):
                       '\n--push |'
                       '\n--pull/-p |'
                       '\n--upload/-u | '
-                      '\n--upload-docker-configs | '
                       '\n--deploy/-d | '
                       '\n--stop | '
                       '\n--start | '
@@ -140,7 +138,7 @@ def execute(manager, command, params=''):
                       '\n--pg-restore | '
                       '\n--send-test-email')
         else:
-            if manager_method in methods_with_params:
+            if manager_method in methods_with_params and params:
                 getattr(manager, manager_method)(params)
             else:
                 getattr(manager, manager_method)()

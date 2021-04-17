@@ -121,42 +121,38 @@ class Mantis(object):
         CLI.info('Pulling docker image...')
         os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
-    def upload(self):
+    def upload(self, context='services'):
         CLI.info('Uploading...')
         steps = 1
 
-        CLI.step(1, steps, 'Uploading configs [webserver, cache, htpasswd]')
+        if context == 'services':
+            CLI.step(1, steps, 'Uploading configs for context "services" [webserver, cache, htpasswd]')
+        elif context == 'compose':
+            CLI.step(1, steps, 'Uploading configs for context "compose" [docker compose configs and environment]')
+        elif context == 'mantis':
+            CLI.step(1, steps, 'Uploading configs for mantis [mantis.json]')
+        else:
+            CLI.error(f'Unknown context "{context}"')
 
         if self.environment_id == 'dev':
             print('Skipping for dev...')
         elif self.mode == 'host':
             CLI.warning('Not uploading due to host mode! Be sure your configs on host are up to date!')
         else:
-            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.CACHE}/')
-            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.WEBSERVER}/')
-            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
-            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.htpasswd} {self.user}@{self.host}:/etc/nginx/conf.d/')
-            # os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.environment_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/environments/')
+            if context == 'services':
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.CACHE}/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.WEBSERVER}/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.htpasswd} {self.user}@{self.host}:/etc/nginx/conf.d/')
 
-            # for config in self.compose_configs:
-            #     os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/docker/')
+            elif context == 'mantis':
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/')
 
-    def upload_docker_configs(self):
-        CLI.info('Uploading...')
-        steps = 1
+            elif context == 'compose':
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.environment_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/environments/')
 
-        CLI.step(1, steps, 'Uploading docker compose configs and environment...')
-
-        if self.environment_id == 'dev':
-            print('Skipping for dev...')
-        elif self.mode == 'host':
-            CLI.warning('Not uploading due to host mode! Be sure your configs on host are up to date!')
-        else:
-            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/')
-            os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.environment_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/environments/')
-
-            for config in self.compose_configs:
-                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/docker/')
+                for config in self.compose_configs:
+                    os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/docker/')
 
     def restart(self):
         CLI.info('Restarting...')
