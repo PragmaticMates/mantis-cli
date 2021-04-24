@@ -51,7 +51,7 @@ def main():
     if mode == 'ssh':
         cmds = [
             f'cd {manager.project_path}',
-            f'mantis {environment_id} --mode=host {" ".join(commands)}'
+            f'time mantis {environment_id} --mode=host {" ".join(commands)}'
         ]
         cmd = ';'.join(cmds)
         exec = f"ssh -t {manager.user}@{manager.host} -p {manager.port} '{cmd}'"

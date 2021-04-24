@@ -42,6 +42,7 @@ class Mantis(object):
         self.IMAGE_NAME = self.config['build']['image']
         self.DOCKER_REPOSITORY = self.config['build']['repository']
         self.DOCKER_TAG = self.config['build']['tag']
+        self.DOCKER_FILE = self.config['build']['file']
         self.CONTAINER_PREFIX = self.config['containers']['prefix']
         self.CONTAINER_SUFFIX_DB = self.config['containers']['suffixes']['db']
         self.CONTAINER_SUFFIX_CACHE = self.config['containers']['suffixes']['cache']
@@ -87,6 +88,7 @@ class Mantis(object):
     def build(self, params=''):
         CLI.info(f'Building...')
         CLI.info(f'Params = {params}')
+        CLI.info(f'Dockerfile = {self.configs_path}/docker/{self.DOCKER_FILE}')
         steps = 1
 
         CLI.step(1, steps, 'Building Docker image...')
@@ -104,7 +106,7 @@ class Mantis(object):
         CLI.info(f'Kit = {build_kit}')
         CLI.info(f'Args = {build_args}')
 
-        os.system(f'time {build_kit} docker build . {build_args} -t {self.IMAGE_NAME} -f configs/docker/Dockerfile {params}')
+        os.system(f'time {build_kit} docker build . {build_args} -t {self.IMAGE_NAME} -f {self.configs_path}/docker/{self.DOCKER_FILE} {params}')
 
     def push(self):
         CLI.info(f'Pushing...')
