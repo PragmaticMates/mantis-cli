@@ -83,6 +83,8 @@ def execute(manager, command, params=None):
             '-u': 'upload',
             '--reload': 'reload',
             '--restart': 'restart',
+            '--run': 'run',
+            '--up': 'up',
             '--deploy': 'deploy',
             '-d': 'deploy',
             '--stop': 'stop',
@@ -108,7 +110,8 @@ def execute(manager, command, params=None):
             '--send-test-email': 'send_test_email',
         }.get(command)
 
-        methods_with_params = ['build', 'ssh', 'exec', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove', 'upload']
+        methods_with_params = ['build', 'ssh', 'exec', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove',
+                               'upload', 'run', 'up']
 
         if manager_method is None or not hasattr(manager, manager_method):
             CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
@@ -122,6 +125,8 @@ def execute(manager, command, params=None):
                       '\n--start | '
                       '\n--reload | '
                       '\n--restart | '
+                      '\n--run | '
+                      '\n--up | '
                       '\n--remove | '
                       '\n--clean/-c | '
                       '\n--status/-s | '

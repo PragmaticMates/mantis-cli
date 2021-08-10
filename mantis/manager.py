@@ -43,29 +43,32 @@ class Mantis(object):
         self.DOCKER_REPOSITORY = self.config['build']['repository']
         self.DOCKER_TAG = self.config['build']['tag']
         self.DOCKER_FILE = self.config['build']['file']
-        self.CONTAINER_PREFIX = self.config['containers']['prefix']
-        self.CONTAINER_SUFFIX_DB = self.config['containers']['suffixes']['db']
-        self.CONTAINER_SUFFIX_CACHE = self.config['containers']['suffixes']['cache']
-        self.CONTAINER_SUFFIX_APP = self.config['containers']['suffixes']['app']
-        self.CONTAINER_SUFFIX_QUEUE = self.config['containers']['suffixes']['queue']
-        self.CONTAINER_SUFFIX_WEBSERVER = self.config['containers']['suffixes']['webserver']
-        self.CONTAINER_APP = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_APP}'
-        self.CONTAINER_QUEUE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_QUEUE}'
-        self.CONTAINER_DB = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_DB}'
-        self.CONTAINER_CACHE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_CACHE}'
-        self.CONTAINER_WEBSERVER = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_WEBSERVER}'
+
+        if 'containers' in self.config:
+            self.CONTAINER_PREFIX = self.config['containers']['prefix']
+            self.CONTAINER_SUFFIX_DB = self.config['containers']['suffixes']['db']
+            self.CONTAINER_SUFFIX_CACHE = self.config['containers']['suffixes']['cache']
+            self.CONTAINER_SUFFIX_APP = self.config['containers']['suffixes']['app']
+            self.CONTAINER_SUFFIX_QUEUE = self.config['containers']['suffixes']['queue']
+            self.CONTAINER_SUFFIX_WEBSERVER = self.config['containers']['suffixes']['webserver']
+            self.CONTAINER_APP = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_APP}'
+            self.CONTAINER_QUEUE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_QUEUE}'
+            self.CONTAINER_DB = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_DB}'
+            self.CONTAINER_CACHE = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_CACHE}'
+            self.CONTAINER_WEBSERVER = f'{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIX_WEBSERVER}'
+            self.SWARM = self.config.get('swarm', False)
+            self.SWARM_STACK = self.config.get(f'swarm_stack', self.CONTAINER_PREFIX)  # project name?
+            self.compose_name = self.config['compose']['name']
+            self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
+            self.compose_configs = [
+                f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml',
+                f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml',
+                f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.proxy.yml'
+            ]
+
         self.CACHE = self.config.get('cache', 'redis')
         self.WEBSERVER = self.config.get('webserver', 'nginx')
-        self.SWARM = self.config.get('swarm', False)
-        self.SWARM_STACK = self.config.get(f'swarm_stack', self.CONTAINER_PREFIX)  # project name?
-        self.compose_name = self.config['compose']['name']
-        self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
         self.cache_config = f'{self.configs_path}/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
-        self.compose_configs = [
-            f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml',
-            f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml',
-            f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.proxy.yml'
-        ]
         self.webserver_config = f'{self.configs_path}/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
         self.htpasswd = f'secrets/.htpasswd'
@@ -158,7 +161,7 @@ class Mantis(object):
 
     def restart(self):
         CLI.info('Restarting...')
-        steps = 4
+        steps = 3
 
         if self.SWARM:
             CLI.step(1, steps, 'Stopping and removing Docker app service...')
@@ -172,13 +175,6 @@ class Mantis(object):
 
             CLI.step(3, steps, 'Prune Docker images and volumes')  # todo prune on every node
             os.system(f'docker {self.docker_ssh} system prune --volumes --force')
-
-            CLI.step(4, steps, 'Collecting static files')  # todo collect static
-            app_container = self.get_containers_starts_with(self.CONTAINER_APP)
-
-            if app_container:
-                os.system(f'docker {self.docker_ssh} exec -i {app_container[0]} python manage.py collectstatic --noinput --verbosity 0')
-
         else:
             CLI.step(1, steps, 'Stopping and removing Docker containers...')
 
@@ -194,9 +190,6 @@ class Mantis(object):
             CLI.step(3, steps, 'Prune Docker images and volumes')
             os.system(f'docker {self.docker_ssh} system prune --volumes --force')
 
-            CLI.step(4, steps, 'Collecting static files')
-            os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput --verbosity 0')
-
     def deploy(self):
         CLI.info('Deploying...')
         self.clean()
@@ -211,7 +204,7 @@ class Mantis(object):
         zero_downtime_services = self.config['containers']['deploy']['zero_downtime']
         restart_services = self.config['containers']['deploy']['restart']
 
-        steps = 5
+        steps = 4
 
         step = 1
         CLI.step(step, steps, f'Zero downtime services: {zero_downtime_services}')
@@ -228,10 +221,6 @@ class Mantis(object):
 
             CLI.info(f'Renaming new container [{container}]...')
             os.system(f'docker {self.docker_ssh} container rename {container}_new {container}')
-
-        step += 1
-        CLI.step(step, steps, 'Collecting static files')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py collectstatic --noinput --verbosity 0')
 
         step += 1
         CLI.step(step, steps, 'Reloading webserver...')
@@ -288,7 +277,7 @@ class Mantis(object):
                 CLI.step(index + 1, steps, f'Stopping {container}')
                 os.system(f'docker {self.docker_ssh} container stop {container}')
 
-    def start(self, params):
+    def start(self, params=''):
         if self.SWARM:
             CLI.info('Starting services...')
             os.system(f'docker stack deploy -c configs/docker/{self.COMPOSE_PREFIX}.yml -c configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
@@ -303,6 +292,20 @@ class Mantis(object):
             for index, container in enumerate(containers):
                 CLI.step(index + 1, steps, f'Starting {container}')
                 os.system(f'docker {self.docker_ssh} container start {container}')
+
+    def run(self, params):
+        CLI.info('Run...')
+        steps = 1
+
+        CLI.step(1, steps, f'Running {params}...')
+        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run {params}')
+
+    def up(self, params):
+        CLI.info('Up...')
+        steps = 1
+
+        CLI.step(1, steps, f'Upping {params}...')
+        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up {params}')
 
     def remove(self, params=''):
         if self.SWARM:  # todo remove containers as well ?
