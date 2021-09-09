@@ -7,7 +7,6 @@ from mantis.manager import Mantis
 
 def parse_args():
     import sys
-    from collections import defaultdict
 
     d = {
         'environment_id': None,
@@ -19,18 +18,24 @@ def parse_args():
         if not arg.startswith('-'):
             d['environment_id'] = arg
         elif '=' in arg and ':' not in arg:
-            s, v = arg.split('=')
+            s, v = arg.split('=', maxsplit=1)
             d['settings'][s.strip('-')] = v
         else:
             d['commands'].append(arg)
 
     return d
 
+
+def nested_set(dic, keys, value):
+    for key in keys[:-1]:
+        dic = dic.setdefault(key, {})
+    dic[keys[-1]] = value
+
+
 def main():
     # check params
     params = parse_args()
 
-    # print(params)
     if len(params['commands']) == 0:
         CLI.error('Missing commands')
 
@@ -41,6 +46,19 @@ def main():
 
     # setup manager
     manager = Mantis(environment_id=environment_id, mode=mode)
+
+    # check config settings
+    settings_config = params['settings'].get('config', None)
+
+    if settings_config:
+        # override manager config
+        for override_config in settings_config.split(','):
+            key, value = override_config.split('=')
+            nested_set(
+                dic=manager.config,
+                keys=key.split('.'),
+                value=value
+            )
 
     print(f'Mantis (v{VERSION}) attached to '
           f'{Colors.BOLD}{manager.environment_id}{Colors.ENDC}: '
