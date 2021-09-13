@@ -40,8 +40,6 @@ class Mantis(object):
 
         self.PROJECT_NAME = self.config['project_name']
         self.IMAGE_NAME = self.config['build']['image']
-        self.DOCKER_REPOSITORY = self.config['build']['repository']
-        self.DOCKER_TAG = self.config['build']['tag']
         self.DOCKER_FILE = self.config['build']['file']
 
         if 'containers' in self.config:
@@ -114,13 +112,16 @@ class Mantis(object):
     def push(self):
         CLI.info(f'Pushing...')
 
+        DOCKER_REPOSITORY = self.config['build']['repository']
+        DOCKER_TAG = self.config['build']['tag']
+
         steps = 2
         CLI.step(1, steps, 'Tagging Docker image...')
-        os.system(f'docker tag {self.IMAGE_NAME} {self.DOCKER_REPOSITORY}:{self.DOCKER_TAG}')
-        print(f'Successfully tagged {self.DOCKER_REPOSITORY}:{self.DOCKER_TAG}')
+        os.system(f'docker tag {self.IMAGE_NAME} {DOCKER_REPOSITORY}:{DOCKER_TAG}')
+        print(f'Successfully tagged {DOCKER_REPOSITORY}:{DOCKER_TAG}')
 
         CLI.step(2, steps, 'Pushing Docker image...')
-        os.system(f'docker push {self.DOCKER_REPOSITORY}:{self.DOCKER_TAG}')
+        os.system(f'docker push {DOCKER_REPOSITORY}:{DOCKER_TAG}')
 
     def pull(self):
         CLI.info('Pulling docker image...')
