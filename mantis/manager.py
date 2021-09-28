@@ -64,8 +64,10 @@ class Mantis(object):
                 f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.proxy.yml'
             ]
 
+        self.DATABASE = self.config.get('cache', 'postgres')
         self.CACHE = self.config.get('cache', 'redis')
         self.WEBSERVER = self.config.get('webserver', 'nginx')
+        self.database_config = f'{self.configs_path}/{self.DATABASE}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.cache_config = f'{self.configs_path}/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config = f'{self.configs_path}/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
@@ -132,7 +134,7 @@ class Mantis(object):
         steps = 1
 
         if context == 'services':
-            CLI.step(1, steps, 'Uploading configs for context "services" [webserver, cache, htpasswd]')
+            CLI.step(1, steps, 'Uploading configs for context "services" [webserver, database, cache, htpasswd]')
         elif context == 'compose':
             CLI.step(1, steps, 'Uploading configs for context "compose" [docker compose configs and environment]')
         elif context == 'mantis':
@@ -146,6 +148,7 @@ class Mantis(object):
             CLI.warning('Not uploading due to host mode! Be sure your configs on host are up to date!')
         else:
             if context == 'services':
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.database_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.DATABASE}/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.CACHE}/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.WEBSERVER}/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
