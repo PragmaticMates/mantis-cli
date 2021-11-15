@@ -14,7 +14,10 @@ def parse_args():
         'settings': {}
     }
 
-    for arg in sys.argv:
+    arguments = sys.argv.copy()
+    arguments.pop(0)
+
+    for arg in arguments:
         if not arg.startswith('-'):
             d['environment_id'] = arg
         elif '=' in arg and ':' not in arg:
@@ -60,11 +63,12 @@ def main():
                 value=value
             )
 
-    print(f'Mantis (v{VERSION}) attached to '
-          f'{Colors.BOLD}{manager.environment_id}{Colors.ENDC}: '
-          f'{Colors.RED}{manager.host}{Colors.ENDC}, '
-          f'mode: {Colors.GREEN}{manager.mode}{Colors.ENDC}, '
-          f'hostname: {Colors.BLUE}{hostname}{Colors.ENDC}')
+    if manager.environment_id:
+        print(f'Mantis (v{VERSION}) attached to '
+              f'{Colors.BOLD}{manager.environment_id}{Colors.ENDC}: '
+              f'{Colors.RED}{manager.host}{Colors.ENDC}, '
+              f'mode: {Colors.GREEN}{manager.mode}{Colors.ENDC}, '
+              f'hostname: {Colors.BLUE}{hostname}{Colors.ENDC}')
 
     if mode == 'ssh':
         cmds = [
@@ -86,82 +90,61 @@ def main():
 
 
 def execute(manager, command, params=None):
-    if manager.environment_id is None:
-        CLI.error('Missing environment')
+    manager_methods = {
+        '--encrypt-env': 'encrypt_env',
+        '--decrypt-env': 'decrypt_env',
+        '--build': 'build',
+        '-b': 'build',
+        '--push': 'push',
+        '--pull': 'pull',
+        '-p': 'pull',
+        '--upload': 'upload',
+        '--upload-docker-configs': 'upload_docker_configs',
+        '-u': 'upload',
+        '--reload': 'reload',
+        '--restart': 'restart',
+        '--run': 'run',
+        '--up': 'up',
+        '--deploy': 'deploy',
+        '-d': 'deploy',
+        '--stop': 'stop',
+        '--start': 'start',
+        '--clean': 'clean',
+        '-c': 'clean',
+        '--remove': 'remove',
+        '--reload-webserver': 'reload_webserver',
+        '--restart-proxy': 'restart_proxy',
+        '--status': 'status',
+        '-s': 'status',
+        '--networks': 'networks',
+        '-n': 'networks',
+        '--logs': 'logs',
+        '-l': 'logs',
+        '--shell': 'shell',
+        '--ssh': 'ssh',
+        '--manage': 'manage',
+        '--exec': 'exec',
+        '--psql': 'psql',
+        '--pg-dump': 'pg_dump',
+        '--pg-restore': 'pg_restore',
+        '--send-test-email': 'send_test_email',
+    }
 
+    manager_method = manager_methods.get(command)
+
+    if manager_method is None or not hasattr(manager, manager_method):
+        commands = '\n'.join(manager_methods.keys())
+        
+        CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> \n{commands}')
     else:
-        manager_method = {
-            '--build': 'build',
-            '-b': 'build',
-            '--push': 'push',
-            '--pull': 'pull',
-            '-p': 'pull',
-            '--upload': 'upload',
-            '--upload-docker-configs': 'upload_docker_configs',
-            '-u': 'upload',
-            '--reload': 'reload',
-            '--restart': 'restart',
-            '--run': 'run',
-            '--up': 'up',
-            '--deploy': 'deploy',
-            '-d': 'deploy',
-            '--stop': 'stop',
-            '--start': 'start',
-            '--clean': 'clean',
-            '-c': 'clean',
-            '--remove': 'remove',
-            '--reload-webserver': 'reload_webserver',
-            '--restart-proxy': 'restart_proxy',
-            '--status': 'status',
-            '-s': 'status',
-            '--networks': 'networks',
-            '-n': 'networks',
-            '--logs': 'logs',
-            '-l': 'logs',
-            '--shell': 'shell',
-            '--ssh': 'ssh',
-            '--manage': 'manage',
-            '--exec': 'exec',
-            '--psql': 'psql',
-            '--pg-dump': 'pg_dump',
-            '--pg-restore': 'pg_restore',
-            '--send-test-email': 'send_test_email',
-        }.get(command)
-
+        methods_without_environment = ['encrypt_env', 'decrypt_env']
         methods_with_params = ['build', 'ssh', 'exec', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove',
                                'upload', 'run', 'up']
 
-        if manager_method is None or not hasattr(manager, manager_method):
-            CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> '
-                      '\n--no-ssh |'
-                      '\n--build/-b |'
-                      '\n--push |'
-                      '\n--pull/-p |'
-                      '\n--upload/-u | '
-                      '\n--deploy/-d | '
-                      '\n--stop | '
-                      '\n--start | '
-                      '\n--reload | '
-                      '\n--restart | '
-                      '\n--run | '
-                      '\n--up | '
-                      '\n--remove | '
-                      '\n--clean/-c | '
-                      '\n--status/-s | '
-                      '\n--networks/-n | '
-                      '\n--logs/-l | '
-                      '\n--reload-webserver | '
-                      '\n--restart-proxy | '
-                      '\n--manage | '
-                      '\n--shell | '
-                      '\n--ssh | '
-                      '\n--exec | '
-                      '\n--psql | '
-                      '\n--pg-dump | '
-                      '\n--pg-restore | '
-                      '\n--send-test-email')
+        if manager.environment_id is None and method not in methods_without_environment:
+            CLI.error('Missing environment')
+
+        if manager_method in methods_with_params and params:
+            getattr(manager, manager_method)(params)
         else:
-            if manager_method in methods_with_params and params:
-                getattr(manager, manager_method)(params)
-            else:
-                getattr(manager, manager_method)()
+            getattr(manager, manager_method)()
