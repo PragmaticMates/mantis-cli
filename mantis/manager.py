@@ -21,13 +21,7 @@ class Mantis(object):
         self.KEY = self.read_key()
 
         if self.KEY:
-            decrypted_env = self.decrypt_env()
-            decrypted_env_from_file = self.load_environment(self.environment_file)
-
-            if decrypted_env_from_file != decrypted_env:
-                CLI.danger('Encrypted and decrypted environments do NOT match!')
-            else:
-                CLI.success('Encrypted and decrypted environments DO match...')
+            self.check_environment_encryption()
 
     def init_config(self, config):
         self.config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
@@ -88,6 +82,15 @@ class Mantis(object):
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
         self.htpasswd = f'secrets/.htpasswd'
 
+    def check_environment_encryption(self):
+        decrypted_env = self.decrypt_env(return_value=True)
+        decrypted_env_from_file = self.load_environment(self.environment_file)
+
+        if decrypted_env_from_file != decrypted_env:
+            CLI.danger('Encrypted and decrypted environments do NOT match!')
+        else:
+            CLI.success('Encrypted and decrypted environments DO match...')
+            
     def read_key(self):
         self.config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
         self.key_file = f'{dirname(self.config_file)}/mantis.key'
@@ -117,8 +120,9 @@ class Mantis(object):
 
         CLI.info(f'Save it to {self.environment_file_encrypted}')
         
-    def decrypt_env(self):
-        CLI.info(f'Decrypting environment file {self.environment_file_encrypted}...')
+    def decrypt_env(self, return_value=False):
+        if not return_value:
+            CLI.info(f'Decrypting environment file {self.environment_file_encrypted}...')
 
         if not self.KEY:
             CLI.error('Missing mantis key!')
@@ -132,12 +136,17 @@ class Mantis(object):
 
         for var, value in encrypted_env.items():
             decrypted_value = Crypto.decrypt(value, self.KEY)
-            print(f'{var}={decrypted_value}')
+
+            if not return_value:
+                print(f'{var}={decrypted_value}')
+
             decrypted_env[var] = decrypted_value
 
-        CLI.info(f'Save it to {self.environment_file}')
+        if not return_value:
+            CLI.info(f'Save it to {self.environment_file}')
 
-        return decrypted_env
+        if return_value:
+            return decrypted_env
 
     def load_config(self):
         with open(self.config_file) as config:
