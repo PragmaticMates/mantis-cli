@@ -36,7 +36,7 @@ class Mantis(object):
 
         if self.environment_id is not None:
             # Get environment settings
-            if self.environment_id == 'dev':
+            if 'dev' in self.environment_id:
                 self.host = 'localhost'
             else:
                 self.host = self.config['hosts'][self.environment_id]
