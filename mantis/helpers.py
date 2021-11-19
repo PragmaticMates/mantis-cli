@@ -1,3 +1,6 @@
+from cryptography.fernet import Fernet
+
+
 class Colors:
     BLUE = '\033[94m'
     GREEN = '\033[92m'
@@ -19,11 +22,19 @@ class CLI(object):
         print(f'{Colors.BLUE}{text}{Colors.ENDC}')
 
     @staticmethod
+    def success(text):
+        print(f'{Colors.GREEN}{text}{Colors.ENDC}')
+
+    @staticmethod
     def error(text):
         exit(f'{Colors.RED}{text}{Colors.ENDC}')
 
     @staticmethod
     def warning(text):
+        print(f'{Colors.YELLOW}{text}{Colors.ENDC}')
+
+    @staticmethod
+    def danger(text):
         print(f'{Colors.RED}{text}{Colors.ENDC}')
 
     @staticmethod
@@ -34,3 +45,21 @@ class CLI(object):
     def step(index, total, text):
         print(f'{Colors.YELLOW}[{index}/{total}] {text}{Colors.ENDC}')
 
+
+class Crypto(object):
+    @staticmethod
+    def generate_key():
+        return Fernet.generate_key()
+
+    @staticmethod
+    def encrypt(data, key):
+        fernet = Fernet(key.encode())
+        encoded = data.encode()
+        encrypted = fernet.encrypt(encoded)
+        return encrypted.decode()
+
+    @staticmethod
+    def decrypt(token, key):
+        fernet = Fernet(key.encode())
+        decrypted = fernet.decrypt(token.encode())
+        return decrypted.decode()

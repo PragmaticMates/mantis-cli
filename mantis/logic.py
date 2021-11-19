@@ -91,6 +91,7 @@ def main():
 
 def execute(manager, command, params=None):
     manager_methods = {
+        '--generate-key': 'generate_key',
         '--encrypt-env': 'encrypt_env',
         '--decrypt-env': 'decrypt_env',
         '--build': 'build',
@@ -137,11 +138,11 @@ def execute(manager, command, params=None):
         
         CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> \n{commands}')
     else:
-        methods_without_environment = ['encrypt_env', 'decrypt_env']
+        methods_without_environment = ['generate_key']
         methods_with_params = ['build', 'ssh', 'exec', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove',
                                'upload', 'run', 'up']
 
-        if manager.environment_id is None and method not in methods_without_environment:
+        if manager.environment_id is None and manager_method not in methods_without_environment:
             CLI.error('Missing environment')
 
         if manager_method in methods_with_params and params:

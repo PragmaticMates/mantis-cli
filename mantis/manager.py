@@ -2,8 +2,12 @@ import json
 import os
 import datetime
 from distutils.util import strtobool
+from os.path import dirname
 from time import sleep
-from mantis.helpers import Colors, CLI
+
+from icecream import ic
+
+from mantis.helpers import CLI, Crypto
 
 
 class Mantis(object):
@@ -14,6 +18,16 @@ class Mantis(object):
         self.environment_id = environment_id
         self.mode = mode
         self.init_config(config)
+        self.KEY = self.read_key()
+
+        if self.KEY:
+            decrypted_env = self.decrypt_env()
+            decrypted_env_from_file = self.load_environment(self.environment_file)
+
+            if decrypted_env_from_file != decrypted_env:
+                CLI.danger('Encrypted and decrypted environments do NOT match!')
+            else:
+                CLI.success('Encrypted and decrypted environments DO match...')
 
     def init_config(self, config):
         self.config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
@@ -24,6 +38,7 @@ class Mantis(object):
         self.configs_path = f'{configs_folder_path}{configs_folder_name}'
         self.environment_file_prefix = self.config.get('environment_file_prefix', '')
         self.environment_file = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env'
+        self.environment_file_encrypted = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env.encrypted'
 
         if self.environment_id is not None:
             # Get environment settings
@@ -73,12 +88,66 @@ class Mantis(object):
         self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
         self.htpasswd = f'secrets/.htpasswd'
 
+    def read_key(self):
+        self.config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
+        self.key_file = f'{dirname(self.config_file)}/mantis.key'
+
+        if not os.path.exists(self.key_file):
+            return None
+
+        with open(self.key_file, "r") as f:
+            return f.read()
+
+    def generate_key(self):
+        CLI.info(f'Generating new cryptography key...')
+        key = Crypto.generate_key()
+        CLI.warning(key)
+        CLI.danger('Keep safe !!!')
+
+    def encrypt_env(self):
+        CLI.info(f'Encrypting environment file {self.environment_file}...')
+
+        if not self.KEY:
+            CLI.error('Missing mantis key!')
+
+        decrypted_env = self.load_environment(self.environment_file)
+
+        for var, value in decrypted_env.items():
+            print(f'{var}={Crypto.encrypt(value, self.KEY)}')
+
+        CLI.info(f'Save it to {self.environment_file_encrypted}')
+        
+    def decrypt_env(self):
+        CLI.info(f'Decrypting environment file {self.environment_file_encrypted}...')
+
+        if not self.KEY:
+            CLI.error('Missing mantis key!')
+
+        encrypted_env = self.load_environment(self.environment_file_encrypted)
+
+        if not encrypted_env:
+            return None
+
+        decrypted_env = {}
+
+        for var, value in encrypted_env.items():
+            decrypted_value = Crypto.decrypt(value, self.KEY)
+            print(f'{var}={decrypted_value}')
+            decrypted_env[var] = decrypted_value
+
+        CLI.info(f'Save it to {self.environment_file}')
+
+        return decrypted_env
+
     def load_config(self):
         with open(self.config_file) as config:
             return json.load(config)
 
-    def load_environment(self):
-        with open(self.environment_file) as fh:
+    def load_environment(self, path):
+        if not os.path.exists(path):
+            return None
+
+        with open(path) as fh:
             return dict(
                 (line.split('=', maxsplit=1)[0], line.split('=', maxsplit=1)[1].rstrip("\n"))
                 for line in fh.readlines() if not line.startswith('#')
@@ -418,7 +487,7 @@ class Mantis(object):
 
     def psql(self):
         CLI.info('Starting psql...')
-        env = self.load_environment()
+        env = self.load_environment(self.environment_file)
         os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} psql -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
@@ -433,7 +502,7 @@ class Mantis(object):
         # filename = now.strftime("%Y%m%d%H%M%S")
         filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M.pg")
         CLI.info(f'Backuping database into file {filename}')
-        env = self.load_environment()
+        env = self.load_environment(self.environment_file)
         os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_dump -Fc -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
@@ -441,7 +510,7 @@ class Mantis(object):
     def pg_restore(self, params):
         CLI.info(f'Restoring database from file {params}')
         CLI.underline("Don't forget to drop database at first to prevent constraints collisions!")
-        env = self.load_environment()
+        env = self.load_environment(self.environment_file)
         os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W < /backups/{params}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
