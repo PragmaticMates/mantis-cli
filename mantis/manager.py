@@ -103,7 +103,7 @@ class Mantis(object):
 
     def generate_key(self):
         CLI.info(f'Generating new cryptography key...')
-        key = Crypto.generate_key()
+        key = Crypto.generate_key(deterministically=True)
         CLI.warning(key)
         CLI.danger('Keep safe !!!')
 
@@ -116,7 +116,7 @@ class Mantis(object):
         decrypted_env = self.load_environment(self.environment_file)
 
         for var, value in decrypted_env.items():
-            print(f'{var}={Crypto.encrypt(value, self.KEY)}')
+            print(f'{var}={Crypto.encrypt(value, self.KEY, deterministically=True)}')
 
         CLI.info(f'Save it to {self.environment_file_encrypted}')
         
@@ -135,7 +135,7 @@ class Mantis(object):
         decrypted_env = {}
 
         for var, value in encrypted_env.items():
-            decrypted_value = Crypto.decrypt(value, self.KEY)
+            decrypted_value = Crypto.decrypt(value, self.KEY, deterministically=True)
 
             if not return_value:
                 print(f'{var}={decrypted_value}')
