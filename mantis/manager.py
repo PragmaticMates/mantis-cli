@@ -19,7 +19,7 @@ class Mantis(object):
         self.mode = mode
         self.init_config(config)
         self.KEY = self.read_key()
-
+        self.encrypt_deterministically = self.config.get('encrypt_deterministically', False)
         if self.KEY:
             self.check_environment_encryption()
 
@@ -92,7 +92,6 @@ class Mantis(object):
             CLI.success('Encrypted and decrypted environments DO match...')
             
     def read_key(self):
-        self.config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
         self.key_file = f'{dirname(self.config_file)}/mantis.key'
 
         if not os.path.exists(self.key_file):
@@ -103,7 +102,7 @@ class Mantis(object):
 
     def generate_key(self):
         CLI.info(f'Generating new cryptography key...')
-        key = Crypto.generate_key(deterministically=True)
+        key = Crypto.generate_key(self.encrypt_deterministically)
         CLI.warning(key)
         CLI.danger('Keep safe !!!')
 
@@ -116,7 +115,7 @@ class Mantis(object):
         decrypted_env = self.load_environment(self.environment_file)
 
         for var, value in decrypted_env.items():
-            print(f'{var}={Crypto.encrypt(value, self.KEY, deterministically=True)}')
+            print(f'{var}={Crypto.encrypt(value, self.KEY, self.encrypt_deterministically)}')
 
         CLI.info(f'Save it to {self.environment_file_encrypted}')
         
@@ -135,7 +134,7 @@ class Mantis(object):
         decrypted_env = {}
 
         for var, value in encrypted_env.items():
-            decrypted_value = Crypto.decrypt(value, self.KEY, deterministically=True)
+            decrypted_value = Crypto.decrypt(value, self.KEY, self.encrypt_deterministically)
 
             if not return_value:
                 print(f'{var}={decrypted_value}')
