@@ -1,9 +1,13 @@
 import os
 from base64 import b64encode, b64decode
 
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
-from cryptography.fernet import Fernet
+try:
+    from Crypto.Cipher import AES
+    from Crypto.Random import get_random_bytes
+    from cryptography.fernet import Fernet
+except ImportError:
+    # not using cryptography
+    pass
 
 
 class Colors:
