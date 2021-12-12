@@ -88,6 +88,15 @@ class Mantis(object):
 
         if decrypted_env_from_file != decrypted_env:
             CLI.danger('Encrypted and decrypted environments do NOT match!')
+
+            if decrypted_env_from_file is None:
+                CLI.danger('Decrypted env from file is empty !')
+            elif decrypted_env is None:
+                CLI.danger('Decrypted env is empty !')
+            else:
+                set1 = set(decrypted_env_from_file.items())
+                set2 = set(decrypted_env.items())
+                CLI.danger(set1 ^ set2)
         else:
             CLI.success('Encrypted and decrypted environments DO match...')
             

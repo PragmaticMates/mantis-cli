@@ -7,6 +7,7 @@ try:
     from cryptography.fernet import Fernet
 except ImportError:
     # not using cryptography
+    # pip install pycryptodome>=3.11.0
     pass
 
 
