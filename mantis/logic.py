@@ -63,12 +63,16 @@ def main():
                 value=value
             )
 
-    if manager.environment_id:
-        print(f'Mantis (v{VERSION}) attached to '
-              f'{Colors.BOLD}{manager.environment_id}{Colors.ENDC}: '
-              f'{Colors.RED}{manager.host}{Colors.ENDC}, '
-              f'mode: {Colors.GREEN}{manager.mode}{Colors.ENDC}, '
-              f'hostname: {Colors.BLUE}{hostname}{Colors.ENDC}')
+    environment_intro = f'attached to {Colors.BOLD}{manager.environment_id}{Colors.ENDC}: ' if manager.environment_id else ''
+    host_intro = f'{Colors.RED}{manager.host}{Colors.ENDC}, ' if manager.environment_id else ''
+
+    heading = f'Mantis (v{VERSION}) '\
+              f'{environment_intro}'\
+              f'{host_intro}'\
+              f'mode: {Colors.GREEN}{manager.mode}{Colors.ENDC}, '\
+              f'hostname: {Colors.BLUE}{hostname}{Colors.ENDC}'
+
+    print(heading)
 
     if mode == 'ssh':
         cmds = [
@@ -138,12 +142,14 @@ def execute(manager, command, params=None):
         
         CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> \n{commands}')
     else:
-        methods_without_environment = ['generate_key']
-        methods_with_params = ['build', 'ssh', 'exec', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove',
+        methods_without_environment = ['generate_key', 'build']
+        methods_with_params = ['ssh', 'exec', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove',
                                'upload', 'run', 'up']
 
         if manager.environment_id is None and manager_method not in methods_without_environment:
             CLI.error('Missing environment')
+        elif manager.environment_id is not None and manager_method in methods_without_environment:
+            CLI.error('Redundant environment')
 
         if manager_method in methods_with_params and params:
             getattr(manager, manager_method)(params)

@@ -5,8 +5,6 @@ from distutils.util import strtobool
 from os.path import dirname
 from time import sleep
 
-from icecream import ic
-
 from mantis.helpers import CLI, Crypto
 
 
