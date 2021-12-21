@@ -212,7 +212,7 @@ class Mantis(object):
 
     def pull(self):
         CLI.info('Pulling docker image...')
-        os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
+        self.docker_compose('pull')
 
     def upload(self, context='services'):
         CLI.info('Uploading...')
@@ -263,20 +263,20 @@ class Mantis(object):
             os.system(f'docker stack deploy -c configs/docker/{self.COMPOSE_PREFIX}.yml -c configs/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
 
             CLI.step(3, steps, 'Prune Docker images and volumes')  # todo prune on every node
-            os.system(f'docker {self.docker_ssh} system prune --volumes --force')
+            self.docker(f'system prune --volumes --force')
         else:
             CLI.step(1, steps, 'Stopping and removing Docker containers...')
 
             for service in self.config['containers']['deploy']['zero_downtime'] + self.config['containers']['deploy']['restart']:
                 container = self.get_container_name(service)
                 os.popen(f'docker {self.docker_ssh} container stop {container}').read()
-                os.system(f'docker {self.docker_ssh} container rm {container}')
+                self.docker(f'container rm {container}')
 
             CLI.step(2, steps, 'Recreating Docker containers...')
-            os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up -d')
+            self.docker_compose(f'--project-name={self.PROJECT_NAME} up -d')
 
             CLI.step(3, steps, 'Prune Docker images and volumes')
-            os.system(f'docker {self.docker_ssh} system prune --volumes --force')
+            self.docker(f'system prune --volumes --force')
 
     def deploy(self):
         CLI.info('Deploying...')
@@ -284,9 +284,7 @@ class Mantis(object):
         self.upload()
         self.pull()
         self.reload()
-        self.logs()
-        self.status()
-        
+
     def reload(self):  # todo deploy swarm
         CLI.info('Reloading containers...')
         zero_downtime_services = self.config['containers']['deploy']['zero_downtime']
@@ -299,20 +297,20 @@ class Mantis(object):
 
         for service in zero_downtime_services:
             container = self.get_container_name(service)
-            os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
+            self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
             CLI.info(f'Renaming old container [{container}_old]...')
 
             if container in self.get_containers():
-                os.system(f'docker {self.docker_ssh} container rename {container} {container}_old')
+                self.docker(f'container rename {container} {container}_old')
             else:
                 CLI.info(f'{container}_old was not running')
 
             CLI.info(f'Renaming new container [{container}]...')
-            os.system(f'docker {self.docker_ssh} container rename {container}_new {container}')
+            self.docker(f'container rename {container}_new {container}')
 
         step += 1
         CLI.step(step, steps, 'Reloading webserver...')
-        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
+        self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
         
         step += 1
         CLI.step(step, steps, f'Stopping old zero downtime services: {zero_downtime_services}')
@@ -322,10 +320,10 @@ class Mantis(object):
 
             if container in self.get_containers():
                 CLI.info(f'Stopping old container [{container}_old]...')
-                os.system(f'docker {self.docker_ssh} container stop {container}_old')
+                self.docker(f'container stop {container}_old')
 
                 CLI.info(f'Removing old container [{container}_old]...')
-                os.system(f'docker {self.docker_ssh} container rm {container}_old')
+                self.docker(f'container rm {container}_old')
             else:
                 CLI.info(f'{container}_old was not running')
 
@@ -339,13 +337,13 @@ class Mantis(object):
 
             if container in self.get_containers():
                 CLI.info(f'Stopping container [{container}]...')
-                os.system(f'docker {self.docker_ssh} container stop {container}')
+                self.docker(f'container stop {container}')
 
                 CLI.info(f'Removing container [{container}]...')
-                os.system(f'docker {self.docker_ssh} container rm {container}')
+                self.docker(f'container rm {container}')
 
                 CLI.info(f'Creating new container [{container}]...')
-                os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
+                self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
             else:
                 CLI.info(f'{container} was not running')
 
@@ -363,7 +361,7 @@ class Mantis(object):
 
             for index, container in enumerate(containers):
                 CLI.step(index + 1, steps, f'Stopping {container}')
-                os.system(f'docker {self.docker_ssh} container stop {container}')
+                self.docker(f'container stop {container}')
 
     def start(self, params=''):
         if self.SWARM:
@@ -379,21 +377,21 @@ class Mantis(object):
 
             for index, container in enumerate(containers):
                 CLI.step(index + 1, steps, f'Starting {container}')
-                os.system(f'docker {self.docker_ssh} container start {container}')
+                self.docker(f'container start {container}')
 
     def run(self, params):
         CLI.info('Run...')
         steps = 1
 
         CLI.step(1, steps, f'Running {params}...')
-        os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run {params}')
+        self.docker_compose(f'--project-name={self.PROJECT_NAME} run {params}')
 
     def up(self, params):
         CLI.info('Up...')
         steps = 1
 
         CLI.step(1, steps, f'Upping {params}...')
-        os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up {params}')
+        self.docker_compose(f'--project-name={self.PROJECT_NAME} up {params}')
 
     def remove(self, params=''):
         if self.SWARM:  # todo remove containers as well ?
@@ -409,18 +407,18 @@ class Mantis(object):
 
             for index, container in enumerate(containers):
                 CLI.step(index + 1, steps, f'Removing {container}')
-                os.system(f'docker {self.docker_ssh} container rm {container}')
+                self.docker(f'container rm {container}')
 
     def clean(self):  # todo clean on all nodes
         CLI.info('Cleaning...')
         steps = 1
 
         CLI.step(1, steps, 'Prune Docker images and volumes')
-        os.system(f'docker {self.docker_ssh} system prune --volumes --force')
+        self.docker(f'system prune --volumes --force')
 
     def reload_webserver(self):
         CLI.info('Reloading webserver...')
-        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
+        self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
     def restart_proxy(self):
         CLI.info('Restarting proxy...')
@@ -439,10 +437,10 @@ class Mantis(object):
             steps = 2
 
             CLI.step(1, steps, 'List of Docker images')
-            os.system(f'docker {self.docker_ssh} image ls')
+            self.docker(f'image ls')
 
             CLI.step(2, steps, 'Docker containers')
-            os.system(f'docker {self.docker_ssh} container ls -a --size')
+            self.docker(f'container ls -a --size')
 
     def networks(self):
         # todo for swarm
@@ -486,31 +484,31 @@ class Mantis(object):
 
             for index, container in enumerate(containers):
                 CLI.step(index + 1, steps, f'{container} logs')
-                os.system(f'docker {self.docker_ssh} logs {container} {lines}')
+                self.docker(f'logs {container} {lines}')
 
     def shell(self):
         CLI.info('Connecting to Django shell...')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py shell')
+        self.docker(f'exec -i {self.CONTAINER_APP} python manage.py shell')
 
     def ssh(self, params):
         CLI.info('Logging to container...')
-        os.system(f'docker {self.docker_ssh} exec -it {params} /bin/sh')
+        self.docker(f'exec -it {params} /bin/sh')
 
     def manage(self, params):
         CLI.info('Django manage...')
-        os.system(f'docker {self.docker_ssh} exec -ti {self.CONTAINER_APP} python manage.py {params}')
+        self.docker(f'exec -ti {self.CONTAINER_APP} python manage.py {params}')
 
     def psql(self):
         CLI.info('Starting psql...')
         env = self.load_environment(self.environment_file)
-        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} psql -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W')
+        self.docker(f'exec -it {self.CONTAINER_DB} psql -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
     def exec(self, params):
         container, command = params.split(' ', maxsplit=1)
         CLI.info(f'Executing command "{command}" in container {container}...')
-        os.system(f'docker {self.docker_ssh} exec -it {container} {command}')
+        self.docker(f'exec -it {container} {command}')
 
     def pg_dump(self):
         now = datetime.datetime.now()
@@ -518,7 +516,7 @@ class Mantis(object):
         filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M.pg")
         CLI.info(f'Backuping database into file {filename}')
         env = self.load_environment(self.environment_file)
-        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_dump -Fc -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
+        self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_dump -Fc -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
@@ -526,13 +524,13 @@ class Mantis(object):
         CLI.info(f'Restoring database from file {params}')
         CLI.underline("Don't forget to drop database at first to prevent constraints collisions!")
         env = self.load_environment(self.environment_file)
-        os.system(f'docker {self.docker_ssh} exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W < /backups/{params}\'')
+        self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W < /backups/{params}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
     def send_test_email(self):
         CLI.info('Sending test email...')
-        os.system(f'docker {self.docker_ssh} exec -i {self.CONTAINER_APP} python manage.py sendtestemail --admins')
+        self.docker(f'exec -i {self.CONTAINER_APP} python manage.py sendtestemail --admins')
 
     def get_containers(self):
         containers = os.popen(f'docker {self.docker_ssh} container ls -a --format \'{{{{.Names}}}}\'').read()
@@ -548,3 +546,9 @@ class Mantis(object):
 
     def get_containers_starts_with(self, start_with):
         return [i for i in self.get_containers() if i.startswith(start_with)]
+
+    def docker(self, command):
+        os.system(f'docker {self.docker_ssh} {command}')
+        
+    def docker_compose(self, command):
+        os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {command}')
