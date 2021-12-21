@@ -43,7 +43,8 @@ class Mantis(object):
                 self.project_path = self.config['hosts']['project_path']
 
                 if self.mode == 'docker-host':
-                    self.docker_ssh = f'-H "ssh://{self.user}@{self.host}:{self.port}"'
+                    self.DOCKER_HOST = f'"ssh://{self.user}@{self.host}:{self.port}"'
+                    self.docker_ssh = f'-H {self.DOCKER_HOST}'
 
         self.PROJECT_NAME = self.config['project_name']
         self.IMAGE_NAME = self.config['build']['image']
@@ -211,7 +212,7 @@ class Mantis(object):
 
     def pull(self):
         CLI.info('Pulling docker image...')
-        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
+        os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml pull')
 
     def upload(self, context='services'):
         CLI.info('Uploading...')
@@ -272,8 +273,7 @@ class Mantis(object):
                 os.system(f'docker {self.docker_ssh} container rm {container}')
 
             CLI.step(2, steps, 'Recreating Docker containers...')
-            os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up -d')
-            # os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up --remove-orphans -d')
+            os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up -d')
 
             CLI.step(3, steps, 'Prune Docker images and volumes')
             os.system(f'docker {self.docker_ssh} system prune --volumes --force')
@@ -299,7 +299,7 @@ class Mantis(object):
 
         for service in zero_downtime_services:
             container = self.get_container_name(service)
-            os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
+            os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
             CLI.info(f'Renaming old container [{container}_old]...')
 
             if container in self.get_containers():
@@ -345,7 +345,7 @@ class Mantis(object):
                 os.system(f'docker {self.docker_ssh} container rm {container}')
 
                 CLI.info(f'Creating new container [{container}]...')
-                os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
+                os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
             else:
                 CLI.info(f'{container} was not running')
 
@@ -386,14 +386,14 @@ class Mantis(object):
         steps = 1
 
         CLI.step(1, steps, f'Running {params}...')
-        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run {params}')
+        os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} run {params}')
 
     def up(self, params):
         CLI.info('Up...')
         steps = 1
 
         CLI.step(1, steps, f'Upping {params}...')
-        os.system(f'docker-compose {self.docker_ssh} -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up {params}')
+        os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml --project-name={self.PROJECT_NAME} up {params}')
 
     def remove(self, params=''):
         if self.SWARM:  # todo remove containers as well ?
@@ -427,7 +427,7 @@ class Mantis(object):
         steps = 1
 
         CLI.step(1, steps, 'Reloading proxy container...')
-        os.system(f'docker-compose {self.docker_ssh} -f configs/docker/docker-compose.{self.environment_id}.proxy.yml --project-name=reverse up -d')
+        os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f configs/docker/docker-compose.{self.environment_id}.proxy.yml --project-name=reverse up -d')
 
     def status(self):
         if self.SWARM:  # todo remove containers as well ?
