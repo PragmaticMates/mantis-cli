@@ -169,6 +169,49 @@ class Mantis(object):
                 for line in fh.readlines() if not line.startswith('#')
             )
 
+    def contexts(self):
+        os.system('docker context ls')
+
+    def create_context(self):
+        CLI.info('Creating docker context')
+        protocol = input("Protocol: (U)nix or (S)sh: ")
+
+        if protocol.lower() == 'u':
+            protocol = 'unix'
+            socket = input("Socket: ")
+            host = f'{protocol}://{socket}'
+        elif protocol.lower() == 's':
+            protocol = 'ssh'
+            host_address = input("Host address: ")
+            username = input("Username: ")
+            port = input("Port: ")
+            host = f'{protocol}://{username}@{host_address}:{port}'
+        else:
+            CLI.error('Invalid protocol')
+            exit()
+
+        endpoint = f'host={host}'
+
+        # CLI.warning(f'Endpoint: {endpoint}')
+
+        description = input("Description: ")
+        name = input("Name: ")
+
+        command = f'docker context create \\\n'\
+                  f'    --docker {endpoint} \\\n'\
+                  f'    --description="{description}" \\\n'\
+                  f'    {name}'
+
+        CLI.warning(command)
+
+        if input("Confirm? (Y)es/(N)o: ").lower() != 'y':
+            CLI.error('Canceled')
+            exit()
+
+        # create context
+        os.system(command)
+        self.contexts()
+
     def get_container_name(self, service):
         suffix = self.config['containers']['suffixes'].get(service, f'_{service}')
         return f'{self.CONTAINER_PREFIX}{suffix}'

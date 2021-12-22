@@ -95,6 +95,8 @@ def main():
 
 def execute(manager, command, params=None):
     manager_methods = {
+        '--contexts': 'contexts',
+        '--create-context': 'create_context',
         '--generate-key': 'generate_key',
         '--encrypt-env': 'encrypt_env',
         '--decrypt-env': 'decrypt_env',
@@ -142,7 +144,7 @@ def execute(manager, command, params=None):
         
         CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> \n{commands}')
     else:
-        methods_without_environment = ['generate_key', 'build', 'push']
+        methods_without_environment = ['contexts', 'create_context', 'generate_key', 'build', 'push']
         methods_with_params = ['ssh', 'exec', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove',
                                'upload', 'run', 'up']
 
