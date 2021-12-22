@@ -44,7 +44,7 @@ def main():
 
     environment_id = params['environment_id']
     commands = params['commands']
-    mode = params['settings'].get('mode', 'docker-host')
+    mode = params['settings'].get('mode', 'remote')
     hostname = os.popen('hostname').read().rstrip("\n")
 
     # setup manager
