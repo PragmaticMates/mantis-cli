@@ -21,13 +21,12 @@ setup(
     },
     classifiers=[
         'Programming Language :: Python',
-        'Programming Language :: Python :: 3.6',
         'Operating System :: OS Independent',
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'Framework :: Django',
         'License :: OSI Approved :: GNU General Public License (GPL)',
-        'Development Status :: 3 - Alpha'
+        'Development Status :: 5 - Production/Stable'
     ],
     license='GNU General Public License (GPL)',
     keywords="management deployment docker command",
