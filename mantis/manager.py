@@ -10,7 +10,6 @@ from mantis.helpers import CLI, Crypto
 
 class Mantis(object):
     environment_id = None
-    docker_ssh = ''
 
     def __init__(self, config=None, environment_id=None, mode='docker-host'):
         self.environment_id = environment_id
@@ -37,14 +36,22 @@ class Mantis(object):
             if 'dev' in self.environment_id:
                 self.host = 'localhost'
             else:
-                self.host = self.config['hosts'][self.environment_id]
-                self.user = self.config['hosts']['user']
-                self.port = self.config['hosts']['port']
+                self.connection = self.config.get('connection', 'ssh')
+
+                if self.connection == 'ssh':
+                    self.host = self.config['hosts'][self.environment_id]
+                    self.user = self.config['hosts']['user']
+                    self.port = self.config['hosts']['port']
+                elif self.connection == 'context':
+                    self.DOCKER_CONTEXT = self.config['hosts'][self.environment_id]
+
                 self.project_path = self.config['hosts']['project_path']
 
                 if self.mode == 'docker-host':
-                    self.DOCKER_HOST = f'"ssh://{self.user}@{self.host}:{self.port}"'
-                    self.docker_ssh = f'-H {self.DOCKER_HOST}'
+                    if self.connection == 'ssh':
+                        self.DOCKER_CONNECTION_ENV = f'DOCKER_HOST="ssh://{self.user}@{self.host}:{self.port}"'
+                    elif self.connection == 'context':
+                        self.DOCKER_CONNECTION_ENV = f'DOCKER_CONTEXT={self.DOCKER_CONTEXT}'
 
         self.PROJECT_NAME = self.config['project_name']
         self.IMAGE_NAME = self.config['build']['image']
@@ -312,7 +319,7 @@ class Mantis(object):
 
             for service in self.config['containers']['deploy']['zero_downtime'] + self.config['containers']['deploy']['restart']:
                 container = self.get_container_name(service)
-                os.popen(f'docker {self.docker_ssh} container stop {container}').read()
+                self.docker(f'container stop {container}', return_output=True)
                 self.docker(f'container rm {container}')
 
             CLI.step(2, steps, 'Recreating Docker containers...')
@@ -468,7 +475,7 @@ class Mantis(object):
         steps = 1
 
         CLI.step(1, steps, 'Reloading proxy container...')
-        os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f configs/docker/docker-compose.{self.environment_id}.proxy.yml --project-name=reverse up -d')
+        os.system(f'{self.DOCKER_CONNECTION_ENV} docker-compose -f configs/docker/docker-compose.{self.environment_id}.proxy.yml --project-name=reverse up -d')
 
     def status(self):
         if self.SWARM:  # todo remove containers as well ?
@@ -492,7 +499,7 @@ class Mantis(object):
 
         CLI.step(1, steps, 'List of Docker networks')
 
-        networks = os.popen(f'docker {self.docker_ssh} network ls').read()
+        networks = self.docker('network ls', return_output=True)
         networks = networks.strip().split('\n')
 
         for index, network in enumerate(networks):
@@ -502,7 +509,7 @@ class Mantis(object):
             if index == 0:
                 print(f'{network}\tCONTAINERS')
             else:
-                containers = os.popen(f'docker {self.docker_ssh} network inspect -f \'{{{{ range $key, $value := .Containers }}}}{{{{ .Name }}}} {{{{ end }}}}\' {network_name}').read()
+                containers = self.docker(f'network inspect -f \'{{{{ range $key, $value := .Containers }}}}{{{{ .Name }}}} {{{{ end }}}}\' {network_name}', return_output=True)
                 containers = ', '.join(containers.split())
                 print(f'{network}\t{containers}'.strip())
 
@@ -576,7 +583,7 @@ class Mantis(object):
         self.docker(f'exec -i {self.CONTAINER_APP} python manage.py sendtestemail --admins')
 
     def get_containers(self):
-        containers = os.popen(f'docker {self.docker_ssh} container ls -a --format \'{{{{.Names}}}}\'').read()
+        containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)
         containers = containers.strip().split('\n')
         containers = list(filter(lambda x: x.startswith(self.CONTAINER_PREFIX), containers))
         return containers
@@ -590,8 +597,11 @@ class Mantis(object):
     def get_containers_starts_with(self, start_with):
         return [i for i in self.get_containers() if i.startswith(start_with)]
 
-    def docker(self, command):
-        os.system(f'docker {self.docker_ssh} {command}')
-        
+    def docker(self, command, return_output=False):
+        if return_output:
+            return os.popen(f'{self.DOCKER_CONNECTION_ENV} docker {command}').read()
+
+        os.system(f'{self.DOCKER_CONNECTION_ENV} docker {command}')
+
     def docker_compose(self, command):
-        os.system(f'DOCKER_HOST={self.DOCKER_HOST} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {command}')
+        os.system(f'{self.DOCKER_CONNECTION_ENV} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {command}')
