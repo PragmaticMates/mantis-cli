@@ -122,8 +122,8 @@ class Mantis(object):
             self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
             self.compose_configs = [
                 f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml',
+                f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.proxy.yml'
                 f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml',
-                f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.proxy.yml'
             ]
 
         self.DATABASE = self.config.get('cache', 'postgres')
@@ -522,7 +522,7 @@ class Mantis(object):
         steps = 1
 
         CLI.step(1, steps, 'Reloading proxy container...')
-        os.system(f'{self.docker_connection} docker-compose -f configs/docker/docker-compose.{self.environment_id}.proxy.yml --project-name=reverse up -d')
+        os.system(f'{self.docker_connection} docker-compose -f configs/docker/docker-compose.proxy.yml --project-name=reverse up -d')
 
     def status(self):
         if self.SWARM:  # todo remove containers as well ?
