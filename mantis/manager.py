@@ -32,44 +32,50 @@ class Mantis(object):
     def port(self):
         return self.connection_details['port']
 
+    def parse_ssh_connection(self, connection):
+        return {
+            'host': connection.split("@")[1].split(':')[0],
+            'user': connection.split("@")[0].split('://')[1],
+            'port': connection.split(":")[-1]
+        }
+
     @property
     def connection_details(self):
         property_name = '_connection_details'
-        host = None
-        user = None
-        port = None
+        details = {
+            'host': None,
+            'user': None,
+            'port': None
+        }
 
         if hasattr(self, property_name):
             return getattr(self, property_name)
 
         if 'dev' in self.environment_id:
-            host = 'localhost'
+            details = {
+                'host': 'localhost',
+                'user': None,
+                'port': None
+            }
         else:
-            if self.connection == 'ssh':
-                host = self.config['hosts'][self.environment_id]
-                user = self.config['hosts']['user']
-                port = self.config['hosts']['port']
+            if self.connection.startswith('ssh://'):
+                details = self.parse_ssh_connection(self.connection)
 
-            elif self.connection == 'context':
-                context = self.config['hosts'][self.environment_id]
+            elif self.connection.startswith('context://'):
+                context_name = self.connection.replace('context://', '')
 
                 # TODO: move to own method
-                context_details = json.loads(os.popen(f'docker context inspect {context}').read())
+                context_details = json.loads(os.popen(f'docker context inspect {context_name}').read())
 
                 try:
                     ssh_host = context_details[0]["Endpoints"]["docker"]["Host"]
-                    host = ssh_host.split("@")[1].split(':')[0]
-                    user = ssh_host.split("@")[0].split('://')[1]
-                    port = ssh_host.split(":")[-1]
+                    details = self.parse_ssh_connection(ssh_host)
                 except IndexError:
                     pass
 
-        details = {
-            'host': host,
-            'user': user,
-            'port': port
-        }
+        # set to singleton
         setattr(self, property_name, details)
+
         return details
 
     @property
@@ -78,11 +84,11 @@ class Mantis(object):
             return ''
 
         if self.mode == 'remote':
-            if self.connection == 'ssh':
-                return f'DOCKER_HOST="ssh://{self.user}@{self.host}:{self.port}"'
-            elif self.connection == 'context':
-                docker_context = self.config['hosts'][self.environment_id]
-                return f'DOCKER_CONTEXT={docker_context}'
+            if self.connection.startswith('ssh://'):
+                return f'DOCKER_HOST="{self.connection}"'
+            elif self.connection.startswith('context://'):
+                context_name = self.connection.replace('context://', '')
+                return f'DOCKER_CONTEXT={context_name}'
 
         return ''
 
@@ -96,8 +102,8 @@ class Mantis(object):
         self.environment_file_prefix = self.config.get('environment_file_prefix', '')
         self.environment_file = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env'
         self.environment_file_encrypted = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env.encrypted'
-        self.project_path = self.config['hosts']['project_path']
-        self.connection = self.config.get('connection', 'ssh')
+        self.project_path = self.config['project_path']
+        self.connection = self.config['connections'].get(self.environment_id, None)
 
         # Get environment settings
         self.PROJECT_NAME = self.config['project_name']
