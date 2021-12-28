@@ -64,7 +64,14 @@ def main():
             )
 
     environment_intro = f'attached to {Colors.BOLD}{manager.environment_id}{Colors.ENDC}: ' if manager.environment_id else ''
-    host_intro = f'{Colors.RED}{manager.host}{Colors.ENDC}, ' if manager.environment_id else ''
+
+    if manager.environment_id:
+        if manager.host:
+            host_intro = f'{Colors.RED}{manager.host}{Colors.ENDC}, '
+        else:
+            CLI.error(f'Invalid host: {manager.host}')
+    else:
+        host_intro = ''
 
     heading = f'Mantis (v{VERSION}) '\
               f'{environment_intro}'\

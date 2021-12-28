@@ -72,6 +72,8 @@ class Mantis(object):
                     details = self.parse_ssh_connection(ssh_host)
                 except IndexError:
                     pass
+            else:
+                raise CLI.error(f'Invalid connection protocol {self.connection}')
 
         # set to singleton
         setattr(self, property_name, details)
@@ -99,6 +101,7 @@ class Mantis(object):
         configs_folder_path = self.config.get('configs_folder_path', '')
         configs_folder_name = self.config.get('configs_folder_name', 'configs')
         self.configs_path = f'{configs_folder_path}{configs_folder_name}'
+        self.key_file = f'{dirname(self.config_file)}/mantis.key'
         self.environment_file_prefix = self.config.get('environment_file_prefix', '')
         self.environment_file = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env'
         self.environment_file_encrypted = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env.encrypted'
@@ -160,8 +163,6 @@ class Mantis(object):
             CLI.success('Encrypted and decrypted environments DO match...')
             
     def read_key(self):
-        self.key_file = f'{dirname(self.config_file)}/mantis.key'
-
         if not os.path.exists(self.key_file):
             return None
 
@@ -169,10 +170,13 @@ class Mantis(object):
             return f.read()
 
     def generate_key(self):
-        CLI.info(f'Generating new cryptography key...')
+        CLI.info(f'Deterministic encryption: ', end='')
+        CLI.warning(self.encrypt_deterministically)
+
         key = Crypto.generate_key(self.encrypt_deterministically)
-        CLI.warning(key)
-        CLI.danger('Keep safe !!!')
+        CLI.bold('Generated cryptography key: ', end='')
+        CLI.pink(key)
+        CLI.danger(f'Save it to {self.key_file} and keep safe !!!')
 
     def encrypt_env(self):
         CLI.info(f'Encrypting environment file {self.environment_file}...')

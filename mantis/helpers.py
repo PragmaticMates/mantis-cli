@@ -24,36 +24,40 @@ class Colors:
 
 class CLI(object):
     @staticmethod
-    def bold(text):
-        print(f'{Colors.BOLD}{text}{Colors.ENDC}')
+    def bold(text, end='\n'):
+        print(f'{Colors.BOLD}{text}{Colors.ENDC}', end=end)
 
     @staticmethod
-    def info(text):
-        print(f'{Colors.BLUE}{text}{Colors.ENDC}')
+    def info(text, end='\n'):
+        print(f'{Colors.BLUE}{text}{Colors.ENDC}', end=end)
 
     @staticmethod
-    def success(text):
-        print(f'{Colors.GREEN}{text}{Colors.ENDC}')
+    def pink(text, end='\n'):
+        print(f'{Colors.PINK}{text}{Colors.ENDC}', end=end)
+
+    @staticmethod
+    def success(text, end='\n'):
+        print(f'{Colors.GREEN}{text}{Colors.ENDC}', end=end)
 
     @staticmethod
     def error(text):
         exit(f'{Colors.RED}{text}{Colors.ENDC}')
 
     @staticmethod
-    def warning(text):
-        print(f'{Colors.YELLOW}{text}{Colors.ENDC}')
+    def warning(text, end='\n'):
+        print(f'{Colors.YELLOW}{text}{Colors.ENDC}', end=end)
 
     @staticmethod
-    def danger(text):
-        print(f'{Colors.RED}{text}{Colors.ENDC}')
+    def danger(text, end='\n'):
+        print(f'{Colors.RED}{text}{Colors.ENDC}', end=end)
 
     @staticmethod
-    def underline(text):
-        print(f'{Colors.UNDERLINE}{text}{Colors.ENDC}')
+    def underline(text, end='\n'):
+        print(f'{Colors.UNDERLINE}{text}{Colors.ENDC}', end=end)
 
     @staticmethod
-    def step(index, total, text):
-        print(f'{Colors.YELLOW}[{index}/{total}] {text}{Colors.ENDC}')
+    def step(index, total, text, end='\n'):
+        print(f'{Colors.YELLOW}[{index}/{total}] {text}{Colors.ENDC}', end=end)
 
 
 def random_string(n=10):
