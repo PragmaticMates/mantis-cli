@@ -105,8 +105,8 @@ class Mantis(object):
         self.environment_file_prefix = self.config.get('environment_file_prefix', '')
         self.environment_file = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env'
         self.environment_file_encrypted = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env.encrypted'
-        self.project_path = self.config['project_path']
-        self.connection = self.config['connections'].get(self.environment_id, None)
+        self.project_path = self.config.get('project_path', None)
+        self.connection = self.config.get('connections', {}).get(self.environment_id, None)
 
         # Get environment settings
         self.PROJECT_NAME = self.config['project_name']
