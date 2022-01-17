@@ -103,8 +103,10 @@ class Mantis(object):
         self.configs_path = f'{configs_folder_path}{configs_folder_name}'
         self.key_file = f'{dirname(self.config_file)}/mantis.key'
         self.environment_file_prefix = self.config.get('environment_file_prefix', '')
-        self.environment_file = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env'
-        self.environment_file_encrypted = f'{self.configs_path}/environments/{self.environment_file_prefix}{self.environment_id}.env.encrypted'
+        self.environment_file_name = f'{self.environment_file_prefix}{self.environment_id}.env'
+        self.environment_file = f'{self.configs_path}/environments/{self.environment_file_name}'
+        self.environment_file_encrypted_name = f'{self.environment_file_prefix}{self.environment_id}.env.encrypted'
+        self.environment_file_encrypted = f'{self.configs_path}/environments/{self.environment_file_encrypted_name}'
         self.project_path = self.config.get('project_path', None)
         self.connection = self.config.get('connections', {}).get(self.environment_id, None)
 
@@ -145,8 +147,8 @@ class Mantis(object):
         self.htpasswd = f'secrets/.htpasswd'
 
     def check_environment_encryption(self):
-        decrypted_env = self.decrypt_env(return_value=True)
-        decrypted_env_from_file = self.load_environment(self.environment_file)
+        decrypted_env = self.decrypt_env(return_value=True)                     # .env.encrypted
+        decrypted_env_from_file = self.load_environment(self.environment_file)  # .env
 
         if decrypted_env_from_file != decrypted_env:
             CLI.danger('Encrypted and decrypted environments do NOT match!')
@@ -158,7 +160,29 @@ class Mantis(object):
             else:
                 set1 = set(decrypted_env_from_file.items())
                 set2 = set(decrypted_env.items())
-                CLI.danger(set1 ^ set2)
+                difference = set1 ^ set2
+
+                for var in dict(difference).keys():
+                    CLI.info(var, end=': ')
+
+                    encrypted_value = decrypted_env_from_file.get(var, '')
+
+                    if encrypted_value == '':
+                        CLI.bold('-- empty --', end=' ')
+                    else:
+                        CLI.warning(encrypted_value, end=' ')
+
+                    print(f'[{self.environment_file_name}]', end=' / ')
+
+                    decrypted_value = decrypted_env.get(var, '')
+
+                    if decrypted_value == '':
+                        CLI.bold('-- empty --', end=' ')
+                    else:
+                        CLI.danger(decrypted_value, end=' ')
+
+                    print(f'[{self.environment_file_encrypted_name}]', end='\n')
+
         else:
             CLI.success('Encrypted and decrypted environments DO match...')
 
@@ -260,6 +284,9 @@ class Mantis(object):
             CLI.success(f'Saved to file {self.environment_file}')
         else:
             CLI.warning(f'Save it to {self.environment_file} manually.')
+
+    def check_env(self):
+        self.check_environment_encryption()
 
     def load_config(self):
         with open(self.config_file) as config:

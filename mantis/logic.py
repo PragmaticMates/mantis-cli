@@ -107,6 +107,7 @@ def execute(manager, command, params=None):
         '--generate-key': 'generate_key',
         '--encrypt-env': 'encrypt_env',
         '--decrypt-env': 'decrypt_env',
+        '--check-env': 'check_env',
         '--build': 'build',
         '-b': 'build',
         '--push': 'push',
