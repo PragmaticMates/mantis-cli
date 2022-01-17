@@ -23,7 +23,7 @@ class Mantis(object):
     @property
     def host(self):
         return self.connection_details['host']
-    
+
     @property
     def user(self):
         return self.connection_details['user']
@@ -161,7 +161,7 @@ class Mantis(object):
                 CLI.danger(set1 ^ set2)
         else:
             CLI.success('Encrypted and decrypted environments DO match...')
-            
+
     def read_key(self):
         if not os.path.exists(self.key_file):
             return None
@@ -209,8 +209,12 @@ class Mantis(object):
 
         if save_to_file.lower() == 'y':
             with open(self.environment_file_encrypted, "w") as f:
-                for var, decrypted_value in decrypted_env.items():
-                    f.write(f'{var}={decrypted_value}\n')
+                for index, (var, encrypted_value) in enumerate(encrypted_env.items()):
+                    f.write(f'{var}={encrypted_value}')
+
+                    if index < len(encrypted_env) - 1:
+                        f.write('\n')
+
             CLI.success(f'Saved to file {self.environment_file_encrypted}')
         else:
             CLI.warning(f'Save it to {self.environment_file_encrypted} manually.')
@@ -247,8 +251,12 @@ class Mantis(object):
 
         if save_to_file.lower() == 'y':
             with open(self.environment_file, "w") as f:
-                for var, decrypted_value in decrypted_env.items():
-                    f.write(f'{var}={decrypted_value}\n')
+                for index, (var, decrypted_value) in enumerate(decrypted_env.items()):
+                    f.write(f'{var}={decrypted_value}')
+
+                    if index < len(encrypted_env) - 1:
+                        f.write('\n')
+
             CLI.success(f'Saved to file {self.environment_file}')
         else:
             CLI.warning(f'Save it to {self.environment_file} manually.')
@@ -452,7 +460,7 @@ class Mantis(object):
         step += 1
         CLI.step(step, steps, 'Reloading webserver...')
         self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
-        
+
         step += 1
         CLI.step(step, steps, f'Stopping old zero downtime services: {zero_downtime_services}')
 
