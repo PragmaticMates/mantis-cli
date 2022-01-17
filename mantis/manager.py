@@ -213,11 +213,21 @@ class Mantis(object):
 
             decrypted_env[var] = decrypted_value
 
-        if not return_value:
-            CLI.info(f'Save it to {self.environment_file}')
-
         if return_value:
             return decrypted_env
+
+        # save to file?
+        CLI.info(f'Save to file?')
+
+        save_to_file = input("(Y)es or (N)o: ")
+
+        if save_to_file.lower() == 'y':
+            with open(self.environment_file, "w") as f:
+                for var, decrypted_value in decrypted_env.items():
+                    f.write(f'{var}={decrypted_value}\n')
+            CLI.success(f'Saved to file {self.environment_file}')
+        else:
+            CLI.warning(f'Save it to {self.environment_file} manually.')
 
     def load_config(self):
         with open(self.config_file) as config:
@@ -332,7 +342,7 @@ class Mantis(object):
         elif context == 'mantis':
             CLI.step(1, steps, 'Uploading configs for mantis [mantis.json]')
         else:
-            CLI.error(f'Unknown context "{context}"')
+            CLI.error(f'Unknown context "{context}". Available: services, compose, mantis')
 
         if self.environment_id == 'dev':
             print('Skipping for dev...')
