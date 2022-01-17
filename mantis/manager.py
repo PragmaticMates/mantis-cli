@@ -178,7 +178,7 @@ class Mantis(object):
         CLI.pink(key)
         CLI.danger(f'Save it to {self.key_file} and keep safe !!!')
 
-    def encrypt_env(self):
+    def encrypt_env(self, return_value=False):
         CLI.info(f'Encrypting environment file {self.environment_file}...')
 
         if not self.KEY:
@@ -186,11 +186,35 @@ class Mantis(object):
 
         decrypted_env = self.load_environment(self.environment_file)
 
-        for var, value in decrypted_env.items():
-            print(f'{var}={Crypto.encrypt(value, self.KEY, self.encrypt_deterministically)}')
+        if not decrypted_env:
+            return None
 
-        CLI.info(f'Save it to {self.environment_file_encrypted}')
-        
+        encrypted_env = {}
+
+        for var, value in decrypted_env.items():
+            encrypted_value = Crypto.encrypt(value, self.KEY, self.encrypt_deterministically)
+
+            if not return_value:
+                print(f'{var}={encrypted_value}')
+
+            encrypted_env[var] = encrypted_value
+
+        if return_value:
+            return encrypted_env
+
+        # save to file?
+        CLI.info(f'Save to file?')
+
+        save_to_file = input("(Y)es or (N)o: ")
+
+        if save_to_file.lower() == 'y':
+            with open(self.environment_file_encrypted, "w") as f:
+                for var, decrypted_value in decrypted_env.items():
+                    f.write(f'{var}={decrypted_value}\n')
+            CLI.success(f'Saved to file {self.environment_file_encrypted}')
+        else:
+            CLI.warning(f'Save it to {self.environment_file_encrypted} manually.')
+
     def decrypt_env(self, return_value=False):
         if not return_value:
             CLI.info(f'Decrypting environment file {self.environment_file_encrypted}...')
