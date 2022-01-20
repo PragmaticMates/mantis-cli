@@ -381,10 +381,11 @@ class Mantis(object):
         steps = 2
         CLI.step(1, steps, 'Tagging Docker image...')
         os.system(f'docker tag {self.IMAGE_NAME} {DOCKER_REPOSITORY}:{DOCKER_TAG}')
-        print(f'Successfully tagged {DOCKER_REPOSITORY}:{DOCKER_TAG}')
+        CLI.success(f'Successfully tagged {DOCKER_REPOSITORY}:{DOCKER_TAG}')
 
         CLI.step(2, steps, 'Pushing Docker image...')
         os.system(f'docker push {DOCKER_REPOSITORY}:{DOCKER_TAG}')
+        CLI.success(f'Successfully pushed {DOCKER_REPOSITORY}:{DOCKER_TAG}')
 
     def pull(self):
         CLI.info('Pulling docker image...')
