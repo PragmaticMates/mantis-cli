@@ -355,7 +355,11 @@ class Mantis(object):
         CLI.info(f'Dockerfile = {self.configs_path}/docker/{self.DOCKER_FILE}')
         steps = 1
 
-        CLI.step(1, steps, 'Building Docker image...')
+        DOCKER_REPOSITORY = self.config['build']['repository']
+        DOCKER_TAG = self.config['build']['tag']
+        DOCKER_REPOSITORY_AND_TAG = f'{DOCKER_REPOSITORY}:{DOCKER_TAG}'
+
+        CLI.step(1, steps, f'Building Docker image [{DOCKER_REPOSITORY_AND_TAG}]...')
 
         build_args = self.config['build']['args']
         build_args = ','.join(map('='.join, build_args.items()))
@@ -377,15 +381,17 @@ class Mantis(object):
 
         DOCKER_REPOSITORY = self.config['build']['repository']
         DOCKER_TAG = self.config['build']['tag']
+        DOCKER_REPOSITORY_AND_TAG = f'{DOCKER_REPOSITORY}:{DOCKER_TAG}'
 
         steps = 2
-        CLI.step(1, steps, 'Tagging Docker image...')
-        os.system(f'docker tag {self.IMAGE_NAME} {DOCKER_REPOSITORY}:{DOCKER_TAG}')
-        CLI.success(f'Successfully tagged {DOCKER_REPOSITORY}:{DOCKER_TAG}')
 
-        CLI.step(2, steps, 'Pushing Docker image...')
-        os.system(f'docker push {DOCKER_REPOSITORY}:{DOCKER_TAG}')
-        CLI.success(f'Successfully pushed {DOCKER_REPOSITORY}:{DOCKER_TAG}')
+        CLI.step(1, steps, f'Tagging Docker image [{DOCKER_REPOSITORY_AND_TAG}]...')
+        os.system(f'docker tag {self.IMAGE_NAME} {DOCKER_REPOSITORY_AND_TAG}')
+        CLI.success(f'Successfully tagged {DOCKER_REPOSITORY_AND_TAG}')
+
+        CLI.step(2, steps, f'Pushing Docker image [{DOCKER_REPOSITORY_AND_TAG}]...')
+        os.system(f'docker push {DOCKER_REPOSITORY_AND_TAG}')
+        CLI.success(f'Successfully pushed {DOCKER_REPOSITORY_AND_TAG}')
 
     def pull(self):
         CLI.info('Pulling docker image...')
