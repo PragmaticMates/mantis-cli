@@ -45,6 +45,13 @@ def main():
     environment_id = params['environment_id']
     commands = params['commands']
     mode = params['settings'].get('mode', 'remote')
+
+    if mode not in ['remote', 'ssh', 'host']:
+        CLI.error('Incorrect mode. Usage of modes:\n\
+    --mode=remote \tconnects to host remotely from local machine (default)\n\
+    --mode=ssh \t\tconnects to host via ssh and run mantis on remote machine\n\
+    --mode=host \truns mantis on remote machine directly')
+
     hostname = os.popen('hostname').read().rstrip("\n")
 
     # setup manager
