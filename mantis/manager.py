@@ -401,14 +401,18 @@ class Mantis(object):
         CLI.info('Uploading...')
         steps = 1
 
-        if context == 'services':
+        if context == 'all':
+            self.upload('services')
+            self.upload('compose')
+            self.upload('mantis')
+        elif context == 'services':
             CLI.step(1, steps, 'Uploading configs for context "services" [webserver, database, cache, htpasswd]')
         elif context == 'compose':
             CLI.step(1, steps, 'Uploading configs for context "compose" [docker compose configs and environment]')
         elif context == 'mantis':
             CLI.step(1, steps, 'Uploading configs for mantis [mantis.json]')
         else:
-            CLI.error(f'Unknown context "{context}". Available: services, compose, mantis')
+            CLI.error(f'Unknown context "{context}". Available: services, compose, mantis or all')
 
         if self.environment_id == 'dev':
             print('Skipping for dev...')
@@ -675,7 +679,7 @@ class Mantis(object):
 
     def ssh(self, params):
         CLI.info('Logging to container...')
-        self.docker(f'exec -it {params} /bin/sh')
+        self.docker(f'exec -it {params} /bin/bash')
 
     def manage(self, params):
         CLI.info('Django manage...')
@@ -693,13 +697,22 @@ class Mantis(object):
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')
 
+    def bash(self, container):
+        CLI.info('Running bash...')
+        self.docker_compose(f'--project-name={self.PROJECT_NAME} run --entrypoint /bin/bash {container}')
+
     def pg_dump(self):
+        compressed = True
+        data_only = False
+        data_only_param = '--data-only' if data_only else ''
+        extension = 'pg' if compressed else 'sql'
+        compressed_params = '-Fc' if compressed else ''
         now = datetime.datetime.now()
         # filename = now.strftime("%Y%m%d%H%M%S")
-        filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M.pg")
+        filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M.{extension}")
         CLI.info(f'Backuping database into file {filename}')
         env = self.load_environment(self.environment_file)
-        self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_dump -Fc -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
+        self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_dump {compressed_params} {data_only_param} -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
