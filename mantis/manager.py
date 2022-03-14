@@ -495,6 +495,10 @@ class Mantis(object):
             CLI.info(f'Renaming new container [{container}]...')
             self.docker(f'container rename {container}_new {container}')
 
+        # TODO: healthcheck
+        # CLI.info(f'Sleeping 10 seconds...')
+        # sleep(10)
+
         step += 1
         CLI.step(step, steps, 'Reloading webserver...')
         self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
@@ -701,20 +705,29 @@ class Mantis(object):
         CLI.info('Running bash...')
         self.docker_compose(f'--project-name={self.PROJECT_NAME} run --entrypoint /bin/bash {container}')
 
-    def pg_dump(self):
-        compressed = True
-        data_only = False
-        data_only_param = '--data-only' if data_only else ''
+    def pg_dump(self, data_only=False):
+        if data_only:
+            compressed = False
+            data_only_param = '--data-only'
+            data_only_suffix = '_data'
+        else:
+            compressed = True
+            data_only_param = ''
+            data_only_suffix = ''
+
         extension = 'pg' if compressed else 'sql'
         compressed_params = '-Fc' if compressed else ''
         now = datetime.datetime.now()
         # filename = now.strftime("%Y%m%d%H%M%S")
-        filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M.{extension}")
+        filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M{data_only_suffix}.{extension}")
         CLI.info(f'Backuping database into file {filename}')
         env = self.load_environment(self.environment_file)
         self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_dump {compressed_params} {data_only_param} -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
+
+    def pg_dump_data(self):
+        self.pg_dump(data_only=True)
 
     def pg_restore(self, params):
         CLI.info(f'Restoring database from file {params}')

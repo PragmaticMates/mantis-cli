@@ -149,6 +149,7 @@ def execute(manager, command, params=None):
         '--exec': 'exec',
         '--psql': 'psql',
         '--pg-dump': 'pg_dump',
+        '--pg-dump-data': 'pg_dump_data',
         '--pg-restore': 'pg_restore',
         '--send-test-email': 'send_test_email',
     }
