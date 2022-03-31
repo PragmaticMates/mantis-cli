@@ -133,7 +133,7 @@ class Mantis(object):
             self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
             self.compose_configs = [
                 f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml',
-                f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.proxy.yml'
+                f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.proxy.yml',
                 f'{self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml',
             ]
 
