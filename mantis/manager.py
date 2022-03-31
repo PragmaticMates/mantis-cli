@@ -398,7 +398,6 @@ class Mantis(object):
         self.docker_compose('pull')
 
     def upload(self, context='services'):
-        CLI.info('Uploading...')
         steps = 1
 
         if context == 'all':
@@ -419,6 +418,8 @@ class Mantis(object):
         elif self.mode == 'host':
             CLI.warning('Not uploading due to host mode! Be sure your configs on host are up to date!')
         else:
+            CLI.info('Uploading...')
+
             if context == 'services':
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.database_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.DATABASE}/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.CACHE}/')
@@ -705,11 +706,11 @@ class Mantis(object):
         CLI.info('Running bash...')
         self.docker_compose(f'--project-name={self.PROJECT_NAME} run --entrypoint /bin/bash {container}')
 
-    def pg_dump(self, data_only=False):
+    def pg_dump(self, data_only=False, table=None):
         if data_only:
-            compressed = False
+            compressed = True
             data_only_param = '--data-only'
-            data_only_suffix = '_data'
+            data_only_suffix = f'_{table}' if table else '_data'
         else:
             compressed = True
             data_only_param = ''
@@ -717,25 +718,38 @@ class Mantis(object):
 
         extension = 'pg' if compressed else 'sql'
         compressed_params = '-Fc' if compressed else ''
+        table_params = f'--table={table}' if table else ''
+
         now = datetime.datetime.now()
         # filename = now.strftime("%Y%m%d%H%M%S")
         filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M{data_only_suffix}.{extension}")
         CLI.info(f'Backuping database into file {filename}')
         env = self.load_environment(self.environment_file)
-        self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_dump {compressed_params} {data_only_param} -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
+        self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_dump {compressed_params} {data_only_param} -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {table_params} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
-    def pg_dump_data(self):
-        self.pg_dump(data_only=True)
+    def pg_dump_data(self, table=None):
+        self.pg_dump(data_only=True, table=table)
 
-    def pg_restore(self, params):
-        CLI.info(f'Restoring database from file {params}')
+    def pg_restore(self, filename, table=None):
+        if table:
+            CLI.info(f'Restoring table {table} from file {filename}')
+            table_params = f'--table {table}'
+        else:
+            CLI.info(f'Restoring database from file {filename}')
+            table_params = ''
+
         CLI.underline("Don't forget to drop database at first to prevent constraints collisions!")
         env = self.load_environment(self.environment_file)
-        self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W < /backups/{params}\'')
+        self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} {table_params} -W < /backups/{filename}\'')
+        # print(f'exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} {table_params} -W < /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
+
+    def pg_restore_data(self, params):
+        filename, table = params.split(',')
+        self.pg_restore(filename=filename, table=table)
 
     def send_test_email(self):
         CLI.info('Sending test email...')

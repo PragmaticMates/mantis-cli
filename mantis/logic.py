@@ -151,6 +151,7 @@ def execute(manager, command, params=None):
         '--pg-dump': 'pg_dump',
         '--pg-dump-data': 'pg_dump_data',
         '--pg-restore': 'pg_restore',
+        '--pg-restore-data': 'pg_restore_data',
         '--send-test-email': 'send_test_email',
     }
 
@@ -162,8 +163,8 @@ def execute(manager, command, params=None):
         CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> \n{commands}')
     else:
         methods_without_environment = ['contexts', 'create_context', 'generate_key', 'build', 'push']
-        methods_with_params = ['ssh', 'exec', 'bash', 'manage', 'pg_restore', 'start', 'stop', 'logs', 'remove',
-                               'upload', 'run', 'up']
+        methods_with_params = ['ssh', 'exec', 'bash', 'manage', 'pg_restore', 'pg_restore_data', 'pg_dump_data',
+                               'start', 'stop', 'logs', 'remove', 'upload', 'run', 'up']
 
         if manager.environment_id is None and manager_method not in methods_without_environment:
             CLI.error('Missing environment')
