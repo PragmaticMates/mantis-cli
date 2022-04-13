@@ -117,6 +117,7 @@ def execute(manager, command, params=None):
         '--decrypt-env': 'decrypt_env',
         '--check-env': 'check_env',
         '--healthcheck': 'healthcheck',
+        '-hc': 'healthcheck',
         '--bash': 'bash',
         '--build': 'build',
         '-b': 'build',
