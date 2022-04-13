@@ -382,13 +382,13 @@ class Mantis(object):
                 result = ', '.join(pids)
 
             if success:
-                print(f'{Colors.GREEN}Success{Colors.ENDC}. Result: {result}')
+                print(f'#{retry}: {Colors.GREEN}Success{Colors.ENDC}. Result: {result}')
                 last_status = True
 
                 if break_if_successful:
                     return last_status
             else:
-                print(f'{Colors.RED}Fail{Colors.ENDC}. Result: {result}')
+                print(f'#{retry}: {Colors.RED}Fail{Colors.ENDC}. Result: {result}')
                 last_status = False
 
             # if retries > 1:
@@ -537,7 +537,7 @@ class Mantis(object):
             self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
 
             # healthcheck
-            self.healthcheck(retries=10, service=f'{service}_new', break_if_successful=True)
+            self.healthcheck(retries=30, service=f'{service}_new', break_if_successful=True)
 
             # rename old container
             CLI.info(f'Renaming old container [{container}_old]...')
