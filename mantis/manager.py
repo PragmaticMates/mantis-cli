@@ -391,8 +391,8 @@ class Mantis(object):
                 print(f'#{retry}: {Colors.RED}Fail{Colors.ENDC}. Result: {result}')
                 last_status = False
 
-            # if retries > 1:
-            #     sleep(1)
+            if retries > 1:
+                sleep(1)
 
         return last_status
 
