@@ -350,34 +350,45 @@ class Mantis(object):
         suffix = self.config['containers']['suffixes'].get(service, f'_{service}')
         return f'{self.CONTAINER_PREFIX}{suffix}'
 
-    def healthcheck(self, retries=5, service=None):
+    def healthcheck(self, retries=5, service=None, break_if_successful=False):
         if service:
             container = self.get_container_name(service)
-            url = 'http://127.0.0.1:8000'
-            CLI.info(f'Health-checking {Colors.YELLOW}{container}{Colors.ENDC} ({url})...')
+            target = container
+            method = 'gunicorn'  # TODO: method per service
             success_responses = [200]
         else:
-            url = f'http://{self.host}'
-            CLI.info(f'Health-checking {Colors.YELLOW}{self.host}{Colors.ENDC}...')
+            target = f'http://{self.host}'
+            method = 'curl'
             success_responses = [200, 401]
 
+        CLI.info(f'Health-checking {Colors.YELLOW}{target}{Colors.ENDC} ({method})...')
         retries = int(retries)
         last_status = False
+        status_code = None
 
         for retry in range(retries):
             if service is None:
-                response = requests.get(url)
+                response = requests.get(target)
                 status_code = response.status_code
+                success = status_code in success_responses
+                result = status_code
             else:
-                command = 'curl -s -o /dev/null -w "%%{http_code}" -L -H "Host: %s" %s' % (self.host, url)
-                status_code = self.docker(f'container exec -it {container} {command}', return_output=True)
-                status_code = int(status_code)
+                # command = 'curl -s -o /dev/null -w "%%{http_code}" -L -H "Host: %s" %s' % (self.host, url)
+                command = "pgrep -x gunicorn -d ' '"
+                pids = self.docker(f'container exec -it {container} {command}', return_output=True)
+                pids = pids.strip()
+                pids = [] if pids == '' else pids.split(' ')
+                success = len(pids) > 0
+                result = ', '.join(pids)
 
-            if status_code in success_responses:
-                CLI.success(f'{Colors.GREEN}Success{Colors.ENDC}. Response code: {status_code}')
+            if success:
+                print(f'{Colors.GREEN}Success{Colors.ENDC}. Result: {result}')
                 last_status = True
+
+                if break_if_successful:
+                    return last_status
             else:
-                CLI.error(f'{Colors.RED}Fail{Colors.ENDC}. Response code: {status_code}')
+                print(f'{Colors.RED}Fail{Colors.ENDC}. Result: {result}')
                 last_status = False
 
             # if retries > 1:
@@ -525,9 +536,8 @@ class Mantis(object):
             # run new container
             self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
 
-            # TODO: healthcheck
-            # CLI.info(f'Sleeping 10 seconds...')
-            # sleep(10)
+            # healthcheck
+            self.healthcheck(retries=10, service=f'{service}_new', break_if_successful=True)
 
             # rename old container
             CLI.info(f'Renaming old container [{container}_old]...')
