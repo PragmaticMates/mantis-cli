@@ -101,6 +101,7 @@ def main():
         for command in commands:
             if ':' in command:
                 command, params = command.split(':')
+                params = params.split(',')
             else:
                 params = None
 
@@ -115,6 +116,7 @@ def execute(manager, command, params=None):
         '--encrypt-env': 'encrypt_env',
         '--decrypt-env': 'decrypt_env',
         '--check-env': 'check_env',
+        '--healthcheck': 'healthcheck',
         '--bash': 'bash',
         '--build': 'build',
         '-b': 'build',
@@ -163,7 +165,7 @@ def execute(manager, command, params=None):
         CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> \n{commands}')
     else:
         methods_without_environment = ['contexts', 'create_context', 'generate_key', 'build', 'push']
-        methods_with_params = ['ssh', 'exec', 'bash', 'manage', 'pg_restore', 'pg_restore_data', 'pg_dump_data',
+        methods_with_params = ['healthcheck', 'ssh', 'exec', 'bash', 'manage', 'pg_restore', 'pg_restore_data', 'pg_dump_data',
                                'start', 'stop', 'logs', 'remove', 'upload', 'run', 'up']
 
         if manager.environment_id is None and manager_method not in methods_without_environment:
@@ -172,6 +174,6 @@ def execute(manager, command, params=None):
             CLI.error('Redundant environment')
 
         if manager_method in methods_with_params and params:
-            getattr(manager, manager_method)(params)
+            getattr(manager, manager_method)(*params)
         else:
             getattr(manager, manager_method)()

@@ -1,11 +1,12 @@
 import json
 import os
 import datetime
+import requests
 from distutils.util import strtobool
 from os.path import dirname
 from time import sleep
 
-from mantis.helpers import CLI, Crypto
+from mantis.helpers import CLI, Colors, Crypto
 
 
 class Mantis(object):
@@ -349,6 +350,41 @@ class Mantis(object):
         suffix = self.config['containers']['suffixes'].get(service, f'_{service}')
         return f'{self.CONTAINER_PREFIX}{suffix}'
 
+    def healthcheck(self, retries=5, service=None):
+        if service:
+            container = self.get_container_name(service)
+            url = 'http://127.0.0.1:8000'
+            CLI.info(f'Health-checking {Colors.YELLOW}{container}{Colors.ENDC} ({url})...')
+            success_responses = [200]
+        else:
+            url = f'http://{self.host}'
+            CLI.info(f'Health-checking {Colors.YELLOW}{self.host}{Colors.ENDC}...')
+            success_responses = [200, 401]
+
+        retries = int(retries)
+        last_status = False
+
+        for retry in range(retries):
+            if service is None:
+                response = requests.get(url)
+                status_code = response.status_code
+            else:
+                command = 'curl -s -o /dev/null -w "%%{http_code}" -L -H "Host: %s" %s' % (self.host, url)
+                status_code = self.docker(f'container exec -it {container} {command}', return_output=True)
+                status_code = int(status_code)
+
+            if status_code in success_responses:
+                CLI.success(f'{Colors.GREEN}Success{Colors.ENDC}. Response code: {status_code}')
+                last_status = True
+            else:
+                CLI.error(f'{Colors.RED}Fail{Colors.ENDC}. Response code: {status_code}')
+                last_status = False
+
+            # if retries > 1:
+            #     sleep(1)
+
+        return last_status
+
     def build(self, params=''):
         CLI.info(f'Building...')
         CLI.info(f'Params = {params}')
@@ -485,7 +521,15 @@ class Mantis(object):
 
         for service in zero_downtime_services:
             container = self.get_container_name(service)
+
+            # run new container
             self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
+
+            # TODO: healthcheck
+            # CLI.info(f'Sleeping 10 seconds...')
+            # sleep(10)
+
+            # rename old container
             CLI.info(f'Renaming old container [{container}_old]...')
 
             if container in self.get_containers():
@@ -493,12 +537,9 @@ class Mantis(object):
             else:
                 CLI.info(f'{container}_old was not running')
 
+            # rename new container
             CLI.info(f'Renaming new container [{container}]...')
             self.docker(f'container rename {container}_new {container}')
-
-        # TODO: healthcheck
-        # CLI.info(f'Sleeping 10 seconds...')
-        # sleep(10)
 
         step += 1
         CLI.step(step, steps, 'Reloading webserver...')
@@ -660,7 +701,7 @@ class Mantis(object):
             CLI.info('Reading logs...')
 
             services = params.split(' ') if params else self.get_services()
-            lines = '-f' if params else '--tail 10'
+            lines = '--tail 100 -f' if params else '--tail 10'
             steps = len(services)
 
             for index, service in enumerate(services):
@@ -671,7 +712,7 @@ class Mantis(object):
             CLI.info('Reading logs...')
 
             containers = params.split(' ') if params else self.get_containers()
-            lines = '-f' if params else '--tail 10'
+            lines = '--tail 100 -f' if params else '--tail 10'
             steps = len(containers)
 
             for index, container in enumerate(containers):
