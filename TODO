@@ -1,0 +1,2 @@
+- ask user whether to continue in deploying if decrypted and encrypted environment do not match
+- ask user whether to continue in deploying if zero-downtime deployment fails after maximum number of retries
