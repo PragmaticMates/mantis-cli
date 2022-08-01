@@ -148,7 +148,7 @@ class Mantis(object):
         self.htpasswd = f'secrets/.htpasswd'
 
     def check_environment_encryption(self):
-        decrypted_env = self.decrypt_env('', return_value=True)                     # .env.encrypted
+        decrypted_env = self.decrypt_env(return_value=True)                     # .env.encrypted
         decrypted_env_from_file = self.load_environment(self.environment_file)  # .env
 
         if decrypted_env_from_file != decrypted_env:
@@ -203,7 +203,7 @@ class Mantis(object):
         CLI.pink(key)
         CLI.danger(f'Save it to {self.key_file} and keep safe !!!')
 
-    def encrypt_env(self, params, return_value=False):
+    def encrypt_env(self, params='', return_value=False):
         CLI.info(f'Encrypting environment file {self.environment_file}...')
 
         if not self.KEY:
@@ -242,7 +242,7 @@ class Mantis(object):
             else:
                 CLI.warning(f'Save it to {self.environment_file_encrypted} manually.')
 
-    def decrypt_env(self, params, return_value=False):
+    def decrypt_env(self, params='', return_value=False):
         if not return_value:
             CLI.info(f'Decrypting environment file {self.environment_file_encrypted}...')
 
