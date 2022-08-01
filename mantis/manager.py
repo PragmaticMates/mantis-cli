@@ -255,11 +255,12 @@ class Mantis(object):
             return None
 
         decrypted_env = {}
+        force = 'force' in params
 
         for var, value in encrypted_env.items():
             decrypted_value = Crypto.decrypt(value, self.KEY, self.encrypt_deterministically)
 
-            if not return_value:
+            if not return_value and not force:
                 print(f'{var}={decrypted_value}')
 
             decrypted_env[var] = decrypted_value
@@ -267,7 +268,7 @@ class Mantis(object):
         if return_value:
             return decrypted_env
 
-        if 'force' in params:
+        if force:
             self._save_environment_file(decrypted_env, encrypted_env)
             CLI.success(f'Saved to file {self.environment_file}')
         else:
