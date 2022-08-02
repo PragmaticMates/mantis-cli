@@ -433,7 +433,7 @@ class Mantis(object):
         CLI.info(f'Kit = {build_kit}')
         CLI.info(f'Args = {build_args}')
 
-        os.system(f'time {build_kit} docker build . {build_args} -t {self.IMAGE_NAME} -f {self.configs_path}/docker/{self.DOCKER_FILE} {params}')
+        os.system(f'{build_kit} docker build . {build_args} -t {self.IMAGE_NAME} -f {self.configs_path}/docker/{self.DOCKER_FILE} {params}')
 
     def push(self):
         CLI.info(f'Pushing...')
