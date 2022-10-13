@@ -203,7 +203,7 @@ class Mantis(object):
         CLI.pink(key)
         CLI.danger(f'Save it to {self.key_file} and keep safe !!!')
 
-    def encrypt_env(self, return_value=False):
+    def encrypt_env(self, params='', return_value=False):
         CLI.info(f'Encrypting environment file {self.environment_file}...')
 
         if not self.KEY:
@@ -227,24 +227,22 @@ class Mantis(object):
         if return_value:
             return encrypted_env
 
-        # save to file?
-        CLI.info(f'Save to file?')
-
-        save_to_file = input("(Y)es or (N)o: ")
-
-        if save_to_file.lower() == 'y':
-            with open(self.environment_file_encrypted, "w") as f:
-                for index, (var, encrypted_value) in enumerate(encrypted_env.items()):
-                    f.write(f'{var}={encrypted_value}')
-
-                    if index < len(encrypted_env) - 1:
-                        f.write('\n')
-
+        if 'force' in params:
+            self._save_environment_file_encrypted(encrypted_env)
             CLI.success(f'Saved to file {self.environment_file_encrypted}')
         else:
-            CLI.warning(f'Save it to {self.environment_file_encrypted} manually.')
+            # save to file?
+            CLI.info(f'Save to file?')
 
-    def decrypt_env(self, return_value=False):
+            save_to_file = input("(Y)es or (N)o: ")
+
+            if save_to_file.lower() == 'y':
+                self._save_environment_file_encrypted(encrypted_env)
+                CLI.success(f'Saved to file {self.environment_file_encrypted}')
+            else:
+                CLI.warning(f'Save it to {self.environment_file_encrypted} manually.')
+
+    def decrypt_env(self, params='', return_value=False):
         if not return_value:
             CLI.info(f'Decrypting environment file {self.environment_file_encrypted}...')
 
@@ -257,11 +255,12 @@ class Mantis(object):
             return None
 
         decrypted_env = {}
+        force = 'force' in params
 
         for var, value in encrypted_env.items():
             decrypted_value = Crypto.decrypt(value, self.KEY, self.encrypt_deterministically)
 
-            if not return_value:
+            if not return_value and not force:
                 print(f'{var}={decrypted_value}')
 
             decrypted_env[var] = decrypted_value
@@ -269,22 +268,36 @@ class Mantis(object):
         if return_value:
             return decrypted_env
 
-        # save to file?
-        CLI.info(f'Save to file?')
-
-        save_to_file = input("(Y)es or (N)o: ")
-
-        if save_to_file.lower() == 'y':
-            with open(self.environment_file, "w") as f:
-                for index, (var, decrypted_value) in enumerate(decrypted_env.items()):
-                    f.write(f'{var}={decrypted_value}')
-
-                    if index < len(encrypted_env) - 1:
-                        f.write('\n')
-
+        if force:
+            self._save_environment_file(decrypted_env, encrypted_env)
             CLI.success(f'Saved to file {self.environment_file}')
         else:
-            CLI.warning(f'Save it to {self.environment_file} manually.')
+            # save to file?
+            CLI.info(f'Save to file?')
+
+            save_to_file = input("(Y)es or (N)o: ")
+
+            if save_to_file.lower() == 'y':
+                self._save_environment_file(decrypted_env, encrypted_env)
+                CLI.success(f'Saved to file {self.environment_file}')
+            else:
+                CLI.warning(f'Save it to {self.environment_file} manually.')
+
+    def _save_environment_file_encrypted(self, encrypted_env):
+        with open(self.environment_file_encrypted, "w") as f:
+            for index, (var, encrypted_value) in enumerate(encrypted_env.items()):
+                f.write(f'{var}={encrypted_value}')
+
+                if index < len(encrypted_env) - 1:
+                    f.write('\n')
+
+    def _save_environment_file(self, decrypted_env, encrypted_env):
+        with open(self.environment_file, "w") as f:
+            for index, (var, decrypted_value) in enumerate(decrypted_env.items()):
+                f.write(f'{var}={decrypted_value}')
+
+                if index < len(encrypted_env) - 1:
+                    f.write('\n')
 
     def check_env(self):
         self.check_environment_encryption()
