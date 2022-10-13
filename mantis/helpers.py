@@ -8,7 +8,7 @@ try:
 except ImportError:
     # not using cryptography
     # pip install pycryptodome>=3.11.0
-    pass
+    raise ImportError('Install pycryptodome and cryptography!')
 
 
 class Colors:
