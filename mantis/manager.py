@@ -746,9 +746,13 @@ class Mantis(object):
         CLI.info('Connecting to Django shell...')
         self.docker(f'exec -i {self.CONTAINER_APP} python manage.py shell')
 
-    def ssh(self, params):
+    def bash(self, params):
         CLI.info('Logging to container...')
         self.docker(f'exec -it {params} /bin/bash')
+
+    def sh(self, params):
+        CLI.info('Logging to container...')
+        self.docker(f'exec -it {params} /bin/sh')
 
     def manage(self, params):
         CLI.info('Django manage...')
