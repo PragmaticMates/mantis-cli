@@ -108,8 +108,8 @@ class Mantis(object):
         self.environment_file = f'{self.configs_path}/environments/{self.environment_file_name}'
         self.environment_file_encrypted_name = f'{self.environment_file_prefix}{self.environment_id}.env.encrypted'
         self.environment_file_encrypted = f'{self.configs_path}/environments/{self.environment_file_encrypted_name}'
-        self.project_path = self.config.get('project_path', None)
         self.connection = self.config.get('connections', {}).get(self.environment_id, None)
+        self.project_path = self.config.get('project_path', f'/home/{self.user}/public_html/web')
 
         # Get environment settings
         self.PROJECT_NAME = self.config['project_name']
@@ -481,20 +481,20 @@ class Mantis(object):
             CLI.info('Uploading...')
 
             if context == 'services':
-                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.database_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.DATABASE}/')
-                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.CACHE}/')
-                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/{self.WEBSERVER}/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.database_config} {self.user}@{self.host}:{self.project_path}/configs/{self.DATABASE}/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:{self.project_path}/configs/{self.CACHE}/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.htpasswd} {self.user}@{self.host}:/etc/nginx/conf.d/')
 
             elif context == 'mantis':
-                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:{self.project_path}/configs/')
 
             elif context == 'compose':
-                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.environment_file} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/environments/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.environment_file} {self.user}@{self.host}:{self.project_path}/configs/environments/')
 
                 for config in self.compose_configs:
-                    os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {config} {self.user}@{self.host}:/home/{self.user}/public_html/web/configs/docker/')
+                    os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {config} {self.user}@{self.host}:{self.project_path}/configs/docker/')
 
     def restart(self):
         CLI.info('Restarting...')
@@ -747,8 +747,9 @@ class Mantis(object):
         self.docker(f'exec -i {self.CONTAINER_APP} python manage.py shell')
 
     def bash(self, params):
-        CLI.info('Logging to container...')
+        CLI.info('Running bash...')
         self.docker(f'exec -it {params} /bin/bash')
+        # self.docker_compose(f'--project-name={self.PROJECT_NAME} run --entrypoint /bin/bash {container}')
 
     def sh(self, params):
         CLI.info('Logging to container...')
@@ -769,10 +770,6 @@ class Mantis(object):
         container, command = params.split(' ', maxsplit=1)
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')
-
-    def bash(self, container):
-        CLI.info('Running bash...')
-        self.docker_compose(f'--project-name={self.PROJECT_NAME} run --entrypoint /bin/bash {container}')
 
     def pg_dump(self, data_only=False, table=None):
         if data_only:
