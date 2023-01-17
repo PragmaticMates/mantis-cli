@@ -829,15 +829,3 @@ class Mantis(object):
 
     def docker_compose(self, command):
         os.system(f'{self.docker_connection} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {command}')
-
-    def shell(self):
-        CLI.info('Connecting to Django shell...')
-        self.docker(f'exec -i {self.CONTAINER_APP} python manage.py shell')
-
-    def manage(self, params):
-        CLI.info('Django manage...')
-        self.docker(f'exec -ti {self.CONTAINER_APP} python manage.py {params}')
-
-    def send_test_email(self):
-        CLI.info('Sending test email...')
-        self.docker(f'exec -i {self.CONTAINER_APP} python manage.py sendtestemail --admins')
