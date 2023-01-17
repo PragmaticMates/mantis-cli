@@ -79,6 +79,9 @@ class Mantis(object):
         # set to singleton
         setattr(self, property_name, details)
 
+        # set project path
+        self.project_path = self.config.get('project_path', f'/home/{self.user}/public_html/web')
+
         return details
 
     @property
@@ -109,7 +112,6 @@ class Mantis(object):
         self.environment_file_encrypted_name = f'{self.environment_file_prefix}{self.environment_id}.env.encrypted'
         self.environment_file_encrypted = f'{self.configs_path}/environments/{self.environment_file_encrypted_name}'
         self.connection = self.config.get('connections', {}).get(self.environment_id, None)
-        self.project_path = self.config.get('project_path', f'/home/{self.user}/public_html/web')
 
         # Get environment settings
         self.PROJECT_NAME = self.config['project_name']
