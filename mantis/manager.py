@@ -6,7 +6,7 @@ from distutils.util import strtobool
 from os.path import dirname
 from time import sleep
 
-from mantis.helpers import CLI, Colors, Crypto
+from mantis.helpers import CLI, Colors, Crypto, load_config
 
 
 class Mantis(object):
@@ -100,7 +100,7 @@ class Mantis(object):
 
     def init_config(self, config):
         self.config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
-        self.config = config or self.load_config()
+        self.config = config or load_config(self.config_file)
 
         configs_folder_path = self.config.get('configs_folder_path', '')
         configs_folder_name = self.config.get('configs_folder_name', 'configs')
@@ -303,10 +303,6 @@ class Mantis(object):
 
     def check_env(self):
         self.check_environment_encryption()
-
-    def load_config(self):
-        with open(self.config_file) as config:
-            return json.load(config)
 
     def load_environment(self, path):
         if not os.path.exists(path):
@@ -744,10 +740,6 @@ class Mantis(object):
                 CLI.step(index + 1, steps, f'{container} logs')
                 self.docker(f'logs {container} {lines}')
 
-    def shell(self):
-        CLI.info('Connecting to Django shell...')
-        self.docker(f'exec -i {self.CONTAINER_APP} python manage.py shell')
-
     def bash(self, params):
         CLI.info('Running bash...')
         self.docker(f'exec -it {params} /bin/bash')
@@ -756,10 +748,6 @@ class Mantis(object):
     def sh(self, params):
         CLI.info('Logging to container...')
         self.docker(f'exec -it {params} /bin/sh')
-
-    def manage(self, params):
-        CLI.info('Django manage...')
-        self.docker(f'exec -ti {self.CONTAINER_APP} python manage.py {params}')
 
     def psql(self):
         CLI.info('Starting psql...')
@@ -818,10 +806,6 @@ class Mantis(object):
         filename, table = params.split(',')
         self.pg_restore(filename=filename, table=table)
 
-    def send_test_email(self):
-        CLI.info('Sending test email...')
-        self.docker(f'exec -i {self.CONTAINER_APP} python manage.py sendtestemail --admins')
-
     def get_containers(self):
         containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)
         containers = containers.strip().split('\n')
@@ -845,3 +829,15 @@ class Mantis(object):
 
     def docker_compose(self, command):
         os.system(f'{self.docker_connection} docker-compose -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.yml -f {self.configs_path}/docker/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {command}')
+
+    def shell(self):
+        CLI.info('Connecting to Django shell...')
+        self.docker(f'exec -i {self.CONTAINER_APP} python manage.py shell')
+
+    def manage(self, params):
+        CLI.info('Django manage...')
+        self.docker(f'exec -ti {self.CONTAINER_APP} python manage.py {params}')
+
+    def send_test_email(self):
+        CLI.info('Sending test email...')
+        self.docker(f'exec -i {self.CONTAINER_APP} python manage.py sendtestemail --admins')

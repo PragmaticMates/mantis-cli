@@ -1,8 +1,7 @@
 import os, sys
 
 from mantis import VERSION
-from mantis.helpers import Colors, CLI
-from mantis.manager import Mantis
+from mantis.helpers import Colors, CLI, load_config
 
 
 def parse_args():
@@ -54,8 +53,16 @@ def main():
 
     hostname = os.popen('hostname').read().rstrip("\n")
 
+    # config file
+    config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
+    config = load_config(config_file)
+    manager_class_name = config.get('manager_class', 'mantis.manager.Mantis')
+
     # setup manager
-    manager = Mantis(environment_id=environment_id, mode=mode)
+    components = manager_class_name.split('.')
+    mod = __import__('.'.join(components[0:-1]), globals(), locals(), [components[-1]])
+    manager_class = getattr(mod, components[-1])
+    manager = manager_class(config=config, environment_id=environment_id, mode=mode)
 
     # check config settings
     settings_config = params['settings'].get('config', None)

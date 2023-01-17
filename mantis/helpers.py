@@ -1,4 +1,5 @@
 import os
+import json
 from base64 import b64encode, b64decode
 
 try:
@@ -116,3 +117,8 @@ class Crypto(object):
         fernet = Fernet(key.encode())
         decrypted = fernet.decrypt(secret.encode())
         return decrypted.decode()
+
+
+def load_config(config_file):
+    with open(config_file) as config:
+        return json.load(config)
