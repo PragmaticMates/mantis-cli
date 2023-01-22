@@ -145,9 +145,10 @@ class Mantis(object):
         self.WEBSERVER = self.config.get('webserver', 'nginx')
         self.database_config = f'{self.configs_path}/{self.DATABASE}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.cache_config = f'{self.configs_path}/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
-        self.webserver_config = f'{self.configs_path}/{self.WEBSERVER}/{self.environment_file_prefix}{self.environment_id}.conf'
-        self.webserver_config_proxy = f'configs/{self.WEBSERVER}/proxy_directives.conf'
-        self.htpasswd = f'secrets/.htpasswd'
+        self.webserver_html = f'{self.configs_path}/{self.WEBSERVER}/html/'
+        self.webserver_config = f'{self.configs_path}/{self.WEBSERVER}/sites/{self.environment_file_prefix}{self.environment_id}.conf'
+        self.webserver_config_proxy = f'{self.configs_path}/{self.WEBSERVER}/proxy_directives.conf'
+        self.htpasswd = f'{self.configs_path}/{self.WEBSERVER}/secrets/.htpasswd'
 
     def check_environment_encryption(self):
         decrypted_env = self.decrypt_env(return_value=True)                     # .env.encrypted
@@ -481,9 +482,10 @@ class Mantis(object):
             if context == 'services':
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.database_config} {self.user}@{self.host}:{self.project_path}/configs/{self.DATABASE}/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:{self.project_path}/configs/{self.CACHE}/')
-                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/')
-                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:/etc/nginx/conf.d/proxy/')
-                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.htpasswd} {self.user}@{self.host}:/etc/nginx/conf.d/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_html} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/html/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/sites/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.htpasswd} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/secrets/')
 
             elif context == 'mantis':
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:{self.project_path}/configs/')
