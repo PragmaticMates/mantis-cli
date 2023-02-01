@@ -146,8 +146,9 @@ class Mantis(object):
         self.database_config = f'{self.configs_path}/{self.DATABASE}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.cache_config = f'{self.configs_path}/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_html = f'{self.configs_path}/{self.WEBSERVER}/html/'
-        self.webserver_config = f'{self.configs_path}/{self.WEBSERVER}/sites/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_config_proxy = f'{self.configs_path}/{self.WEBSERVER}/proxy_directives.conf'
+        self.webserver_config_default = f'{self.configs_path}/{self.WEBSERVER}/default.conf'
+        self.webserver_config_site = f'{self.configs_path}/{self.WEBSERVER}/sites/{self.environment_file_prefix}{self.environment_id}.conf'
         self.htpasswd = f'{self.configs_path}/{self.WEBSERVER}/secrets/.htpasswd'
 
     def check_environment_encryption(self):
@@ -483,8 +484,9 @@ class Mantis(object):
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.database_config} {self.user}@{self.host}:{self.project_path}/configs/{self.DATABASE}/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.cache_config} {self.user}@{self.host}:{self.project_path}/configs/{self.CACHE}/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_html} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/html/')
-                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/sites/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_default} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_proxy} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/')
+                os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.webserver_config_site} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/sites/')
                 os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.htpasswd} {self.user}@{self.host}:{self.project_path}/configs/{self.WEBSERVER}/secrets/')
 
             elif context == 'mantis':
