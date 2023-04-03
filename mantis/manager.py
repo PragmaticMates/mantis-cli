@@ -599,11 +599,11 @@ class Mantis(object):
 
                 CLI.info(f'Removing container [{container}]...')
                 self.docker(f'container rm {container}')
-
-                CLI.info(f'Creating new container [{container}]...')
-                self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
             else:
                 CLI.info(f'{container} was not running')
+
+            CLI.info(f'Creating new container [{container}]...')
+            self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
 
     def stop(self, params=None):
         if self.SWARM:  # todo can stop service ?
