@@ -9,6 +9,7 @@ try:
 except ImportError:
     # not using cryptography
     # pip install pycryptodome>=3.11.0
+    # TODO: only if using environment encryption!
     raise ImportError('Install pycryptodome and cryptography!')
 
 
