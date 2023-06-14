@@ -216,7 +216,7 @@ class Mantis(object):
         CLI.info(f'Encrypting environment file {self.environment_file}...')
 
         if not self.KEY:
-            CLI.error('Missing mantis key!')
+            CLI.error('Missing mantis key! (%s)' % self.key_file)
 
         decrypted_env = self.load_environment(self.environment_file)
 
