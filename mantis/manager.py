@@ -425,7 +425,7 @@ class Mantis(object):
         for service, image in self.config['services'].items():
             self.build_image(service, params)
 
-    def build_image(self, service, params):
+    def build_image(self, service, params=''):
         service_build = self.config['services'][service]
         image = service_build.get('image', self.get_image_name(service))
         dockerfile = f"{self.config['build'].get('context', '.')}{service_build['dockerfile']}"
