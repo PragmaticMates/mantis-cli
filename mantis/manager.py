@@ -567,7 +567,7 @@ class Mantis(object):
         else:
             CLI.step(1, steps, 'Stopping and removing Docker containers...')
 
-            # TODO: stop and remove all containers with project prefix
+            # stop and remove all containers with project prefix
             containers = self.get_containers_starts_with(self.CONTAINER_PREFIX)
             print(containers)
             for container in containers:
