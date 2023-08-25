@@ -1,4 +1,5 @@
 import os
+import json
 from base64 import b64encode, b64decode
 
 try:
@@ -8,7 +9,8 @@ try:
 except ImportError:
     # not using cryptography
     # pip install pycryptodome>=3.11.0
-    pass
+    # TODO: only if using environment encryption!
+    raise ImportError('Install pycryptodome and cryptography!')
 
 
 class Colors:
@@ -113,3 +115,8 @@ class Crypto(object):
         fernet = Fernet(key.encode())
         decrypted = fernet.decrypt(secret.encode())
         return decrypted.decode()
+
+
+def load_config(config_file):
+    with open(config_file) as config:
+        return json.load(config)

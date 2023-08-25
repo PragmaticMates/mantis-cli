@@ -1,8 +1,7 @@
 import os, sys
 
 from mantis import VERSION
-from mantis.helpers import Colors, CLI
-from mantis.manager import Mantis
+from mantis.helpers import Colors, CLI, load_config
 
 
 def parse_args():
@@ -54,8 +53,16 @@ def main():
 
     hostname = os.popen('hostname').read().rstrip("\n")
 
+    # config file
+    config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
+    config = load_config(config_file)
+    manager_class_name = config.get('manager_class', 'mantis.manager.Mantis')
+
     # setup manager
-    manager = Mantis(environment_id=environment_id, mode=mode)
+    components = manager_class_name.split('.')
+    mod = __import__('.'.join(components[0:-1]), globals(), locals(), [components[-1]])
+    manager_class = getattr(mod, components[-1])
+    manager = manager_class(config=config, environment_id=environment_id, mode=mode)
 
     # check config settings
     settings_config = params['settings'].get('config', None)
@@ -120,6 +127,7 @@ def execute(manager, command, params=None):
         '-hc': 'healthcheck',
         '--bash': 'bash',
         '--build': 'build',
+        '--build-image': 'build_image',
         '-b': 'build',
         '--push': 'push',
         '--pull': 'pull',
@@ -147,7 +155,8 @@ def execute(manager, command, params=None):
         '--logs': 'logs',
         '-l': 'logs',
         '--shell': 'shell',
-        '--ssh': 'ssh',
+        '--sh': 'sh',
+        '--bash': 'bash',
         '--manage': 'manage',
         '--exec': 'exec',
         '--psql': 'psql',
@@ -165,8 +174,8 @@ def execute(manager, command, params=None):
         
         CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> \n{commands}')
     else:
-        methods_without_environment = ['contexts', 'create_context', 'generate_key', 'build', 'push']
-        methods_with_params = ['healthcheck', 'ssh', 'exec', 'bash', 'manage', 'pg_restore', 'pg_restore_data', 'pg_dump_data',
+        methods_without_environment = ['contexts', 'create_context', 'generate_key', 'build', 'build_image', 'push']
+        methods_with_params = ['healthcheck', 'sh', 'bash', 'build_image', 'exec', 'bash', 'manage', 'pg_restore', 'pg_restore_data', 'pg_dump_data',
                                'start', 'stop', 'logs', 'remove', 'upload', 'run', 'up', 'encrypt_env', 'decrypt_env']
 
         if manager.environment_id is None and manager_method not in methods_without_environment:
