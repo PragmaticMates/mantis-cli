@@ -3,7 +3,8 @@ import os
 import datetime
 import requests
 from distutils.util import strtobool
-from os.path import dirname
+from os import path
+from os.path import dirname, normpath
 from time import sleep
 
 from mantis.helpers import CLI, Colors, Crypto, load_config
@@ -106,7 +107,7 @@ class Mantis(object):
         configs_folder_name = self.config.get('configs_folder_name', 'configs')
         self.configs_path = f'{configs_folder_path}{configs_folder_name}'
         self.configs_compose_folder = self.config.get('configs_compose_folder', 'compose')
-        self.key_file = f'{dirname(self.config_file)}/mantis.key'
+        self.key_file = path.join(f'{dirname(self.config_file)}', 'mantis.key')
         self.environment_file_prefix = self.config.get('environment_file_prefix', '')
         self.environment_file_name = f'{self.environment_file_prefix}{self.environment_id}.env'
         self.environment_file = f'{self.configs_path}/environments/{self.environment_file_name}'
