@@ -158,25 +158,31 @@ class Mantis(object):
         self.htpasswd = f'{self.configs_path}/{self.WEBSERVER}/secrets/.htpasswd'
 
     def check_environment_encryption(self):
-        decrypted_env = self.decrypt_env(return_value=True)                     # .env.encrypted
-        decrypted_env_from_file = self.load_environment(self.environment_file)  # .env
+        decrypted_environment = self.decrypt_env(return_value=True)        # .env.encrypted
+        loaded_environment = self.load_environment(self.environment_file)  # .env
 
-        if decrypted_env_from_file != decrypted_env:
-            CLI.danger('Encrypted and decrypted environments do NOT match!')
+        if decrypted_environment is None:
+            CLI.error('Decrypted environment is empty!')
 
-            if decrypted_env_from_file is None:
+        if loaded_environment is None:
+            CLI.error('Loaded environment is empty!')
+
+        if loaded_environment != decrypted_environment:
+            CLI.danger('Encrypted and decrypted environment files do NOT match!')
+
+            if loaded_environment is None:
                 CLI.danger('Decrypted env from file is empty !')
-            elif decrypted_env is None:
+            elif decrypted_environment is None:
                 CLI.danger('Decrypted env is empty !')
             else:
-                set1 = set(decrypted_env_from_file.items())
-                set2 = set(decrypted_env.items())
+                set1 = set(loaded_environment.items())
+                set2 = set(decrypted_environment.items())
                 difference = set1 ^ set2
 
                 for var in dict(difference).keys():
                     CLI.info(var, end=': ')
 
-                    encrypted_value = decrypted_env_from_file.get(var, '')
+                    encrypted_value = loaded_environment.get(var, '')
 
                     if encrypted_value == '':
                         CLI.bold('-- empty --', end=' ')
@@ -185,7 +191,7 @@ class Mantis(object):
 
                     print(f'[{self.environment_file_name}]', end=' / ')
 
-                    decrypted_value = decrypted_env.get(var, '')
+                    decrypted_value = decrypted_environment.get(var, '')
 
                     if decrypted_value == '':
                         CLI.bold('-- empty --', end=' ')
