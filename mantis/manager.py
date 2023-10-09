@@ -19,8 +19,10 @@ class Mantis(object):
         self.init_config(config)
         self.KEY = self.read_key()
         self.encrypt_deterministically = self.config.get('encrypt_deterministically', False)
-        if self.KEY:
-            self.check_environment_encryption()
+
+        # TODO: when to check?
+        # if self.KEY:
+        #     self.check_env()
 
     @property
     def host(self):
@@ -108,11 +110,16 @@ class Mantis(object):
         self.configs_path = f'{configs_folder_path}{configs_folder_name}'
         self.configs_compose_folder = self.config.get('configs_compose_folder', 'compose')
         self.key_file = path.join(f'{dirname(self.config_file)}', 'mantis.key')
+
+        # environment files
+        self.environment_folder = self.config.get('environment_folder', 'environments')
+        self.environment_path = path.join(self.configs_path, self.environment_folder, f'.{self.environment_id}')
         self.environment_file_prefix = self.config.get('environment_file_prefix', '')
-        self.environment_file_name = f'{self.environment_file_prefix}{self.environment_id}.env'
-        self.environment_file = f'{self.configs_path}/environments/{self.environment_file_name}'
-        self.environment_file_encrypted_name = f'{self.environment_file_prefix}{self.environment_id}.env.encrypted'
-        self.environment_file_encrypted = f'{self.configs_path}/environments/{self.environment_file_encrypted_name}'
+
+        for dirpath, directories, files in os.walk(self.environment_path):
+            environment_filenames = list(filter(lambda f: f.endswith('.env'), files))
+            self.environment_files = list(map(lambda x: path.join(dirpath, x), environment_filenames))
+
         self.connection = self.config.get('connections', {}).get(self.environment_id, None)
 
         # Get environment settings
@@ -157,15 +164,15 @@ class Mantis(object):
         self.webserver_config_site = f'{self.configs_path}/{self.WEBSERVER}/sites/{self.environment_file_prefix}{self.environment_id}.conf'
         self.htpasswd = f'{self.configs_path}/{self.WEBSERVER}/secrets/.htpasswd'
 
-    def check_environment_encryption(self):
-        decrypted_environment = self.decrypt_env(return_value=True)        # .env.encrypted
-        loaded_environment = self.load_environment(self.environment_file)  # .env
+    def check_environment_encryption(self, env_file):
+        decrypted_environment = self.decrypt_env(env_file, return_value=True)        # .env.encrypted
+        loaded_environment = self.load_environment(env_file)                         # .env
 
         if decrypted_environment is None:
-            CLI.error('Decrypted environment is empty!')
+            CLI.error(f'Decrypted environment {env_file} is empty!')
 
         if loaded_environment is None:
-            CLI.error('Loaded environment is empty!')
+            CLI.error(f'Loaded environment {env_file} is empty!')
 
         if loaded_environment != decrypted_environment:
             CLI.danger('Encrypted and decrypted environment files do NOT match!')
@@ -189,7 +196,7 @@ class Mantis(object):
                     else:
                         CLI.warning(encrypted_value, end=' ')
 
-                    print(f'[{self.environment_file_name}]', end=' / ')
+                    print(f'[{env_file}]', end=' / ')
 
                     decrypted_value = decrypted_environment.get(var, '')
 
@@ -219,114 +226,166 @@ class Mantis(object):
         CLI.pink(key)
         CLI.danger(f'Save it to {self.key_file} and keep safe !!!')
 
-    def encrypt_env(self, params='', return_value=False):
-        CLI.info(f'Encrypting environment file {self.environment_file}...')
+    def encrypt_env(self, env_file=None, params='', return_value=False):
+        if env_file is None:
+            CLI.info(f'Environment file not specified. Walking all environment files...')
+
+            values = {}
+
+            for env_file in self.environment_files:
+                value = self.encrypt_env(env_file, return_value=return_value)
+                if return_value:
+                    values.update(value)
+
+            return values if return_value else None
+
+        CLI.info(f'Encrypting environment file {env_file}...')
+        env_file_encrypted = f'{env_file}.encrypted'
 
         if not self.KEY:
             CLI.error('Missing mantis key! (%s)' % self.key_file)
 
-        decrypted_env = self.load_environment(self.environment_file)
+        decrypted_lines = self.read_environment(env_file)
 
-        if not decrypted_env:
+        if not decrypted_lines:
             return None
 
+        encrypted_lines = []
         encrypted_env = {}
 
-        for var, value in decrypted_env.items():
-            encrypted_value = Crypto.encrypt(value, self.KEY, self.encrypt_deterministically)
+        for line in decrypted_lines:
+            if self.is_valid_line(line):
+                var, decrypted_value = self.parse_line(line)
+                encrypted_value = Crypto.encrypt(decrypted_value, self.KEY, self.encrypt_deterministically)
+                encrypted_lines.append(f'{var}={encrypted_value}')
+                encrypted_env[var] = encrypted_value
+            else:
+                encrypted_lines.append(line)
 
             if not return_value:
-                print(f'{var}={encrypted_value}')
-
-            encrypted_env[var] = encrypted_value
+                print(encrypted_lines[-1])
 
         if return_value:
             return encrypted_env
 
         if 'force' in params:
-            self._save_environment_file_encrypted(encrypted_env)
-            CLI.success(f'Saved to file {self.environment_file_encrypted}')
+            self._save_file(env_file_encrypted, encrypted_lines)
+            CLI.success(f'Saved to file {env_file_encrypted}')
         else:
             # save to file?
-            CLI.info(f'Save to file?')
+            CLI.warning(f'Save to file {env_file_encrypted}?')
 
             save_to_file = input("(Y)es or (N)o: ")
 
             if save_to_file.lower() == 'y':
-                self._save_environment_file_encrypted(encrypted_env)
-                CLI.success(f'Saved to file {self.environment_file_encrypted}')
+                self._save_file(env_file_encrypted, encrypted_lines)
+                CLI.success(f'Saved to file {env_file_encrypted}')
             else:
-                CLI.warning(f'Save it to {self.environment_file_encrypted} manually.')
+                CLI.warning(f'Save it to {env_file_encrypted} manually.')
 
-    def decrypt_env(self, params='', return_value=False):
+    def decrypt_env(self, env_file=None, params='', return_value=False):
+        if env_file is None:
+            CLI.info(f'Environment file not specified. Walking all environment files...')
+
+            values = {}
+
+            for env_file in self.environment_files:
+                value = self.decrypt_env(env_file, return_value=return_value)
+                if return_value:
+                    values.update(value)
+
+            return values if return_value else None
+
+        env_file_encrypted = f'{env_file}.encrypted'
+
         if not return_value:
-            CLI.info(f'Decrypting environment file {self.environment_file_encrypted}...')
+            CLI.info(f'Decrypting environment file {env_file_encrypted}...')
 
         if not self.KEY:
             CLI.error('Missing mantis key!')
 
-        encrypted_env = self.load_environment(self.environment_file_encrypted)
+        encrypted_lines = self.read_environment(env_file_encrypted)
 
-        if not encrypted_env:
+        if not encrypted_lines:
             return None
 
+        decrypted_lines = []
         decrypted_env = {}
-        force = 'force' in params
 
-        for var, value in encrypted_env.items():
-            decrypted_value = Crypto.decrypt(value, self.KEY, self.encrypt_deterministically)
+        for line in encrypted_lines:
+            if self.is_valid_line(line):
+                var, encrypted_value = self.parse_line(line)
+                decrypted_value = Crypto.decrypt(encrypted_value, self.KEY, self.encrypt_deterministically)
+                decrypted_lines.append(f'{var}={decrypted_value}')
+                decrypted_env[var] = decrypted_value
+            else:
+                decrypted_lines.append(line)
 
-            if not return_value and not force:
-                print(f'{var}={decrypted_value}')
-
-            decrypted_env[var] = decrypted_value
+            if not return_value:
+                print(decrypted_lines[-1])
 
         if return_value:
             return decrypted_env
 
-        if force:
-            self._save_environment_file(decrypted_env, encrypted_env)
-            CLI.success(f'Saved to file {self.environment_file}')
+        if 'force' in params:
+            self._save_file(env_file, decrypted_lines)
+            CLI.success(f'Saved to file {env_file}')
         else:
             # save to file?
-            CLI.info(f'Save to file?')
+            CLI.warning(f'Save to file {env_file}?')
 
             save_to_file = input("(Y)es or (N)o: ")
 
             if save_to_file.lower() == 'y':
-                self._save_environment_file(decrypted_env, encrypted_env)
-                CLI.success(f'Saved to file {self.environment_file}')
+                self._save_file(env_file, decrypted_lines)
+                CLI.success(f'Saved to file {env_file}')
             else:
-                CLI.warning(f'Save it to {self.environment_file} manually.')
+                CLI.warning(f'Save it to {env_file} manually.')
 
-    def _save_environment_file_encrypted(self, encrypted_env):
-        with open(self.environment_file_encrypted, "w") as f:
-            for index, (var, encrypted_value) in enumerate(encrypted_env.items()):
-                f.write(f'{var}={encrypted_value}')
-
-                if index < len(encrypted_env) - 1:
-                    f.write('\n')
-
-    def _save_environment_file(self, decrypted_env, encrypted_env):
-        with open(self.environment_file, "w") as f:
-            for index, (var, decrypted_value) in enumerate(decrypted_env.items()):
-                f.write(f'{var}={decrypted_value}')
-
-                if index < len(encrypted_env) - 1:
-                    f.write('\n')
+    def _save_file(self, path, lines):
+        with open(path, "w") as f:
+            for line in lines:
+                f.write(f'{line}\n')
 
     def check_env(self):
-        self.check_environment_encryption()
+        for env_file in self.environment_files:
+            self.check_environment_encryption(env_file)
 
-    def load_environment(self, path):
+    def read_environment(self, path=None):
+        # if not path:
+        #     # TODO
+        #     path = self.environment_path
+
         if not os.path.exists(path):
+            CLI.error(f'Environment file {path} does not exist')
             return None
 
-        with open(path) as fh:
-            return dict(
-                (line.split('=', maxsplit=1)[0], line.split('=', maxsplit=1)[1].rstrip("\n"))
-                for line in fh.readlines() if not line.startswith('#')
+        with open(path) as f:
+            return f.read().splitlines()
+
+    def load_environment(self, path=None):
+        lines = self.read_environment(path)
+
+        # TODO: refactor
+        return dict(
+            (
+                self.parse_line(line)[0],
+                self.parse_line(line)[1]
             )
+            for line in lines if self.is_valid_line(line)
+        )
+
+    def is_valid_line(self, line):
+        return not line.startswith('#') and line.rstrip("\n") != ''
+
+    def parse_line(self, line):
+        if not self.is_valid_line(line):
+            return None
+
+        key = line.split('=', maxsplit=1)[0]
+        value = line.split('=', maxsplit=1)[1]
+
+        return key, value
 
     def contexts(self):
         os.system('docker context ls')
@@ -544,10 +603,11 @@ class Mantis(object):
                     CLI.info(f'{self.config_file} does not exists. Skipping...')
 
             elif context == 'compose':
-                if os.path.exists(self.environment_file):
-                    os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.environment_file} {self.user}@{self.host}:{self.project_path}/configs/environments/')
-                else:
-                    CLI.info(f'{self.environment_file} does not exists. Skipping...')
+                for env_file in self.environment_files:
+                    if os.path.exists(env_file):
+                        os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {env_file} {self.user}@{self.host}:{self.project_path}/configs/environments/')  # TODO: paths
+                    else:
+                        CLI.info(f'{env_file} does not exists. Skipping...')
 
                 for config in self.compose_configs:
                     if os.path.exists(config):
@@ -829,7 +889,7 @@ class Mantis(object):
 
     def psql(self):
         CLI.info('Starting psql...')
-        env = self.load_environment(self.environment_file)
+        env = self.load_environment()
         self.docker(f'exec -it {self.CONTAINER_DB} psql -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
@@ -857,7 +917,7 @@ class Mantis(object):
         # filename = now.strftime("%Y%m%d%H%M%S")
         filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M{data_only_suffix}.{extension}")
         CLI.info(f'Backuping database into file {filename}')
-        env = self.load_environment(self.environment_file)
+        env = self.load_environment()
         self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_dump {compressed_params} {data_only_param} -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {table_params} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
@@ -874,7 +934,7 @@ class Mantis(object):
             table_params = ''
 
         CLI.underline("Don't forget to drop database at first to prevent constraints collisions!")
-        env = self.load_environment(self.environment_file)
+        env = self.load_environment()
         self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} {table_params} -W < /backups/{filename}\'')
         # print(f'exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} {table_params} -W < /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
