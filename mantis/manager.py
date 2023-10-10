@@ -55,7 +55,7 @@ class Mantis(object):
         if hasattr(self, property_name):
             return getattr(self, property_name)
 
-        if 'dev' in self.environment_id:
+        if 'local' in self.environment_id:
             details = {
                 'host': 'localhost',
                 'user': None,
@@ -89,7 +89,7 @@ class Mantis(object):
 
     @property
     def docker_connection(self):
-        if 'dev' in self.environment_id:
+        if 'local' in self.environment_id:
             return ''
 
         if self.mode == 'remote':
@@ -205,10 +205,10 @@ class Mantis(object):
                     else:
                         CLI.danger(decrypted_value, end=' ')
 
-                    print(f'[{self.environment_file_encrypted_name}]', end='\n')
+                    print(f'[{env_file}.encrypted]', end='\n')
 
         else:
-            CLI.success('Encrypted and decrypted environments DO match...')
+            CLI.success(f'Encrypted and decrypted environments DO match [{env_file}]...')
 
     def read_key(self):
         if not os.path.exists(self.key_file):
@@ -582,8 +582,8 @@ class Mantis(object):
         else:
             CLI.error(f'Unknown context "{context}". Available: services, compose, mantis or all')
 
-        if self.environment_id == 'dev':
-            print('Skipping for dev...')
+        if self.environment_id == 'local':
+            print('Skipping for local...')
         elif self.mode == 'host':
             CLI.warning('Not uploading due to host mode! Be sure your configs on host are up to date!')
         else:
