@@ -19,7 +19,8 @@ def parse_args():
     for arg in arguments:
         if not arg.startswith('-'):
             d['environment_id'] = arg
-        elif '=' in arg and ':' not in arg:
+        # elif '=' in arg and ':' not in arg:
+        elif '=' in arg:
             s, v = arg.split('=', maxsplit=1)
             d['settings'][s.strip('-')] = v
         else:

@@ -165,7 +165,7 @@ class Mantis(object):
         self.htpasswd = f'{self.configs_path}/{self.WEBSERVER}/secrets/.htpasswd'
 
     def check_environment_encryption(self, env_file):
-        decrypted_environment = self.decrypt_env(env_file, return_value=True)        # .env.encrypted
+        decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)        # .env.encrypted
         loaded_environment = self.load_environment(env_file)                         # .env
 
         if decrypted_environment is None:
@@ -226,14 +226,14 @@ class Mantis(object):
         CLI.pink(key)
         CLI.danger(f'Save it to {self.key_file} and keep safe !!!')
 
-    def encrypt_env(self, env_file=None, params='', return_value=False):
+    def encrypt_env(self, params='', env_file=None, return_value=False):
         if env_file is None:
             CLI.info(f'Environment file not specified. Walking all environment files...')
 
             values = {}
 
             for env_file in self.environment_files:
-                value = self.encrypt_env(env_file, return_value=return_value)
+                value = self.encrypt_env(params=params, env_file=env_file, return_value=return_value)
                 if return_value:
                     values.update(value)
 
@@ -262,7 +262,7 @@ class Mantis(object):
             else:
                 encrypted_lines.append(line)
 
-            if not return_value:
+            if not return_value and 'force' not in params:
                 print(encrypted_lines[-1])
 
         if return_value:
@@ -283,14 +283,14 @@ class Mantis(object):
             else:
                 CLI.warning(f'Save it to {env_file_encrypted} manually.')
 
-    def decrypt_env(self, env_file=None, params='', return_value=False):
+    def decrypt_env(self, params='', env_file=None, return_value=False):
         if env_file is None:
             CLI.info(f'Environment file not specified. Walking all environment files...')
 
             values = {}
 
             for env_file in self.environment_files:
-                value = self.decrypt_env(env_file, return_value=return_value)
+                value = self.decrypt_env(params=params, env_file=env_file, return_value=return_value)
                 if return_value:
                     values.update(value)
 
@@ -321,7 +321,7 @@ class Mantis(object):
             else:
                 decrypted_lines.append(line)
 
-            if not return_value:
+            if not return_value and 'force' not in params:
                 print(decrypted_lines[-1])
 
         if return_value:
