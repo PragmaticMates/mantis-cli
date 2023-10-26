@@ -20,10 +20,6 @@ class Mantis(object):
         self.KEY = self.read_key()
         self.encrypt_deterministically = self.config.get('encrypt_deterministically', False)
 
-        # TODO: when to check?
-        # if self.KEY:
-        #     self.check_env()
-
     @property
     def host(self):
         return self.connection_details['host']
@@ -118,7 +114,9 @@ class Mantis(object):
 
         for dirpath, directories, files in os.walk(self.environment_path):
             environment_filenames = list(filter(lambda f: f.endswith('.env'), files))
+            encrypted_environment_filenames = list(filter(lambda f: f.endswith('.env.encrypted'), files))
             self.environment_files = list(map(lambda x: path.join(dirpath, x), environment_filenames))
+            self.encrypted_environment_files = list(map(lambda x: path.join(dirpath, x), encrypted_environment_filenames))
 
         self.connection = self.config.get('connections', {}).get(self.environment_id, None)
 
@@ -289,7 +287,8 @@ class Mantis(object):
 
             values = {}
 
-            for env_file in self.environment_files:
+            for encrypted_env_file in self.encrypted_environment_files:
+                env_file = encrypted_env_file.rstrip('.encrypted')
                 value = self.decrypt_env(params=params, env_file=env_file, return_value=return_value)
                 if return_value:
                     values.update(value)
@@ -348,7 +347,20 @@ class Mantis(object):
                 f.write(f'{line}\n')
 
     def check_env(self):
+        # check if pair file exists
+        for encrypted_env_file in self.encrypted_environment_files:
+            env_file = encrypted_env_file.rstrip('.encrypted')
+            if not os.path.exists(env_file):
+                CLI.warning(f'Environment file {env_file} does not exist')
+
         for env_file in self.environment_files:
+            env_file_encrypted = f'{env_file}.encrypted'
+
+            # check if pair file exists
+            if not os.path.exists(env_file_encrypted):
+                CLI.warning(f'Environment file {env_file_encrypted} does not exist')
+
+            # check encryption values
             self.check_environment_encryption(env_file)
 
     def read_environment(self, path=None):
