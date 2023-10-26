@@ -103,7 +103,7 @@ class Crypto(object):
     def decrypt_deterministically(secret, key):
         import ast
         json_data = ast.literal_eval(b64decode(secret).decode())
-        cipher = AES.new(key.encode(), AES.MODE_SIV)
+        cipher = AES.new(key.strip().encode(), AES.MODE_SIV)
         data = cipher.decrypt_and_verify(json_data['ciphertext'], json_data['tag'])
         return data.decode()
 
