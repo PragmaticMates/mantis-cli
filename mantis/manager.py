@@ -425,6 +425,7 @@ class Mantis(object):
         build_args = ','.join(map('='.join, build_args.items()))
         build_kit = self.config['build']['kit']
         build_kit = 'DOCKER_BUILDKIT=1' if build_kit else ''
+        time = 'time ' if build_kit == '' else ''
 
         if build_args != '':
             build_args = build_args.split(',')
@@ -434,7 +435,7 @@ class Mantis(object):
         CLI.info(f'Kit = {build_kit}')
         CLI.info(f'Args = {build_args}')
 
-        os.system(f'time {build_kit} docker build . {build_args} -t {self.IMAGE_NAME} -f {self.configs_path}/docker/{self.DOCKER_FILE} {params}')
+        os.system(f'{time}{build_kit} docker build . {build_args} -t {self.IMAGE_NAME} -f {self.configs_path}/docker/{self.DOCKER_FILE} {params}')
 
     def push(self):
         CLI.info(f'Pushing...')
