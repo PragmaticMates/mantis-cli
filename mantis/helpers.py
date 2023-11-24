@@ -106,7 +106,8 @@ class Crypto(object):
             cipher = AES.new(key.strip().encode(), AES.MODE_SIV)
             data = cipher.decrypt_and_verify(json_data['ciphertext'], json_data['tag'])
             return data.decode()
-        except:
+        except Exception as e:
+            print(e)
             return 'DECRYPTION_ERROR'
 
     @staticmethod
