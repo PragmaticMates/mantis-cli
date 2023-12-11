@@ -830,7 +830,7 @@ class Mantis(object):
         steps = 1
 
         CLI.step(1, steps, 'Reloading proxy container...')
-        os.system(f'{self.docker_connection} docker-compose -f configs/{self.configs_compose_folder}/docker-compose.proxy.yml --project-name=reverse up -d')
+        os.system(f'{self.docker_connection} docker compose -f configs/{self.configs_compose_folder}/docker-compose.proxy.yml --project-name=reverse up -d')
 
     def status(self):
         if self.SWARM:  # todo remove containers as well ?
@@ -983,8 +983,8 @@ class Mantis(object):
         docker_compose_environment_file = f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml'
 
         if os.path.exists(docker_compose_file):
-            # docker-compose file inheritance (multiple docker-compose file deployment)
-            os.system(f'{self.docker_connection} docker-compose -f {docker_compose_file} -f {docker_compose_environment_file} {command}')
+            # compose file inheritance (multiple compose file deployment)
+            os.system(f'{self.docker_connection} docker compose -f {docker_compose_file} -f {docker_compose_environment_file} {command}')
         else:
             # single compose file usage
-            os.system(f'{self.docker_connection} docker-compose -f {docker_compose_environment_file} {command}')
+            os.system(f'{self.docker_connection} docker compose -f {docker_compose_environment_file} {command}')
