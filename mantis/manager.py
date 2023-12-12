@@ -126,15 +126,15 @@ class Mantis(object):
         if 'containers' in self.config:
             # self.CONTAINER_PREFIX = self.config['containers']['prefix']
             self.CONTAINER_PREFIX = self.PROJECT_NAME
+            self.IMAGE_PREFIX = self.PROJECT_NAME
 
             # TODO: refactor
             self.CONTAINER_SUFFIXES = {}
-            for service in ['db', 'cache', 'app', 'queue', 'webserver']:
-                self.CONTAINER_SUFFIXES[service] = self.config['containers'].get('suffixes', {}).get(service, f'_{service}')
+            for service in ['db', 'cache', 'backend', 'queue', 'webserver']:
+                self.CONTAINER_SUFFIXES[service] = self.config['containers'].get('suffixes', {}).get(service, f'-{service}')
 
             # TODO: refactor
-            # self.CONTAINER_APP = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['app']}"
-            self.CONTAINER_APP = f"{self.CONTAINER_PREFIX}_backend"
+            self.CONTAINER_BACKEND = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['backend']}"
             self.CONTAINER_CACHE = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['cache']}"
             self.CONTAINER_QUEUE = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['queue']}"
             self.CONTAINER_DB = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['db']}"
@@ -444,11 +444,11 @@ class Mantis(object):
 
     def get_container_name(self, service):
         suffix = self.config['containers'].get('suffixes', {}).get(service, f'_{service}')
-        return f'{self.CONTAINER_PREFIX}{suffix}'
+        return f'{self.CONTAINER_PREFIX}{suffix}'.replace('_', '-')
 
     def get_image_name(self, service):
         suffix = self.config['containers'].get('suffixes', {}).get(service, f'_{service}')
-        return f'{self.PROJECT_NAME}{suffix}'
+        return f'{self.IMAGE_PREFIX}{suffix}'.replace('-', '_')
 
     def healthcheck(self, retries=5, service=None, break_if_successful=False):
         if service:
@@ -649,9 +649,8 @@ class Mantis(object):
 
             # stop and remove all containers with project prefix
             containers = self.get_containers_starts_with(self.CONTAINER_PREFIX)
-            print(containers)
+
             for container in containers:
-                print(container)
                 self.docker(f'container stop {container}', return_output=True)
                 self.docker(f'container rm {container}')
 
@@ -687,7 +686,7 @@ class Mantis(object):
             container = self.get_container_name(service)
 
             # run new container
-            self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container}_new {service}')
+            self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container}-new {service}')
 
             # healthcheck
             # TODO: configurable retries number
@@ -696,19 +695,19 @@ class Mantis(object):
 
             print(self.get_containers())
 
-            self.healthcheck(retries=num_retries, service=f'{service}_new', break_if_successful=True)
+            self.healthcheck(retries=num_retries, service=f'{service}-new', break_if_successful=True)
 
             # rename old container
-            CLI.info(f'Renaming old container [{container}_old]...')
+            CLI.info(f'Renaming old container [{container}-old]...')
 
             if container in self.get_containers():
-                self.docker(f'container rename {container} {container}_old')
+                self.docker(f'container rename {container} {container}-old')
             else:
-                CLI.info(f'{container}_old was not running')
+                CLI.info(f'{container}-old was not running')
 
             # rename new container
             CLI.info(f'Renaming new container [{container}]...')
-            self.docker(f'container rename {container}_new {container}')
+            self.docker(f'container rename {container}-new {container}')
 
         step += 1
         CLI.step(step, steps, 'Reloading webserver...')
@@ -721,13 +720,13 @@ class Mantis(object):
             container = self.get_container_name(service)
 
             if container in self.get_containers():
-                CLI.info(f'Stopping old container [{container}_old]...')
-                self.docker(f'container stop {container}_old')
+                CLI.info(f'Stopping old container [{container}-old]...')
+                self.docker(f'container stop {container}-old')
 
-                CLI.info(f'Removing old container [{container}_old]...')
-                self.docker(f'container rm {container}_old')
+                CLI.info(f'Removing old container [{container}-old]...')
+                self.docker(f'container rm {container}-old')
             else:
-                CLI.info(f'{container}_old was not running')
+                CLI.info(f'{container}-old was not running')
 
         step += 1
         CLI.step(step, steps, f'Restart services: {restart_services}')
@@ -887,6 +886,7 @@ class Mantis(object):
             lines = '--tail 1000 -f' if params else '--tail 10'
             steps = len(containers)
 
+            print(containers)
             for index, container in enumerate(containers):
                 CLI.step(index + 1, steps, f'{container} logs')
                 self.docker(f'logs {container} {lines}')
@@ -959,6 +959,7 @@ class Mantis(object):
 
     def get_containers(self):
         containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)
+        print(containers)
         containers = containers.strip().split('\n')
         containers = list(filter(lambda x: x.startswith(self.CONTAINER_PREFIX), containers))
         return containers
