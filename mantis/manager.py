@@ -135,7 +135,6 @@ class Mantis(object):
 
             # TODO: refactor
             self.CONTAINER_BACKEND = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['backend']}"
-            self.CONTAINER_CACHE = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['cache']}"
             self.CONTAINER_QUEUE = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['queue']}"
             self.CONTAINER_DB = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['db']}"
             self.CONTAINER_CACHE = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['cache']}"
