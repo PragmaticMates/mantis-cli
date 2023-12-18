@@ -35,6 +35,55 @@ def nested_set(dic, keys, value):
     dic[keys[-1]] = value
 
 
+def import_string(path):
+    components = path.split('.')
+    mod = __import__('.'.join(components[0:-1]), globals(), locals(), [components[-1]])
+    return getattr(mod, components[-1])
+
+
+def get_extension_classes(extensions):
+    extension_classes = []
+
+    # extensions
+    for extension in extensions:
+        extension_class_name = extension if '.' in extension else f"mantis.extensions.{extension}"
+        extension_class = import_string(extension_class_name)
+        extension_classes.append(extension_class)
+
+    return extension_classes
+
+
+def get_manager(environment_id, mode):
+    # config file
+    config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
+    config = load_config(config_file)
+
+    # class name of the manager
+    manager_class_name = config.get('manager_class', 'mantis.managers.DefaultManager')
+
+    # get manager class
+    manager_class = import_string(manager_class_name)
+
+    # setup extensions
+    extensions = config.get('extensions', {})
+    extension_classes = get_extension_classes(extensions.keys())
+
+    CLI.info(f"Extensions: {', '.join(extensions.keys())}")
+
+    # create dynamic manager class
+    class MantisManager(*[manager_class] + extension_classes):
+        pass
+
+    manager = MantisManager(config=config, environment_id=environment_id, mode=mode)
+
+    # set extensions data
+    for extension, extension_params in extensions.items():
+        if 'service' in extension_params:
+            setattr(manager, f'{extension}_service'.lower(), extension_params['service'])
+
+    return manager
+
+
 def main():
     # check params
     params = parse_args()
@@ -54,16 +103,8 @@ def main():
 
     hostname = os.popen('hostname').read().rstrip("\n")
 
-    # config file
-    config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
-    config = load_config(config_file)
-    manager_class_name = config.get('manager_class', 'mantis.manager.Mantis')
-
-    # setup manager
-    components = manager_class_name.split('.')
-    mod = __import__('.'.join(components[0:-1]), globals(), locals(), [components[-1]])
-    manager_class = getattr(mod, components[-1])
-    manager = manager_class(config=config, environment_id=environment_id, mode=mode)
+    # get manager
+    manager = get_manager(environment_id, mode)
 
     # check config settings
     settings_config = params['settings'].get('config', None)
@@ -78,9 +119,9 @@ def main():
                 value=value
             )
 
-    environment_intro = f'attached to {Colors.BOLD}{manager.environment_id}{Colors.ENDC}: ' if manager.environment_id else ''
+    environment_intro = f'Environment ID = {Colors.BOLD}{manager.environment_id}{Colors.ENDC}, ' if manager.environment_id else ''
 
-    if manager.environment_id:
+    if manager.connection:
         if manager.host:
             host_intro = f'{Colors.RED}{manager.host}{Colors.ENDC}, '
         else:

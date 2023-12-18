@@ -10,7 +10,7 @@ from time import sleep
 from mantis.helpers import CLI, Colors, Crypto, load_config
 
 
-class Mantis(object):
+class DefaultManager(object):
     environment_id = None
 
     def __init__(self, config=None, environment_id=None, mode='remote'):
@@ -57,7 +57,7 @@ class Mantis(object):
                 'user': None,
                 'port': None
             }
-        else:
+        elif self.connection:
             if self.connection.startswith('ssh://'):
                 details = self.parse_ssh_connection(self.connection)
 
@@ -108,37 +108,35 @@ class Mantis(object):
         self.key_file = path.join(f'{dirname(self.config_file)}', 'mantis.key')
 
         # environment files
-        self.environment_folder = self.config.get('environment_folder', 'environments')
-        self.environment_path = path.join(self.configs_path, self.environment_folder, f'.{self.environment_id}')
         self.environment_file_prefix = self.config.get('environment_file_prefix', '')
 
-        for dirpath, directories, files in os.walk(self.environment_path):
-            environment_filenames = list(filter(lambda f: f.endswith('.env'), files))
-            encrypted_environment_filenames = list(filter(lambda f: f.endswith('.env.encrypted'), files))
-            self.environment_files = list(map(lambda x: path.join(dirpath, x), environment_filenames))
-            self.encrypted_environment_files = list(map(lambda x: path.join(dirpath, x), encrypted_environment_filenames))
+        if self.environment_id:
+            self.environment_folder = self.config.get('environment_folder', 'environments')
+            self.environment_path = path.join(self.configs_path, self.environment_folder, f'.{self.environment_id}')
 
+            if not os.path.exists(self.environment_path):
+                CLI.error(f"Environment path '{self.environment_path}' does not exist")
+
+            for dirpath, directories, files in os.walk(self.environment_path):
+                environment_filenames = list(filter(lambda f: f.endswith('.env'), files))
+                encrypted_environment_filenames = list(filter(lambda f: f.endswith('.env.encrypted'), files))
+                self.environment_files = list(map(lambda x: path.join(dirpath, x), environment_filenames))
+                self.encrypted_environment_files = list(map(lambda x: path.join(dirpath, x), encrypted_environment_filenames))
+
+        # connection
         self.connection = self.config.get('connections', {}).get(self.environment_id, None)
 
         # Get environment settings
         self.PROJECT_NAME = self.config['project_name']
 
+        # containers
+        # self.CONTAINER_PREFIX = self.config['containers']['prefix']
+        self.CONTAINER_PREFIX = self.PROJECT_NAME
+        self.IMAGE_PREFIX = self.PROJECT_NAME
+
         if 'containers' in self.config:
-            # self.CONTAINER_PREFIX = self.config['containers']['prefix']
-            self.CONTAINER_PREFIX = self.PROJECT_NAME
-            self.IMAGE_PREFIX = self.PROJECT_NAME
-
             # TODO: refactor
-            self.CONTAINER_SUFFIXES = {}
-            for service in ['db', 'cache', 'backend', 'queue', 'webserver']:
-                self.CONTAINER_SUFFIXES[service] = self.config['containers'].get('suffixes', {}).get(service, f'-{service}')
-
-            # TODO: refactor
-            self.CONTAINER_BACKEND = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['backend']}"
-            self.CONTAINER_QUEUE = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['queue']}"
-            self.CONTAINER_DB = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['db']}"
-            self.CONTAINER_CACHE = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['cache']}"
-            self.CONTAINER_WEBSERVER = f"{self.CONTAINER_PREFIX}{self.CONTAINER_SUFFIXES['webserver']}"
+            self.CONTAINER_WEBSERVER = f"{self.CONTAINER_PREFIX}{self.get_container_suffix('webserver')}"
 
             self.SWARM = self.config.get('swarm', False)
             self.SWARM_STACK = self.config.get(f'swarm_stack', self.CONTAINER_PREFIX)  # project name?
@@ -150,9 +148,11 @@ class Mantis(object):
                 f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml',
             ]
 
+        # TODO: refactor
         self.DATABASE = self.config.get('cache', 'postgres')
         self.CACHE = self.config.get('cache', 'redis')
         self.WEBSERVER = self.config.get('webserver', 'nginx')
+
         self.database_config = f'{self.configs_path}/{self.DATABASE}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.cache_config = f'{self.configs_path}/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
         self.webserver_html = f'{self.configs_path}/{self.WEBSERVER}/html/'
@@ -358,6 +358,7 @@ class Mantis(object):
             # check if pair file exists
             if not os.path.exists(env_file_encrypted):
                 CLI.warning(f'Environment file {env_file_encrypted} does not exist')
+                continue
 
             # check encryption values
             self.check_environment_encryption(env_file)
@@ -452,12 +453,20 @@ class Mantis(object):
         self.cmd(command)
         self.contexts()
 
+    def get_container_suffix(self, service):
+        delimiter = '-'
+        return self.config.get('containers', {}).get('suffixes', {}).get(service, f'{delimiter}{service}')
+    
     def get_container_name(self, service):
-        suffix = self.config['containers'].get('suffixes', {}).get(service, f'_{service}')
+        suffix = self.get_container_suffix(service)
         return f'{self.CONTAINER_PREFIX}{suffix}'.replace('_', '-')
 
+    def get_image_suffix(self, service):
+        delimiter = '_'
+        return self.config.get('containers', {}).get('suffixes', {}).get(service, f'{delimiter}{service}')
+
     def get_image_name(self, service):
-        suffix = self.config['containers'].get('suffixes', {}).get(service, f'_{service}')
+        suffix = self.get_image_suffix(service)
         return f'{self.IMAGE_PREFIX}{suffix}'.replace('-', '_')
 
     def healthcheck(self, retries=5, service=None, break_if_successful=False):
@@ -659,7 +668,7 @@ class Mantis(object):
             CLI.step(1, steps, 'Stopping and removing Docker containers...')
 
             # stop and remove all containers with project prefix
-            containers = self.get_containers_starts_with(self.CONTAINER_PREFIX)
+            containers = self.get_containers_starting_with(self.CONTAINER_PREFIX)
 
             for container in containers:
                 self.docker(f'container stop {container}', return_output=True)
@@ -721,6 +730,7 @@ class Mantis(object):
             self.docker(f'container rename {container}-new {container}')
 
         step += 1
+        # TODO: hook into this step from extension
         CLI.step(step, steps, 'Reloading webserver...')
         self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
@@ -835,6 +845,7 @@ class Mantis(object):
         CLI.info('Reloading webserver...')
         self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
+    # TODO: Extension
     def restart_proxy(self):
         CLI.info('Restarting proxy...')
         steps = 1
@@ -910,62 +921,10 @@ class Mantis(object):
         CLI.info('Logging to container...')
         self.docker(f'exec -it --user root {params} /bin/sh')
 
-    def psql(self):
-        CLI.info('Starting psql...')
-        env = self.load_environment()
-        self.docker(f'exec -it {self.CONTAINER_DB} psql -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W')
-        # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
-        # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
-
     def exec(self, params):
         container, command = params.split(' ', maxsplit=1)
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')
-
-    def pg_dump(self, data_only=False, table=None):
-        if data_only:
-            compressed = True
-            data_only_param = '--data-only'
-            data_only_suffix = f'_{table}' if table else '_data'
-        else:
-            compressed = True
-            data_only_param = ''
-            data_only_suffix = ''
-
-        extension = 'pg' if compressed else 'sql'
-        compressed_params = '-Fc' if compressed else ''
-        table_params = f'--table={table}' if table else ''
-
-        now = datetime.datetime.now()
-        # filename = now.strftime("%Y%m%d%H%M%S")
-        filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M{data_only_suffix}.{extension}")
-        CLI.info(f'Backuping database into file {filename}')
-        env = self.load_environment()
-        self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_dump {compressed_params} {data_only_param} -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {table_params} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
-        # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
-        # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
-
-    def pg_dump_data(self, table=None):
-        self.pg_dump(data_only=True, table=table)
-
-    def pg_restore(self, filename, table=None):
-        if table:
-            CLI.info(f'Restoring table {table} from file {filename}')
-            table_params = f'--table {table}'
-        else:
-            CLI.info(f'Restoring database from file {filename}')
-            table_params = ''
-
-        CLI.underline("Don't forget to drop database at first to prevent constraints collisions!")
-        env = self.load_environment()
-        self.docker(f'exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} {table_params} -W < /backups/{filename}\'')
-        # print(f'exec -it {self.CONTAINER_DB} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} {table_params} -W < /backups/{filename}\'')
-        # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
-        # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
-
-    def pg_restore_data(self, params):
-        filename, table = params.split(',')
-        self.pg_restore(filename=filename, table=table)
 
     def get_containers(self):
         containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)
@@ -980,7 +939,7 @@ class Mantis(object):
         services = list(filter(lambda x: x.startswith(self.CONTAINER_PREFIX), services))
         return services
 
-    def get_containers_starts_with(self, start_with):
+    def get_containers_starting_with(self, start_with):
         return [i for i in self.get_containers() if i.startswith(start_with)]
 
     def docker(self, command, return_output=False):
