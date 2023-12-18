@@ -398,8 +398,19 @@ class Mantis(object):
 
         return key, value
 
+    def cmd(self, command):
+        error_message = "Error during running command '%s'" % command
+
+        try:
+            if os.system(command) != 0:
+                CLI.error(error_message)
+                # raise Exception(error_message)
+        except:
+            CLI.error(error_message)
+            # raise Exception(error_message)
+    
     def contexts(self):
-        os.system('docker context ls')
+        self.cmd('docker context ls')
 
     def create_context(self):
         CLI.info('Creating docker context')
@@ -438,7 +449,7 @@ class Mantis(object):
             exit()
 
         # create context
-        os.system(command)
+        self.cmd(command)
         self.contexts()
 
     def get_container_name(self, service):
@@ -532,7 +543,8 @@ class Mantis(object):
         CLI.info(f'Kit = {build_kit}')
         CLI.info(f'Args = {build_args}')
 
-        os.system(f'{time}{build_kit} docker build . {build_args} --platform linux/amd64 -t {image} -f {dockerfile} {params}')
+        # TODO: platform as mantis config parameter
+        self.cmd(f'{time}{build_kit} docker build . {build_args} --platform linux/amd64 -t {image} -f {dockerfile} {params}')
 
     def push(self, params=''):
         CLI.info(f'Pushing...')
@@ -553,11 +565,11 @@ class Mantis(object):
         steps = 2
 
         CLI.step(1, steps, f'Tagging Docker image [{DOCKER_REPOSITORY_AND_TAG}]...')
-        os.system(f'docker tag {image} {DOCKER_REPOSITORY_AND_TAG}')
+        self.cmd(f'docker tag {image} {DOCKER_REPOSITORY_AND_TAG}')
         CLI.success(f'Successfully tagged {DOCKER_REPOSITORY_AND_TAG}')
 
         CLI.step(2, steps, f'Pushing Docker image [{DOCKER_REPOSITORY_AND_TAG}]...')
-        os.system(f'docker push {DOCKER_REPOSITORY_AND_TAG}')
+        self.cmd(f'docker push {DOCKER_REPOSITORY_AND_TAG}')
         CLI.success(f'Successfully pushed {DOCKER_REPOSITORY_AND_TAG}')
 
     def pull(self):
@@ -605,25 +617,25 @@ class Mantis(object):
             if context == 'services':
                 for local_path, remote_path in mapping['services'].items():
                     if os.path.exists(local_path):
-                        os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {local_path} {self.user}@{self.host}:{remote_path}')
+                        self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {local_path} {self.user}@{self.host}:{remote_path}')
                     else:
                         CLI.info(f'{local_path} does not exists. Skipping...')
             elif context == 'mantis':
                 if os.path.exists(self.config_file):
-                    os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:{self.project_path}/configs/')
+                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:{self.project_path}/configs/')
                 else:
                     CLI.info(f'{self.config_file} does not exists. Skipping...')
 
             elif context == 'compose':
                 for env_file in self.environment_files:
                     if os.path.exists(env_file):
-                        os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {env_file} {self.user}@{self.host}:{self.project_path}/configs/environments/')  # TODO: paths
+                        self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {env_file} {self.user}@{self.host}:{self.project_path}/configs/environments/')  # TODO: paths
                     else:
                         CLI.info(f'{env_file} does not exists. Skipping...')
 
                 for config in self.compose_configs:
                     if os.path.exists(config):
-                        os.system(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {config} {self.user}@{self.host}:{self.project_path}/configs/{self.configs_compose_folder}/')
+                        self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {config} {self.user}@{self.host}:{self.project_path}/configs/{self.configs_compose_folder}/')
                     else:
                         CLI.info(f'{config} does not exists. Skipping...')
 
@@ -636,10 +648,10 @@ class Mantis(object):
 
             for service in self.get_services():
                 if service == self.CONTAINER_APP:
-                    os.system(f'docker service rm {service}')
+                    self.cmd(f'docker service rm {service}')
 
             CLI.step(2, steps, 'Recreating Docker swarm stack...')
-            os.system(f'docker stack deploy -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
+            self.cmd(f'docker stack deploy -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
 
             CLI.step(3, steps, 'Prune Docker images and volumes')  # todo prune on every node
             self.docker(f'system prune --volumes --force')
@@ -750,7 +762,7 @@ class Mantis(object):
     def stop(self, params=None):
         if self.SWARM:  # todo can stop service ?
             CLI.info('Removing services...')
-            os.system(f'docker stack rm {self.PROJECT_NAME}')
+            self.cmd(f'docker stack rm {self.PROJECT_NAME}')
 
         else:
             CLI.info('Stopping containers...')
@@ -766,7 +778,7 @@ class Mantis(object):
     def start(self, params=''):
         if self.SWARM:
             CLI.info('Starting services...')
-            os.system(f'docker stack deploy -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
+            self.cmd(f'docker stack deploy -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
 
         else:
             CLI.info('Starting containers...')
@@ -796,7 +808,7 @@ class Mantis(object):
     def remove(self, params=''):
         if self.SWARM:  # todo remove containers as well ?
             CLI.info('Removing services...')
-            os.system(f'docker stack rm {self.PROJECT_NAME}')
+            self.cmd(f'docker stack rm {self.PROJECT_NAME}')
 
         else:
             CLI.info('Removing containers...')
@@ -828,12 +840,12 @@ class Mantis(object):
         steps = 1
 
         CLI.step(1, steps, 'Reloading proxy container...')
-        os.system(f'{self.docker_connection} docker compose -f configs/{self.configs_compose_folder}/docker-compose.proxy.yml --project-name=reverse up -d')
+        self.cmd(f'{self.docker_connection} docker compose -f configs/{self.configs_compose_folder}/docker-compose.proxy.yml --project-name=reverse up -d')
 
     def status(self):
         if self.SWARM:  # todo remove containers as well ?
             CLI.info('Getting status...')
-            os.system(f'docker stack services {self.PROJECT_NAME}')
+            self.cmd(f'docker stack services {self.PROJECT_NAME}')
 
         else:
             CLI.info('Getting status...')
@@ -876,7 +888,7 @@ class Mantis(object):
 
             for index, service in enumerate(services):
                 CLI.step(index + 1, steps, f'{service} logs')
-                os.system(f'docker service logs {service} {lines}')
+                self.cmd(f'docker service logs {service} {lines}')
 
         else:
             CLI.info('Reading logs...')
@@ -885,7 +897,6 @@ class Mantis(object):
             lines = '--tail 1000 -f' if params else '--tail 10'
             steps = len(containers)
 
-            print(containers)
             for index, container in enumerate(containers):
                 CLI.step(index + 1, steps, f'{container} logs')
                 self.docker(f'logs {container} {lines}')
@@ -976,7 +987,7 @@ class Mantis(object):
         if return_output:
             return os.popen(f'{self.docker_connection} docker {command}').read()
 
-        os.system(f'{self.docker_connection} docker {command}')
+        self.cmd(f'{self.docker_connection} docker {command}')
 
     def docker_compose(self, command):
         docker_compose_file = f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml'
@@ -984,7 +995,7 @@ class Mantis(object):
 
         if os.path.exists(docker_compose_file):
             # compose file inheritance (multiple compose file deployment)
-            os.system(f'{self.docker_connection} docker compose -f {docker_compose_file} -f {docker_compose_environment_file} {command}')
+            self.cmd(f'{self.docker_connection} docker compose -f {docker_compose_file} -f {docker_compose_environment_file} {command}')
         else:
             # single compose file usage
-            os.system(f'{self.docker_connection} docker compose -f {docker_compose_environment_file} {command}')
+            self.cmd(f'{self.docker_connection} docker compose -f {docker_compose_environment_file} {command}')
