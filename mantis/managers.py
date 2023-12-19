@@ -360,11 +360,7 @@ class DefaultManager(object):
             # check encryption values
             self.check_environment_encryption(env_file)
 
-    def read_environment(self, path=None):
-        # if not path:
-        #     # TODO
-        #     path = self.environment_path
-
+    def read_environment(self, path):
         if not os.path.exists(path):
             CLI.error(f'Environment file {path} does not exist')
             return None
@@ -373,6 +369,19 @@ class DefaultManager(object):
             return f.read().splitlines()
 
     def load_environment(self, path=None):
+        # if not path is specified, load variables from all environment files
+        if not path:
+            CLI.info(f'Environment file path not specified. Walking all environment files...')
+
+            values = {}
+
+            for env_file in self.environment_files:
+                env_values = self.load_environment(path=env_file)
+                values.update(env_values)
+
+            return values
+
+        # read environment file
         lines = self.read_environment(path)
 
         # TODO: refactor

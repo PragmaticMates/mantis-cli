@@ -178,7 +178,7 @@ def execute(manager, command, params=None):
     if manager_method is None or not hasattr(manager, manager_method):
         CLI.error(f'Invalid command "{command}"')
 
-        # TODO: more sofisticated way to print usage
+        # TODO: more sophisticated way to print usage/help
         # commands = '\n'.join(manager_methods.keys())
         # CLI.error(f'\n\nUsage: mantis <ENVIRONMENT> \n{commands}')
     else:
@@ -188,11 +188,6 @@ def execute(manager, command, params=None):
             CLI.error('Missing environment')
         elif manager.environment_id is not None and manager_method in methods_without_environment:
             CLI.error('Redundant environment')
-
-        # if manager_method in methods_with_params and params:
-        #     getattr(manager, manager_method)(*params)
-        # else:
-        #     getattr(manager, manager_method)()
 
         if params:
             getattr(manager, manager_method)(*params)
