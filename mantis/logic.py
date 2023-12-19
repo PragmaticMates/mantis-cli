@@ -158,63 +158,29 @@ def main():
 
 
 def execute(manager, command, params=None):
-    manager_methods = {
-        '--contexts': 'contexts',
-        '--create-context': 'create_context',
-        '--generate-key': 'generate_key',
-        '--encrypt-env': 'encrypt_env',
-        '--decrypt-env': 'decrypt_env',
-        '--check-env': 'check_env',
-        '--healthcheck': 'healthcheck',
+    shortcuts = {
         '-hc': 'healthcheck',
-        '--bash': 'bash',
-        '--build': 'build',
-        '--build-image': 'build_image',
         '-b': 'build',
-        '--push': 'push',
-        '--pull': 'pull',
         '-p': 'pull',
-        '--upload': 'upload',
-        '--upload-docker-configs': 'upload_docker_configs',
         '-u': 'upload',
-        '--reload': 'reload',
-        '--restart': 'restart',
-        '--run': 'run',
-        '--up': 'up',
-        '--deploy': 'deploy',
         '-d': 'deploy',
-        '--stop': 'stop',
-        '--start': 'start',
-        '--clean': 'clean',
         '-c': 'clean',
-        '--remove': 'remove',
-        '--reload-webserver': 'reload_webserver',
-        '--restart-proxy': 'restart_proxy',
-        '--status': 'status',
         '-s': 'status',
-        '--networks': 'networks',
         '-n': 'networks',
-        '--logs': 'logs',
         '-l': 'logs',
-        '--shell': 'shell',
-        '--sh': 'sh',
-        '--bash': 'bash',
-        '--manage': 'manage',
-        '--exec': 'exec',
-        '--psql': 'psql',
-        '--pg-dump': 'pg_dump',
-        '--pg-dump-data': 'pg_dump_data',
-        '--pg-restore': 'pg_restore',
-        '--pg-restore-data': 'pg_restore_data',
-        '--send-test-email': 'send_test_email',
     }
 
-    manager_method = manager_methods.get(command)
+    manager_method = shortcuts.get(command, None)
+
+    if manager_method is None:
+        manager_method = command.lstrip('-').replace('-', '_')
 
     if manager_method is None or not hasattr(manager, manager_method):
-        commands = '\n'.join(manager_methods.keys())
-        
-        CLI.error(f'Invalid command "{command}" \n\nUsage: mantis <ENVIRONMENT> \n{commands}')
+        CLI.error(f'Invalid command "{command}"')
+
+        # TODO: more sofisticated way to print usage
+        # commands = '\n'.join(manager_methods.keys())
+        # CLI.error(f'\n\nUsage: mantis <ENVIRONMENT> \n{commands}')
     else:
         methods_without_environment = ['contexts', 'create_context', 'generate_key', 'build', 'build_image', 'push']
         methods_with_params = ['healthcheck', 'sh', 'bash', 'build_image', 'exec', 'bash', 'manage', 'pg_restore', 'pg_restore_data', 'pg_dump_data',
@@ -225,7 +191,12 @@ def execute(manager, command, params=None):
         elif manager.environment_id is not None and manager_method in methods_without_environment:
             CLI.error('Redundant environment')
 
-        if manager_method in methods_with_params and params:
+        # if manager_method in methods_with_params and params:
+        #     getattr(manager, manager_method)(*params)
+        # else:
+        #     getattr(manager, manager_method)()
+
+        if params:
             getattr(manager, manager_method)(*params)
         else:
             getattr(manager, manager_method)()

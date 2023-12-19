@@ -143,8 +143,7 @@ class DefaultManager(object):
             self.compose_name = self.config['compose']['name']
             self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
             self.compose_configs = [
-                f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml',
-                f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.proxy.yml',
+                f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml', # TODO: deprecated
                 f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml',
             ]
 
@@ -394,12 +393,11 @@ class DefaultManager(object):
         if not self.is_valid_line(line):
             return None
 
-        key = line.split('=', maxsplit=1)[0]
-        value = line.split('=', maxsplit=1)[1]
-
-        return key, value
+        return line.split('=', maxsplit=1)
 
     def cmd(self, command):
+        command = command.strip()
+
         error_message = "Error during running command '%s'" % command
 
         try:
@@ -586,6 +584,9 @@ class DefaultManager(object):
         self.docker_compose('pull')
 
     def upload(self, context='services'):
+        if not self.connection:
+            return CLI.warning('Connection not defined. Skipping uploading files')
+
         steps = 1
 
         mapping = {
@@ -668,7 +669,10 @@ class DefaultManager(object):
             CLI.step(1, steps, 'Stopping and removing Docker containers...')
 
             # stop and remove all containers with project prefix
-            containers = self.get_containers_starting_with(self.CONTAINER_PREFIX)
+            # containers = self.get_containers_starting_with(self.CONTAINER_PREFIX)
+
+            # stop and remove all containers
+            containers = self.get_containers()
 
             for container in containers:
                 self.docker(f'container stop {container}', return_output=True)
@@ -808,12 +812,19 @@ class DefaultManager(object):
         CLI.step(1, steps, f'Running {params}...')
         self.docker_compose(f'--project-name={self.PROJECT_NAME} run {params}')
 
-    def up(self, params):
+    def up(self, params=''):
         CLI.info('Up...')
         steps = 1
 
-        CLI.step(1, steps, f'Upping {params}...')
-        self.docker_compose(f'--project-name={self.PROJECT_NAME} up {params}')
+        CLI.step(1, steps, f'Starting up {params}...')
+        self.docker_compose(f'--project-name={self.PROJECT_NAME} up {params} -d')
+
+    def down(self, params=''):
+        CLI.info('Down...')
+        steps = 1
+
+        CLI.step(1, steps, f'Running down {params}...')
+        self.docker_compose(f'--project-name={self.PROJECT_NAME} down {params}')
 
     def remove(self, params=''):
         if self.SWARM:  # todo remove containers as well ?
@@ -846,12 +857,12 @@ class DefaultManager(object):
         self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
 
     # TODO: Extension
-    def restart_proxy(self):
-        CLI.info('Restarting proxy...')
-        steps = 1
-
-        CLI.step(1, steps, 'Reloading proxy container...')
-        self.cmd(f'{self.docker_connection} docker compose -f configs/{self.configs_compose_folder}/docker-compose.proxy.yml --project-name=reverse up -d')
+    # def restart_proxy(self):
+    #     CLI.info('Restarting proxy...')
+    #     steps = 1
+    #
+    #     CLI.step(1, steps, 'Reloading proxy container...')
+    #     self.cmd(f'{self.docker_connection} docker compose -f configs/{self.configs_compose_folder}/docker-compose.proxy.yml --project-name=reverse up -d')
 
     def status(self):
         if self.SWARM:  # todo remove containers as well ?
