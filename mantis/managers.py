@@ -557,8 +557,7 @@ class DefaultManager(object):
         CLI.info(f'Kit = {build_kit}')
         CLI.info(f'Args = {build_args}')
 
-        # TODO: platform as mantis config parameter
-        self.cmd(f'{time}{build_kit} docker build . {build_args} --platform linux/amd64 -t {image} -f {dockerfile} {params}')
+        self.cmd(f'{time}{build_kit} docker build . {build_args} -t {image} -f {dockerfile} {params}')
 
     def push(self, params=''):
         CLI.info(f'Pushing...')
