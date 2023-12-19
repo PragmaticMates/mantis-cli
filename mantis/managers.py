@@ -138,8 +138,6 @@ class DefaultManager(object):
             # TODO: refactor
             self.CONTAINER_WEBSERVER = f"{self.CONTAINER_PREFIX}{self.get_container_suffix('webserver')}"
 
-            self.SWARM = self.config.get('swarm', False)
-            self.SWARM_STACK = self.config.get(f'swarm_stack', self.CONTAINER_PREFIX)  # project name?
             self.compose_name = self.config['compose']['name']
             self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
             self.compose_configs = [
@@ -653,41 +651,28 @@ class DefaultManager(object):
         CLI.info('Restarting...')
         steps = 3
 
-        if self.SWARM:
-            CLI.step(1, steps, 'Stopping and removing Docker app service...')
+        CLI.step(1, steps, 'Stopping and removing Docker containers...')
 
-            for service in self.get_services():
-                if service == self.CONTAINER_APP:
-                    self.cmd(f'docker service rm {service}')
+        # stop and remove all containers with project prefix
+        # containers = self.get_containers_starting_with(self.CONTAINER_PREFIX)
 
-            CLI.step(2, steps, 'Recreating Docker swarm stack...')
-            self.cmd(f'docker stack deploy -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
+        # stop and remove all containers
+        containers = self.get_containers()
 
-            CLI.step(3, steps, 'Prune Docker images and volumes')  # todo prune on every node
-            self.docker(f'system prune --volumes --force')
-        else:
-            CLI.step(1, steps, 'Stopping and removing Docker containers...')
+        for container in containers:
+            self.docker(f'container stop {container}', return_output=True)
+            self.docker(f'container rm {container}')
 
-            # stop and remove all containers with project prefix
-            # containers = self.get_containers_starting_with(self.CONTAINER_PREFIX)
+        # for service in self.config['containers']['deploy']['zero_downtime'] + self.config['containers']['deploy']['restart']:
+        #     container = self.get_container_name(service)
+        #     self.docker(f'container stop {container}', return_output=True)
+        #     self.docker(f'container rm {container}')
 
-            # stop and remove all containers
-            containers = self.get_containers()
+        CLI.step(2, steps, 'Recreating Docker containers...')
+        self.docker_compose(f'--project-name={self.PROJECT_NAME} up -d')
 
-            for container in containers:
-                self.docker(f'container stop {container}', return_output=True)
-                self.docker(f'container rm {container}')
-
-            # for service in self.config['containers']['deploy']['zero_downtime'] + self.config['containers']['deploy']['restart']:
-            #     container = self.get_container_name(service)
-            #     self.docker(f'container stop {container}', return_output=True)
-            #     self.docker(f'container rm {container}')
-
-            CLI.step(2, steps, 'Recreating Docker containers...')
-            self.docker_compose(f'--project-name={self.PROJECT_NAME} up -d')
-
-            CLI.step(3, steps, 'Prune Docker images and volumes')
-            self.docker(f'system prune --volumes --force')
+        CLI.step(3, steps, 'Prune Docker images and volumes')
+        self.docker(f'system prune --volumes --force')
 
     def deploy(self):
         CLI.info('Deploying...')
@@ -696,7 +681,7 @@ class DefaultManager(object):
         self.pull()
         self.reload()
 
-    def reload(self):  # todo deploy swarm
+    def reload(self):
         CLI.info('Reloading containers...')
         zero_downtime_services = self.config['containers']['deploy']['zero_downtime']
         restart_services = self.config['containers']['deploy']['restart']
@@ -774,36 +759,26 @@ class DefaultManager(object):
             self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
 
     def stop(self, params=None):
-        if self.SWARM:  # todo can stop service ?
-            CLI.info('Removing services...')
-            self.cmd(f'docker stack rm {self.PROJECT_NAME}')
+        CLI.info('Stopping containers...')
 
-        else:
-            CLI.info('Stopping containers...')
+        containers = self.get_containers() if not params else params.split(' ')
 
-            containers = self.get_containers() if not params else params.split(' ')
+        steps = len(containers)
 
-            steps = len(containers)
-
-            for index, container in enumerate(containers):
-                CLI.step(index + 1, steps, f'Stopping {container}')
-                self.docker(f'container stop {container}')
+        for index, container in enumerate(containers):
+            CLI.step(index + 1, steps, f'Stopping {container}')
+            self.docker(f'container stop {container}')
 
     def start(self, params=''):
-        if self.SWARM:
-            CLI.info('Starting services...')
-            self.cmd(f'docker stack deploy -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml -c configs/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml {self.PROJECT_NAME}')
+        CLI.info('Starting containers...')
 
-        else:
-            CLI.info('Starting containers...')
+        containers = self.get_containers() if not params else params.split(' ')
 
-            containers = self.get_containers() if not params else params.split(' ')
+        steps = len(containers)
 
-            steps = len(containers)
-
-            for index, container in enumerate(containers):
-                CLI.step(index + 1, steps, f'Starting {container}')
-                self.docker(f'container start {container}')
+        for index, container in enumerate(containers):
+            CLI.step(index + 1, steps, f'Starting {container}')
+            self.docker(f'container start {container}')
 
     def run(self, params):
         CLI.info('Run...')
@@ -827,20 +802,15 @@ class DefaultManager(object):
         self.docker_compose(f'--project-name={self.PROJECT_NAME} down {params}')
 
     def remove(self, params=''):
-        if self.SWARM:  # todo remove containers as well ?
-            CLI.info('Removing services...')
-            self.cmd(f'docker stack rm {self.PROJECT_NAME}')
+        CLI.info('Removing containers...')
 
-        else:
-            CLI.info('Removing containers...')
+        containers = self.get_containers() if params == '' else params.split(' ')
 
-            containers = self.get_containers() if params == '' else params.split(' ')
+        steps = len(containers)
 
-            steps = len(containers)
-
-            for index, container in enumerate(containers):
-                CLI.step(index + 1, steps, f'Removing {container}')
-                self.docker(f'container rm {container}')
+        for index, container in enumerate(containers):
+            CLI.step(index + 1, steps, f'Removing {container}')
+            self.docker(f'container rm {container}')
 
     def clean(self):  # todo clean on all nodes
         CLI.info('Cleaning...')
@@ -865,22 +835,16 @@ class DefaultManager(object):
     #     self.cmd(f'{self.docker_connection} docker compose -f configs/{self.configs_compose_folder}/docker-compose.proxy.yml --project-name=reverse up -d')
 
     def status(self):
-        if self.SWARM:  # todo remove containers as well ?
-            CLI.info('Getting status...')
-            self.cmd(f'docker stack services {self.PROJECT_NAME}')
+        CLI.info('Getting status...')
+        steps = 2
 
-        else:
-            CLI.info('Getting status...')
-            steps = 2
+        CLI.step(1, steps, 'List of Docker images')
+        self.docker(f'image ls')
 
-            CLI.step(1, steps, 'List of Docker images')
-            self.docker(f'image ls')
-
-            CLI.step(2, steps, 'Docker containers')
-            self.docker(f'container ls -a --size')
+        CLI.step(2, steps, 'Docker containers')
+        self.docker(f'container ls -a --size')
 
     def networks(self):
-        # todo for swarm
         CLI.info('Getting networks...')
         steps = 1
 
@@ -901,27 +865,15 @@ class DefaultManager(object):
                 print(f'{network}\t{containers}'.strip())
 
     def logs(self, params=None):
-        if self.SWARM:
-            CLI.info('Reading logs...')
+        CLI.info('Reading logs...')
 
-            services = params.split(' ') if params else self.get_services()
-            lines = '--tail 100 -f' if params else '--tail 10'
-            steps = len(services)
+        containers = params.split(' ') if params else self.get_containers()
+        lines = '--tail 1000 -f' if params else '--tail 10'
+        steps = len(containers)
 
-            for index, service in enumerate(services):
-                CLI.step(index + 1, steps, f'{service} logs')
-                self.cmd(f'docker service logs {service} {lines}')
-
-        else:
-            CLI.info('Reading logs...')
-
-            containers = params.split(' ') if params else self.get_containers()
-            lines = '--tail 1000 -f' if params else '--tail 10'
-            steps = len(containers)
-
-            for index, container in enumerate(containers):
-                CLI.step(index + 1, steps, f'{container} logs')
-                self.docker(f'logs {container} {lines}')
+        for index, container in enumerate(containers):
+            CLI.step(index + 1, steps, f'{container} logs')
+            self.docker(f'logs {container} {lines}')
 
     def bash(self, params):
         CLI.info('Running bash...')
@@ -943,12 +895,6 @@ class DefaultManager(object):
         containers = containers.strip().split('\n')
         containers = list(filter(lambda x: x.startswith(self.CONTAINER_PREFIX), containers))
         return containers
-
-    def get_services(self):
-        services = os.popen(f'docker stack services {self.SWARM_STACK} --format \'{{{{.Name}}}}\'').read()
-        services = services.strip().split('\n')
-        services = list(filter(lambda x: x.startswith(self.CONTAINER_PREFIX), services))
-        return services
 
     def get_containers_starting_with(self, start_with):
         return [i for i in self.get_containers() if i.startswith(start_with)]
