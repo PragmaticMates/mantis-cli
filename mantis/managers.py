@@ -654,23 +654,28 @@ class DefaultManager(object):
 
     def restart(self):
         CLI.info('Restarting...')
-        steps = 3
+        steps = 4
 
-        CLI.step(1, steps, 'Stopping and removing Docker containers...')
+        # run down project containers
+        CLI.step(1, steps, 'Running down project containers...')
         self.down()
 
-        # stop and remove all containers
-        # containers = self.get_containers()
-        #
-        # for container in containers:
-        #     self.docker(f'container stop {container}', return_output=True)
-        #     self.docker(f'container rm {container}')
+        # stop and remove all other containers
+        CLI.step(2, steps, 'Stopping and removing remaining containers...')
 
-        CLI.step(2, steps, 'Recreating Docker containers...')
+        containers = self.get_containers()
+
+        for container in containers:
+            self.docker(f'container stop {container}', return_output=True)
+            self.docker(f'container rm {container}')
+
+        # recreate project
+        CLI.step(3, steps, 'Recreating project containers...')
         self.up()
 
-        CLI.step(3, steps, 'Prune Docker images and volumes')
-        self.docker(f'system prune --volumes --force')
+        # clean
+        CLI.step(4, steps, 'Prune Docker images and volumes')
+        self.clean()
 
     def deploy(self):
         CLI.info('Deploying...')
@@ -801,7 +806,6 @@ class DefaultManager(object):
 
     def clean(self):  # todo clean on all nodes
         CLI.info('Cleaning...')
-        CLI.warning('Prune Docker images and volumes')
         # self.docker(f'builder prune')
         self.docker(f'system prune --volumes --force')
         # self.docker(f'container prune')
