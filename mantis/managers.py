@@ -163,7 +163,8 @@ class DefaultManager(object):
         loaded_environment = self.load_environment(env_file)                         # .env
 
         if decrypted_environment is None:
-            CLI.error(f'Decrypted environment {env_file} is empty!')
+            env_file_encrypted = f'{env_file}.encrypted'
+            CLI.error(f'Encrypted environment {env_file_encrypted} is empty!')
 
         if loaded_environment is None:
             CLI.error(f'Loaded environment {env_file} is empty!')
@@ -301,8 +302,11 @@ class DefaultManager(object):
 
         encrypted_lines = self.read_environment(env_file_encrypted)
 
-        if not encrypted_lines:
+        if encrypted_lines is None:
             return None
+
+        if not encrypted_lines:
+            return {}
 
         decrypted_lines = []
         decrypted_env = {}
