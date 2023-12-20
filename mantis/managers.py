@@ -532,7 +532,6 @@ class DefaultManager(object):
         image = service_build.get('image', self.get_image_name(service))
         dockerfile = f"{self.config['build'].get('context', '.')}{service_build['dockerfile']}"
         CLI.info(f'Building image {image} from {dockerfile}...')
-        steps = 1
 
         if not os.path.exists(dockerfile):
             CLI.error(f'Dockerfile {dockerfile} not found')
@@ -541,7 +540,7 @@ class DefaultManager(object):
         DOCKER_TAG = self.config['build']['tag']
         DOCKER_REPOSITORY_AND_TAG = f'{DOCKER_REPOSITORY}:{DOCKER_TAG}'
 
-        CLI.step(1, steps, f'Building Docker image [{DOCKER_REPOSITORY_AND_TAG}]...')
+        CLI.warning(f'Building Docker image [{DOCKER_REPOSITORY_AND_TAG}]...')
 
         build_args = self.config['build']['args']
         build_args = ','.join(map('='.join, build_args.items()))
@@ -593,8 +592,6 @@ class DefaultManager(object):
         if not self.connection:
             return CLI.warning('Connection not defined. Skipping uploading files')
 
-        steps = 1
-
         mapping = {
             'services': {
                 self.database_config: f'{self.project_path}/{self.configs_path}/{self.DATABASE}/',
@@ -614,11 +611,11 @@ class DefaultManager(object):
             self.upload('compose')
             self.upload('mantis')
         elif context == 'services':
-            CLI.step(1, steps, 'Uploading configs for context "services" [webserver, database, cache, htpasswd]')
+            CLI.warning('Uploading configs for context "services" [webserver, database, cache, htpasswd]')
         elif context == 'compose':
-            CLI.step(1, steps, 'Uploading configs for context "compose" [docker compose configs and environment]')
+            CLI.warning('Uploading configs for context "compose" [docker compose configs and environment]')
         elif context == 'mantis':
-            CLI.step(1, steps, 'Uploading configs for mantis [mantis.json]')
+            CLI.warning('Uploading configs for mantis [mantis.json]')
         else:
             CLI.error(f'Unknown context "{context}". Available: services, compose, mantis or all')
 
@@ -660,24 +657,17 @@ class DefaultManager(object):
         steps = 3
 
         CLI.step(1, steps, 'Stopping and removing Docker containers...')
-
-        # stop and remove all containers with project prefix
-        # containers = self.get_containers_starting_with(self.CONTAINER_PREFIX)
+        self.down()
 
         # stop and remove all containers
-        containers = self.get_containers()
-
-        for container in containers:
-            self.docker(f'container stop {container}', return_output=True)
-            self.docker(f'container rm {container}')
-
-        # for service in self.config['containers']['deploy']['zero_downtime'] + self.config['containers']['deploy']['restart']:
-        #     container = self.get_container_name(service)
+        # containers = self.get_containers()
+        #
+        # for container in containers:
         #     self.docker(f'container stop {container}', return_output=True)
         #     self.docker(f'container rm {container}')
 
         CLI.step(2, steps, 'Recreating Docker containers...')
-        self.docker_compose(f'--project-name={self.PROJECT_NAME} up -d')
+        self.up()
 
         CLI.step(3, steps, 'Prune Docker images and volumes')
         self.docker(f'system prune --volumes --force')
@@ -709,8 +699,6 @@ class DefaultManager(object):
             # TODO: configurable retries number
             num_retries = 30
             # num_retries = 20
-
-            print(self.get_containers())
 
             self.healthcheck(retries=num_retries, service=f'{service}-new', break_if_successful=True)
 
@@ -789,24 +777,15 @@ class DefaultManager(object):
             self.docker(f'container start {container}')
 
     def run(self, params):
-        CLI.info('Run...')
-        steps = 1
-
-        CLI.step(1, steps, f'Running {params}...')
+        CLI.info(f'Running {params}...')
         self.docker_compose(f'--project-name={self.PROJECT_NAME} run {params}')
 
     def up(self, params=''):
-        CLI.info('Up...')
-        steps = 1
-
-        CLI.step(1, steps, f'Starting up {params}...')
+        CLI.info(f'Starting up {params}...')
         self.docker_compose(f'--project-name={self.PROJECT_NAME} up {params} -d')
 
     def down(self, params=''):
-        CLI.info('Down...')
-        steps = 1
-
-        CLI.step(1, steps, f'Running down {params}...')
+        CLI.info(f'Running down {params}...')
         self.docker_compose(f'--project-name={self.PROJECT_NAME} down {params}')
 
     def remove(self, params=''):
@@ -822,9 +801,7 @@ class DefaultManager(object):
 
     def clean(self):  # todo clean on all nodes
         CLI.info('Cleaning...')
-        steps = 1
-
-        CLI.step(1, steps, 'Prune Docker images and volumes')
+        CLI.warning('Prune Docker images and volumes')
         # self.docker(f'builder prune')
         self.docker(f'system prune --volumes --force')
         # self.docker(f'container prune')
@@ -833,14 +810,6 @@ class DefaultManager(object):
     def reload_webserver(self):
         CLI.info('Reloading webserver...')
         self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
-
-    # TODO: Extension
-    # def restart_proxy(self):
-    #     CLI.info('Restarting proxy...')
-    #     steps = 1
-    #
-    #     CLI.step(1, steps, 'Reloading proxy container...')
-    #     self.cmd(f'{self.docker_connection} docker compose -f configs/{self.configs_compose_folder}/docker-compose.proxy.yml --project-name=reverse up -d')
 
     def status(self):
         CLI.info('Getting status...')
@@ -854,9 +823,7 @@ class DefaultManager(object):
 
     def networks(self):
         CLI.info('Getting networks...')
-        steps = 1
-
-        CLI.step(1, steps, 'List of Docker networks')
+        CLI.warning('List of Docker networks')
 
         networks = self.docker('network ls', return_output=True)
         networks = networks.strip().split('\n')
@@ -901,7 +868,7 @@ class DefaultManager(object):
         containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)
         print(containers)
         containers = containers.strip().split('\n')
-        containers = list(filter(lambda x: x.startswith(self.CONTAINER_PREFIX), containers))
+        # containers = list(filter(lambda x: x.startswith(self.CONTAINER_PREFIX), containers))
         return containers
 
     def get_containers_starting_with(self, start_with):
