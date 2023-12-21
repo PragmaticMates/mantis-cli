@@ -873,11 +873,9 @@ class DefaultManager(object):
         self.docker(f'exec -it {container} {command}')
 
     def get_containers(self):
-        containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)
+        containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True).strip('\n')
         print(containers)
-        containers = containers.strip().split('\n')
-        # containers = list(filter(lambda x: x.startswith(self.CONTAINER_PREFIX), containers))
-        return containers
+        return containers.strip().split('\n')
 
     def get_containers_starting_with(self, start_with):
         return [i for i in self.get_containers() if i.startswith(start_with)]
