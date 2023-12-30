@@ -32,12 +32,12 @@ class Environment(object):
         possible_folder_names = [f'.{id}', id]
         possible_folders = list(map(lambda x: os.path.join(self.folder, x), possible_folder_names))
 
-        print(possible_folders)
         for environment_path in possible_folders:
             if os.path.exists(environment_path):
                 if not os.path.isdir(environment_path):
                     CLI.error(f"Environment path '{environment_path}' is not directory")
 
+                CLI.info(f"Found environment path: '{environment_path}'")
                 return environment_path
 
         CLI.error(f"Environment path not found. Tried: {', '.join(possible_folders)}")

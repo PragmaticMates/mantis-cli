@@ -109,10 +109,8 @@ class DefaultManager(object):
         self.config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
         self.config = config or load_config(self.config_file)
 
-        configs_folder_path = self.config.get('configs_folder_path', '')
-        configs_folder_name = self.config.get('configs_folder_name', 'configs')
-        self.configs_path = f'{configs_folder_path}{configs_folder_name}'
-        self.configs_compose_folder = self.config.get('configs_compose_folder', 'compose')
+        self.configs_path = self.config.get('configs', {}).get('folder', 'configs/')
+        self.compose_path = self.config.get('compose', {}).get('folder', 'configs/compose')
         self.key_file = path.join(f'{dirname(self.config_file)}', 'mantis.key')
 
         # Get environment settings
@@ -121,8 +119,8 @@ class DefaultManager(object):
     def init_environment(self):
         self.env = Environment(
             environment_id=self.environment_id,
-            folder=self.config.get('environment_folder', 'environments'),
-            file_prefix=self.config.get('environment_file_prefix', '')
+            folder=self.config.get('environment', {}).get('folder', 'environments'),
+            file_prefix=self.config.get('environment', {}).get('file_prefix', '')
         )
 
         # connection
@@ -139,7 +137,7 @@ class DefaultManager(object):
 
             self.compose_name = self.config['compose']['name']
             self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
-            self.compose_config = f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.env.id}.yml',
+            self.compose_config = f'{self.compose_path}/{self.COMPOSE_PREFIX}.{self.env.id}.yml'
 
         # TODO: refactor
         self.DATABASE = self.config.get('db', 'postgres')
@@ -451,7 +449,7 @@ class DefaultManager(object):
                 result = status_code
             else:
                 # command = 'curl -s -o /dev/null -w "%%{http_code}" -L -H "Host: %s" %s' % (self.host, url)
-                command = "pgrep -x gunicorn -d ' '"
+                command = "pgrep -x gunicorn -d ' '"  # TODO: proper healthcheck
                 pids = self.docker(f'container exec -it {container} {command}', return_output=True)
                 pids = pids.strip()
                 pids = [] if pids == '' else pids.split(' ')
@@ -546,8 +544,9 @@ class DefaultManager(object):
             return CLI.warning('Connection not defined. Skipping uploading files')
 
         mapping = {
+            # TODO: paths
             'services': {
-                self.database_config: f'{self.project_path}/{self.configs_path}/{self.DATABASE}/',
+                self.database_config: f'{self.project_path}/configs/{self.DATABASE}/',
                 self.cache_config: f'{self.project_path}/configs/{self.CACHE}/',
                 self.webserver_html: f'{self.project_path}/configs/{self.WEBSERVER}/html/',
                 self.webserver_config_default: f'{self.project_path}/configs/{self.WEBSERVER}/',
@@ -588,7 +587,7 @@ class DefaultManager(object):
                         CLI.info(f'{local_path} does not exists. Skipping...')
             elif context == 'mantis':
                 if os.path.exists(self.config_file):
-                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:{self.project_path}/configs/')
+                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:{self.project_path}/configs/')  # TODO: paths
                 else:
                     CLI.info(f'{self.config_file} does not exists. Skipping...')
 
@@ -600,7 +599,7 @@ class DefaultManager(object):
                         CLI.info(f'{env_file} does not exists. Skipping...')
 
                 if os.path.exists(self.compose_config):
-                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.compose_config} {self.user}@{self.host}:{self.project_path}/configs/{self.configs_compose_folder}/')
+                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.compose_config} {self.user}@{self.host}:{self.project_path}/configs/docker/')  # TODO: paths
                 else:
                     CLI.info(f'{self.compose_config} does not exists. Skipping...')
 
