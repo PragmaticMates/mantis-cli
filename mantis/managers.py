@@ -7,7 +7,9 @@ from os import path
 from os.path import dirname, normpath
 from time import sleep
 
-from mantis.helpers import CLI, Colors, Crypto, load_config
+from mantis.crypto import Crypto
+from mantis.environment import Environment
+from mantis.helpers import CLI, Colors, load_config
 
 
 class DefaultManager(object):
@@ -16,7 +18,13 @@ class DefaultManager(object):
     def __init__(self, config=None, environment_id=None, mode='remote'):
         self.environment_id = environment_id
         self.mode = mode
+
+        # init config
         self.init_config(config)
+
+        # init environment
+        self.init_environment()
+
         self.KEY = self.read_key()
         self.encrypt_deterministically = self.config.get('encrypt_deterministically', False)
 
@@ -51,7 +59,7 @@ class DefaultManager(object):
         if hasattr(self, property_name):
             return getattr(self, property_name)
 
-        if 'local' in self.environment_id:
+        if 'local' in self.env.id:
             details = {
                 'host': 'localhost',
                 'user': None,
@@ -85,7 +93,7 @@ class DefaultManager(object):
 
     @property
     def docker_connection(self):
-        if 'local' in self.environment_id:
+        if 'local' in self.env.id:
             return ''
 
         if self.mode == 'remote':
@@ -107,27 +115,18 @@ class DefaultManager(object):
         self.configs_compose_folder = self.config.get('configs_compose_folder', 'compose')
         self.key_file = path.join(f'{dirname(self.config_file)}', 'mantis.key')
 
-        # environment files
-        self.environment_file_prefix = self.config.get('environment_file_prefix', '')
-
-        if self.environment_id:
-            self.environment_folder = self.config.get('environment_folder', 'environments')
-            self.environment_path = path.join(self.configs_path, self.environment_folder, f'.{self.environment_id}')
-
-            if not os.path.exists(self.environment_path):
-                CLI.error(f"Environment path '{self.environment_path}' does not exist")
-
-            for dirpath, directories, files in os.walk(self.environment_path):
-                environment_filenames = list(filter(lambda f: f.endswith('.env'), files))
-                encrypted_environment_filenames = list(filter(lambda f: f.endswith('.env.encrypted'), files))
-                self.environment_files = list(map(lambda x: path.join(dirpath, x), environment_filenames))
-                self.encrypted_environment_files = list(map(lambda x: path.join(dirpath, x), encrypted_environment_filenames))
-
-        # connection
-        self.connection = self.config.get('connections', {}).get(self.environment_id, None)
-
         # Get environment settings
         self.PROJECT_NAME = self.config['project_name']
+
+    def init_environment(self):
+        self.env = Environment(
+            environment_id=self.environment_id,
+            folder=self.config.get('environment_folder', 'environments'),
+            file_prefix=self.config.get('environment_file_prefix', '')
+        )
+
+        # connection
+        self.connection = self.config.get('connections', {}).get(self.env.id, None)
 
         # containers
         # self.CONTAINER_PREFIX = self.config['containers']['prefix']
@@ -140,27 +139,24 @@ class DefaultManager(object):
 
             self.compose_name = self.config['compose']['name']
             self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
-            self.compose_configs = [
-                f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml', # TODO: deprecated
-                f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml',
-            ]
+            self.compose_config = f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.env.id}.yml',
 
         # TODO: refactor
-        self.DATABASE = self.config.get('cache', 'postgres')
+        self.DATABASE = self.config.get('db', 'postgres')
         self.CACHE = self.config.get('cache', 'redis')
         self.WEBSERVER = self.config.get('webserver', 'nginx')
 
-        self.database_config = f'{self.configs_path}/{self.DATABASE}/{self.environment_file_prefix}{self.environment_id}.conf'
-        self.cache_config = f'{self.configs_path}/{self.CACHE}/{self.environment_file_prefix}{self.environment_id}.conf'
+        self.database_config = f'{self.configs_path}/{self.DATABASE}/{self.env.file_prefix}{self.env.id}.conf'
+        self.cache_config = f'{self.configs_path}/{self.CACHE}/{self.env.file_prefix}{self.env.id}.conf'
         self.webserver_html = f'{self.configs_path}/{self.WEBSERVER}/html/'
         self.webserver_config_proxy = f'{self.configs_path}/{self.WEBSERVER}/proxy_directives.conf'
         self.webserver_config_default = f'{self.configs_path}/{self.WEBSERVER}/default.conf'
-        self.webserver_config_site = f'{self.configs_path}/{self.WEBSERVER}/sites/{self.environment_file_prefix}{self.environment_id}.conf'
+        self.webserver_config_site = f'{self.configs_path}/{self.WEBSERVER}/sites/{self.env.file_prefix}{self.env.id}.conf'
         self.htpasswd = f'{self.configs_path}/{self.WEBSERVER}/secrets/.htpasswd'
 
     def check_environment_encryption(self, env_file):
         decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)        # .env.encrypted
-        loaded_environment = self.load_environment(env_file)                         # .env
+        loaded_environment = self.env.load(env_file)                                          # .env
 
         if decrypted_environment is None:
             env_file_encrypted = f'{env_file}.encrypted'
@@ -227,7 +223,7 @@ class DefaultManager(object):
 
             values = {}
 
-            for env_file in self.environment_files:
+            for env_file in self.env.files:
                 value = self.encrypt_env(params=params, env_file=env_file, return_value=return_value)
                 if return_value:
                     values.update(value)
@@ -240,7 +236,7 @@ class DefaultManager(object):
         if not self.KEY:
             CLI.error('Missing mantis key! (%s)' % self.key_file)
 
-        decrypted_lines = self.read_environment(env_file)
+        decrypted_lines = self.env.read(env_file)
 
         if not decrypted_lines:
             return None
@@ -249,8 +245,8 @@ class DefaultManager(object):
         encrypted_env = {}
 
         for line in decrypted_lines:
-            if self.is_valid_line(line):
-                var, decrypted_value = self.parse_line(line)
+            if Environment.is_valid_line(line):
+                var, decrypted_value = Environment.parse_line(line)
                 encrypted_value = Crypto.encrypt(decrypted_value, self.KEY, self.encrypt_deterministically)
                 encrypted_lines.append(f'{var}={encrypted_value}')
                 encrypted_env[var] = encrypted_value
@@ -264,7 +260,7 @@ class DefaultManager(object):
             return encrypted_env
 
         if 'force' in params:
-            self._save_file(env_file_encrypted, encrypted_lines)
+            Environment.save(env_file_encrypted, encrypted_lines)
             CLI.success(f'Saved to file {env_file_encrypted}')
         else:
             # save to file?
@@ -273,7 +269,7 @@ class DefaultManager(object):
             save_to_file = input("(Y)es or (N)o: ")
 
             if save_to_file.lower() == 'y':
-                self._save_file(env_file_encrypted, encrypted_lines)
+                Environment.save(env_file_encrypted, encrypted_lines)
                 CLI.success(f'Saved to file {env_file_encrypted}')
             else:
                 CLI.warning(f'Save it to {env_file_encrypted} manually.')
@@ -284,7 +280,7 @@ class DefaultManager(object):
 
             values = {}
 
-            for encrypted_env_file in self.encrypted_environment_files:
+            for encrypted_env_file in self.env.encrypted_files:
                 env_file = encrypted_env_file.rstrip('.encrypted')
                 value = self.decrypt_env(params=params, env_file=env_file, return_value=return_value)
                 if return_value:
@@ -300,7 +296,7 @@ class DefaultManager(object):
         if not self.KEY:
             CLI.error('Missing mantis key!')
 
-        encrypted_lines = self.read_environment(env_file_encrypted)
+        encrypted_lines = self.env.read(env_file_encrypted)
 
         if encrypted_lines is None:
             return None
@@ -312,8 +308,8 @@ class DefaultManager(object):
         decrypted_env = {}
 
         for line in encrypted_lines:
-            if self.is_valid_line(line):
-                var, encrypted_value = self.parse_line(line)
+            if Environment.is_valid_line(line):
+                var, encrypted_value = Environment.parse_line(line)
                 decrypted_value = Crypto.decrypt(encrypted_value, self.KEY, self.encrypt_deterministically)
                 decrypted_lines.append(f'{var}={decrypted_value}')
                 decrypted_env[var] = decrypted_value
@@ -327,7 +323,7 @@ class DefaultManager(object):
             return decrypted_env
 
         if 'force' in params:
-            self._save_file(env_file, decrypted_lines)
+            Environment.save(env_file, decrypted_lines)
             CLI.success(f'Saved to file {env_file}')
         else:
             # save to file?
@@ -336,24 +332,19 @@ class DefaultManager(object):
             save_to_file = input("(Y)es or (N)o: ")
 
             if save_to_file.lower() == 'y':
-                self._save_file(env_file, decrypted_lines)
+                Environment.save(env_file, decrypted_lines)
                 CLI.success(f'Saved to file {env_file}')
             else:
                 CLI.warning(f'Save it to {env_file} manually.')
 
-    def _save_file(self, path, lines):
-        with open(path, "w") as f:
-            for line in lines:
-                f.write(f'{line}\n')
-
     def check_env(self):
         # check if pair file exists
-        for encrypted_env_file in self.encrypted_environment_files:
+        for encrypted_env_file in self.env.encrypted_files:
             env_file = encrypted_env_file.rstrip('.encrypted')
             if not os.path.exists(env_file):
                 CLI.warning(f'Environment file {env_file} does not exist')
 
-        for env_file in self.environment_files:
+        for env_file in self.env.files:
             env_file_encrypted = f'{env_file}.encrypted'
 
             # check if pair file exists
@@ -363,48 +354,6 @@ class DefaultManager(object):
 
             # check encryption values
             self.check_environment_encryption(env_file)
-
-    def read_environment(self, path):
-        if not os.path.exists(path):
-            CLI.error(f'Environment file {path} does not exist')
-            return None
-
-        with open(path) as f:
-            return f.read().splitlines()
-
-    def load_environment(self, path=None):
-        # if not path is specified, load variables from all environment files
-        if not path:
-            CLI.info(f'Environment file path not specified. Walking all environment files...')
-
-            values = {}
-
-            for env_file in self.environment_files:
-                env_values = self.load_environment(path=env_file)
-                values.update(env_values)
-
-            return values
-
-        # read environment file
-        lines = self.read_environment(path)
-
-        # TODO: refactor
-        return dict(
-            (
-                self.parse_line(line)[0],
-                self.parse_line(line)[1]
-            )
-            for line in lines if self.is_valid_line(line)
-        )
-
-    def is_valid_line(self, line):
-        return not line.startswith('#') and line.rstrip("\n") != ''
-
-    def parse_line(self, line):
-        if not self.is_valid_line(line):
-            return None
-
-        return line.split('=', maxsplit=1)
 
     def cmd(self, command):
         command = command.strip()
@@ -418,7 +367,7 @@ class DefaultManager(object):
         except:
             CLI.error(error_message)
             # raise Exception(error_message)
-    
+
     def contexts(self):
         self.cmd('docker context ls')
 
@@ -465,7 +414,7 @@ class DefaultManager(object):
     def get_container_suffix(self, service):
         delimiter = '-'
         return self.config.get('containers', {}).get('suffixes', {}).get(service, f'{delimiter}{service}')
-    
+
     def get_container_name(self, service):
         suffix = self.get_container_suffix(service)
         return f'{self.CONTAINER_PREFIX}{suffix}'.replace('_', '-')
@@ -623,7 +572,7 @@ class DefaultManager(object):
         else:
             CLI.error(f'Unknown context "{context}". Available: services, compose, mantis or all')
 
-        if self.environment_id == 'local':
+        if self.env.id == 'local':
             print('Skipping for local...')
         elif self.mode == 'host':
             CLI.warning('Not uploading due to host mode! Be sure your configs on host are up to date!')
@@ -644,17 +593,16 @@ class DefaultManager(object):
                     CLI.info(f'{self.config_file} does not exists. Skipping...')
 
             elif context == 'compose':
-                for env_file in self.environment_files:
+                for env_file in self.env.files:
                     if os.path.exists(env_file):
                         self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {env_file} {self.user}@{self.host}:{self.project_path}/configs/environments/')  # TODO: paths
                     else:
                         CLI.info(f'{env_file} does not exists. Skipping...')
 
-                for config in self.compose_configs:
-                    if os.path.exists(config):
-                        self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {config} {self.user}@{self.host}:{self.project_path}/configs/{self.configs_compose_folder}/')
-                    else:
-                        CLI.info(f'{config} does not exists. Skipping...')
+                if os.path.exists(self.compose_config):
+                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.compose_config} {self.user}@{self.host}:{self.project_path}/configs/{self.configs_compose_folder}/')
+                else:
+                    CLI.info(f'{self.compose_config} does not exists. Skipping...')
 
     def restart(self):
         CLI.info('Restarting...')
@@ -702,7 +650,7 @@ class DefaultManager(object):
             container = self.get_container_name(service)
 
             # run new container
-            self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container}-new {service}')
+            self.docker_compose(f'run -d --service-ports --name={container}-new {service}')
 
             # healthcheck
             # TODO: configurable retries number
@@ -761,7 +709,7 @@ class DefaultManager(object):
                 CLI.info(f'{container} was not running')
 
             CLI.info(f'Creating new container [{container}]...')
-            self.docker_compose(f'--project-name={self.PROJECT_NAME} run -d --service-ports --name={container} {service}')
+            self.docker_compose(f'run -d --service-ports --name={container} {service}')
 
     def stop(self, params=None):
         CLI.info('Stopping containers...')
@@ -787,15 +735,15 @@ class DefaultManager(object):
 
     def run(self, params):
         CLI.info(f'Running {params}...')
-        self.docker_compose(f'--project-name={self.PROJECT_NAME} run {params}')
+        self.docker_compose(f'run {params}')
 
     def up(self, params=''):
         CLI.info(f'Starting up {params}...')
-        self.docker_compose(f'--project-name={self.PROJECT_NAME} up {params} -d')
+        self.docker_compose(f'up {params} -d')
 
     def down(self, params=''):
         CLI.info(f'Running down {params}...')
-        self.docker_compose(f'--project-name={self.PROJECT_NAME} down {params}')
+        self.docker_compose(f'down {params}')
 
     def remove(self, params=''):
         CLI.info('Removing containers...')
@@ -861,7 +809,7 @@ class DefaultManager(object):
     def bash(self, params):
         CLI.info('Running bash...')
         self.docker(f'exec -it --user root {params} /bin/bash')
-        # self.docker_compose(f'--project-name={self.PROJECT_NAME} run --entrypoint /bin/bash {container}')
+        # self.docker_compose(f'run --entrypoint /bin/bash {container}')
 
     def sh(self, params):
         CLI.info('Logging to container...')
@@ -875,6 +823,10 @@ class DefaultManager(object):
     def get_containers(self):
         containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)\
             .strip('\n').strip().split('\n')
+
+        # Remove empty strings
+        containers = list(filter(None, containers))
+
         print(containers)
         return containers
 
@@ -888,12 +840,4 @@ class DefaultManager(object):
         self.cmd(f'{self.docker_connection} docker {command}')
 
     def docker_compose(self, command):
-        docker_compose_file = f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.yml'
-        docker_compose_environment_file = f'{self.configs_path}/{self.configs_compose_folder}/{self.COMPOSE_PREFIX}.{self.environment_id}.yml'
-
-        if os.path.exists(docker_compose_file):
-            # compose file inheritance (multiple compose file deployment)
-            self.cmd(f'{self.docker_connection} docker compose -f {docker_compose_file} -f {docker_compose_environment_file} {command}')
-        else:
-            # single compose file usage
-            self.cmd(f'{self.docker_connection} docker compose -f {docker_compose_environment_file} {command}')
+        self.cmd(f'{self.docker_connection} docker compose -f {self.compose_config} --project-name={self.PROJECT_NAME} {command}')
