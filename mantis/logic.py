@@ -188,7 +188,7 @@ def execute(manager, command, params=None):
         # commands = '\n'.join(manager_methods.keys())
         # CLI.error(f'\n\nUsage: mantis <ENVIRONMENT> \n{commands}')
     else:
-        methods_without_environment = ['contexts', 'create_context', 'generate_key', 'build', 'build_image', 'push']
+        methods_without_environment = ['contexts', 'create_context', 'generate_key']
 
         if manager.environment_id is None and manager_method not in methods_without_environment:
             CLI.error('Missing environment')

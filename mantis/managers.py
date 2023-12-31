@@ -135,9 +135,8 @@ class DefaultManager(object):
             # TODO: refactor
             self.CONTAINER_WEBSERVER = f"{self.CONTAINER_PREFIX}{self.get_container_suffix('webserver')}"
 
-            self.compose_name = self.config['compose']['name']
-            self.COMPOSE_PREFIX = 'docker-compose' if self.compose_name == '' else f'docker-compose.{self.compose_name}'
-            self.compose_config = f'{self.compose_path}/{self.COMPOSE_PREFIX}.{self.env.id}.yml'
+            compose_prefix = f"docker-compose.{self.config['compose']['name']}".rstrip('.')
+            self.compose_file = os.path.join(self.compose_path, f'{compose_prefix}.{self.env.id}.yml')
 
         # TODO: refactor
         self.DATABASE = self.config.get('db', 'postgres')
@@ -359,6 +358,7 @@ class DefaultManager(object):
         error_message = "Error during running command '%s'" % command
 
         try:
+            print(command)
             if os.system(command) != 0:
                 CLI.error(error_message)
                 # raise Exception(error_message)
@@ -475,46 +475,25 @@ class DefaultManager(object):
         CLI.info(f'Building...')
         CLI.info(f'Params = {params}')
 
-        for service, image in self.config['services'].items():
-            self.build_image(service, params)
-
-    def build_image(self, service, params=''):
-        service_build = self.config['services'][service]
-        image = service_build.get('image', self.get_image_name(service))
-        dockerfile = f"{self.config['build'].get('context', '.')}{service_build['dockerfile']}"
-        CLI.info(f'Building image {image} from {dockerfile}...')
-
-        if not os.path.exists(dockerfile):
-            CLI.error(f'Dockerfile {dockerfile} not found')
-
-        DOCKER_REPOSITORY = service_build['repository']
-        DOCKER_TAG = self.config['build']['tag']
-        DOCKER_REPOSITORY_AND_TAG = f'{DOCKER_REPOSITORY}:{DOCKER_TAG}'
-
-        CLI.warning(f'Building Docker image [{DOCKER_REPOSITORY_AND_TAG}]...')
-
         build_args = self.config['build']['args']
         build_args = ','.join(map('='.join, build_args.items()))
-        build_kit = self.config['build']['kit']
-        build_kit = 'DOCKER_BUILDKIT=1' if build_kit else ''
-        time = 'time ' if build_kit == '' else ''
 
         if build_args != '':
             build_args = build_args.split(',')
             build_args = [f'--build-arg {arg}' for arg in build_args]
             build_args = ' '.join(build_args)
 
-        CLI.info(f'Kit = {build_kit}')
         CLI.info(f'Args = {build_args}')
 
-        self.cmd(f'{time}{build_kit} docker build . {build_args} -t {image} -f {dockerfile} {params}')
+        # Using docker compose
+        self.docker_compose(f'build {build_args} {params}')
 
     def push(self, params=''):
         CLI.info(f'Pushing...')
         CLI.info(f'Params = {params}')
 
-        for service, image in self.config['services'].items():
-            self.push_image(service, params)
+        # Build using docker compose
+        self.docker_compose(f'push {params}')
 
     def push_image(self, service, params):
         service_build = self.config['services'][service]
@@ -598,10 +577,10 @@ class DefaultManager(object):
                     else:
                         CLI.info(f'{env_file} does not exists. Skipping...')
 
-                if os.path.exists(self.compose_config):
-                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.compose_config} {self.user}@{self.host}:{self.project_path}/configs/docker/')  # TODO: paths
+                if os.path.exists(self.compose_file):
+                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.compose_file} {self.user}@{self.host}:{self.project_path}/configs/docker/')  # TODO: paths
                 else:
-                    CLI.info(f'{self.compose_config} does not exists. Skipping...')
+                    CLI.info(f'{self.compose_file} does not exists. Skipping...')
 
     def restart(self):
         CLI.info('Restarting...')
@@ -839,4 +818,4 @@ class DefaultManager(object):
         self.cmd(f'{self.docker_connection} docker {command}')
 
     def docker_compose(self, command):
-        self.cmd(f'{self.docker_connection} docker compose -f {self.compose_config} --project-name={self.PROJECT_NAME} {command}')
+        self.cmd(f'{self.docker_connection} docker compose -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}'.strip())
