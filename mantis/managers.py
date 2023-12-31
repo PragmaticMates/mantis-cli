@@ -475,6 +475,7 @@ class DefaultManager(object):
         CLI.info(f'Building...')
         CLI.info(f'Params = {params}')
 
+        # Construct build args from config
         build_args = self.config['build']['args']
         build_args = ','.join(map('='.join, build_args.items()))
 
@@ -485,38 +486,22 @@ class DefaultManager(object):
 
         CLI.info(f'Args = {build_args}')
 
-        # Using docker compose
-        self.docker_compose(f'build {build_args} {params}')
+        # Build using docker compose
+        self.docker_compose(f'build {build_args} {params} --pull')
 
     def push(self, params=''):
         CLI.info(f'Pushing...')
         CLI.info(f'Params = {params}')
 
-        # Build using docker compose
+        # Push using docker compose
         self.docker_compose(f'push {params}')
 
-    def push_image(self, service, params):
-        service_build = self.config['services'][service]
-        image = service_build.get('image', self.get_image_name(service))
-        CLI.info(f'Pushing image {image}...')
+    def pull(self, params=''):
+        CLI.info('Pulling...')
+        CLI.info(f'Params = {params}')
 
-        DOCKER_REPOSITORY = service_build['repository']
-        DOCKER_TAG = self.config['build']['tag']
-        DOCKER_REPOSITORY_AND_TAG = f'{DOCKER_REPOSITORY}:{DOCKER_TAG}'
-
-        steps = 2
-
-        CLI.step(1, steps, f'Tagging Docker image [{DOCKER_REPOSITORY_AND_TAG}]...')
-        self.cmd(f'docker tag {image} {DOCKER_REPOSITORY_AND_TAG}')
-        CLI.success(f'Successfully tagged {DOCKER_REPOSITORY_AND_TAG}')
-
-        CLI.step(2, steps, f'Pushing Docker image [{DOCKER_REPOSITORY_AND_TAG}]...')
-        self.cmd(f'docker push {DOCKER_REPOSITORY_AND_TAG}')
-        CLI.success(f'Successfully pushed {DOCKER_REPOSITORY_AND_TAG}')
-
-    def pull(self):
-        CLI.info('Pulling docker image...')
-        self.docker_compose('pull')
+        # Pull using docker compose
+        self.docker_compose(f'pull {params}')
 
     def upload(self, context='services'):
         if not self.connection:
