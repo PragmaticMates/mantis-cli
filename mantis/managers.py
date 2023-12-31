@@ -476,7 +476,7 @@ class DefaultManager(object):
         CLI.info(f'Params = {params}')
 
         # Construct build args from config
-        build_args = self.config['build']['args']
+        build_args = self.config.get('build', {}).get('args', {})
         build_args = ','.join(map('='.join, build_args.items()))
 
         if build_args != '':
@@ -487,14 +487,14 @@ class DefaultManager(object):
         CLI.info(f'Args = {build_args}')
 
         # Build using docker compose
-        self.docker_compose(f'build {build_args} {params} --pull')
+        self.docker_compose(f'build {build_args} {params} --pull', use_connection=False)
 
     def push(self, params=''):
         CLI.info(f'Pushing...')
         CLI.info(f'Params = {params}')
 
         # Push using docker compose
-        self.docker_compose(f'push {params}')
+        self.docker_compose(f'push {params}', use_connection=False)
 
     def pull(self, params=''):
         CLI.info('Pulling...')
@@ -802,5 +802,6 @@ class DefaultManager(object):
 
         self.cmd(f'{self.docker_connection} docker {command}')
 
-    def docker_compose(self, command):
-        self.cmd(f'{self.docker_connection} docker compose -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}'.strip())
+    def docker_compose(self, command, use_connection=True):
+        docker_connection = self.docker_connection if use_connection else ''
+        self.cmd(f'{docker_connection} docker compose -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}')
