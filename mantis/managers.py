@@ -2,6 +2,7 @@ import json
 import os
 import datetime
 import requests
+import time
 from distutils.util import strtobool
 from os import path
 from os.path import dirname, normpath
@@ -450,12 +451,16 @@ class DefaultManager(object):
 
         retries = 100  # TODO: configurable?
         interval = 0.25  # in seconds
+        start = time.time()
 
         for retry in range(retries):
             is_healthy, status = self.check_health(container)
 
             if is_healthy:
                 print(f"#{retry}/{retries}: Status of '{container}' is {Colors.GREEN}{status}{Colors.ENDC}.")
+                end = time.time()
+                loading_time = end - start
+                CLI.info(f'It took {Colors.UNDERLINE}{loading_time} s{Colors.ENDC} to start container {container}')
                 return True
             else:
                 print(f"#{retry}/{retries}: Status of '{container}' is {Colors.RED}{status}{Colors.ENDC}.")
@@ -615,6 +620,9 @@ class DefaultManager(object):
 
         container_prefix = self.get_container_name(service)
         old_container = self.get_containers(prefix=container_prefix)[0]
+
+        if not self.has_healthcheck(old_container):
+            CLI.error(f"Container '{old_container}' doesn't have healthcheck")
 
         # run new container
         self.up(f'--no-deps --no-recreate --scale {service}=2')
