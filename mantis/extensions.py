@@ -80,3 +80,15 @@ class Postgres():
     def pg_restore_data(self, params):
         filename, table = params.split(',')
         self.pg_restore(filename=filename, table=table)
+
+
+class Nginx():
+    nginx_service = 'nginx'
+
+    @property
+    def nginx_container(self):
+        return f"{self.CONTAINER_PREFIX}{self.get_container_suffix(self.nginx_service)}"
+
+    def reload_webserver(self):
+        CLI.info('Reloading nginx...')
+        self.docker(f'exec -i {self.nginx_container} nginx -s reload')

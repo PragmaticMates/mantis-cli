@@ -425,9 +425,8 @@ class DefaultManager(object):
         suffix = self.get_image_suffix(service)
         return f'{self.IMAGE_PREFIX}{suffix}'.replace('-', '_')
 
-    def healthcheck(self, retries=5, service=None, break_if_successful=False):
-        if service:
-            container = self.get_container_name(service)
+    def healthcheck(self, retries=5, container=None, break_if_successful=False):
+        if container:
             target = container
             method = 'gunicorn'  # TODO: method per service
             success_responses = [200]
@@ -442,7 +441,7 @@ class DefaultManager(object):
         status_code = None
 
         for retry in range(retries):
-            if service is None:
+            if container is None:
                 response = requests.get(target)
                 status_code = response.status_code
                 success = status_code in success_responses
@@ -579,17 +578,21 @@ class DefaultManager(object):
         self.down()
 
         # stop and remove all other containers
-        # CLI.step(2, steps, 'Stopping and removing remaining containers...')
-        #
-        # containers = self.get_containers()
-        #
-        # for container in containers:
-        #     self.docker(f'container stop {container}', return_output=True)
-        #     self.docker(f'container rm {container}')
+        CLI.step(2, steps, 'Stopping and removing remaining containers...')
+
+        containers = self.get_containers()
+
+        for container in containers:
+            self.docker(f'container stop {container}', return_output=True)
+            self.docker(f'container rm {container}')
 
         # recreate project
         CLI.step(2, steps, 'Recreating project containers...')
         self.up()
+
+        # remove suffixes and reload webserver
+        self.remove_suffixes()
+        self.reload_webserver()
 
         # clean
         CLI.step(3, steps, 'Prune Docker images and volumes')
@@ -600,47 +603,68 @@ class DefaultManager(object):
         self.clean()
         self.upload()
         self.pull()
-        self.reload()
+
+        if len(self.get_containers()) == 0:
+            self.up()
+            self.remove_suffixes()
+            self.reload_webserver()
+        else:
+            self.reload()
 
     def zero_downtime(self, service=None):
-        container = self.get_container_name(service)
+        if not service:
+            zero_downtime_services = self.config['containers']['deploy']['zero_downtime']
+            for service in zero_downtime_services:
+                self.zero_downtime(service)
+            return
+
+        container_prefix = self.get_container_name(service)
+        print(container_prefix)
+        old_container = self.get_containers(prefix=container_prefix)[0]
 
         # run new container
-        self.docker_compose(f'run -d --service-ports --name={container}-new {service}')
+        self.up(f'--no-deps --no-recreate --scale {service}=2')
 
         # healthcheck
         # TODO: configurable retries number
         num_retries = 30
-        # num_retries = 20
 
-        self.healthcheck(retries=num_retries, service=f'{service}-new', break_if_successful=True)
+        new_containers = self.get_containers(prefix=container_prefix, exclude=[old_container])
 
-        # rename old container
-        CLI.info(f'Renaming old container [{container}-old]...')
+        if len(new_containers) != 1:
+            CLI.error(f'Expecting single new container. Returned value: {new_containers}')
 
-        if container in self.get_containers():
-            self.docker(f'container rename {container} {container}-old')
+        new_container = new_containers[0]
+        self.healthcheck(retries=num_retries, container=new_container, break_if_successful=True)
+
+        # reload_webserver
+        self.reload_webserver()
+
+        # Stop and remove old container
+        CLI.info(f'Stopping old container of service {service}: {old_container}')
+
+        if old_container in self.get_containers():
+            CLI.info(f'Stopping old container [{old_container}]...')
+            self.docker(f'container stop {old_container}')
+
+            CLI.info(f'Removing old container [{old_container}]...')
+            self.docker(f'container rm {old_container}')
         else:
-            CLI.info(f'{container}-old was not running')
+            CLI.info(f'{container} was not running')
 
         # rename new container
-        CLI.info(f'Renaming new container [{container}]...')
-        self.docker(f'container rename {container}-new {container}')
+        CLI.info(f'Renaming new container [{new_container}]...')
+        self.docker(f'container rename {new_container} {container_prefix}')
 
-        # TODO: hook into this step from extension
-        CLI.info('Reloading webserver...')
-        self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
+        # reload webserver
+        self.reload_webserver()
 
-        # Stop old container
-        CLI.info(f'Stopping old container of service {service}: {container}-old')
-        if container in self.get_containers():
-            CLI.info(f'Stopping old container [{container}-old]...')
-            self.docker(f'container stop {container}-old')
-
-            CLI.info(f'Removing old container [{container}-old]...')
-            self.docker(f'container rm {container}-old')
-        else:
-            CLI.info(f'{container}-old was not running')
+    def remove_suffixes(self):
+        for container in self.get_containers():
+            if container.split('-')[-1].isdigit():
+                CLI.info(f'Removing suffix of container {container}')
+                new_container = container.rsplit('-', maxsplit=1)[0]
+                self.docker(f'container rename {container} {new_container}')
 
     def restart_service(self, service):
         container = self.get_container_name(service)
@@ -657,23 +681,21 @@ class DefaultManager(object):
             CLI.info(f'{container} was not running')
 
         CLI.info(f'Creating new container [{container}]...')
-        # self.docker_compose(f'run -d --service-ports --name={container} {service}')
         self.up(f'--no-deps --no-recreate {service}')
-        # docker-compose up -d --no-deps --scale $service_name=2 --no-recreate $service_name
 
     def reload(self):
         CLI.info('Reloading containers...')
         zero_downtime_services = self.config['containers']['deploy']['zero_downtime']
         restart_services = self.config['containers']['deploy']['restart']
 
-        steps = 4
+        steps = 2
 
         CLI.step(1, steps, f'Zero downtime services: {zero_downtime_services}')
 
         for service in zero_downtime_services:
             self.zero_downtime(service)
 
-        CLI.step(4, steps, f'Restart services: {restart_services}')
+        CLI.step(2, steps, f'Restart services: {restart_services}')
 
         for service in restart_services:
             self.restart_service(service)
@@ -730,10 +752,6 @@ class DefaultManager(object):
         # self.docker(f'container prune')
         # self.docker(f'container prune --force')
 
-    def reload_webserver(self):
-        CLI.info('Reloading webserver...')
-        self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
-
     def status(self):
         CLI.info('Getting status...')
         steps = 2
@@ -787,18 +805,24 @@ class DefaultManager(object):
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')
 
-    def get_containers(self):
+    def get_containers(self, prefix='', exclude=[]):
         containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)\
             .strip('\n').strip().split('\n')
 
         # Remove empty strings
         containers = list(filter(None, containers))
 
-        print(containers)
+        # find containers starting with custom prefix
+        containers = list(filter(lambda s: s.startswith(prefix), containers))
+
+        # exclude not matching containers
+        containers = list(filter(lambda s: s not in exclude, containers))
+
+        # print(containers)
         return containers
 
-    def get_containers_starting_with(self, start_with):
-        return [i for i in self.get_containers() if i.startswith(start_with)]
+    def print_containers(self):
+        print(self.get_containers())
 
     def docker(self, command, return_output=False):
         if return_output:
