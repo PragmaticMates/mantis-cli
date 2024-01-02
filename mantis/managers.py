@@ -557,7 +557,7 @@ class DefaultManager(object):
             elif context == 'compose':
                 for env_file in self.env.files:
                     if os.path.exists(env_file):
-                        self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {env_file} {self.user}@{self.host}:{self.project_path}/configs/environments/{self.env.id}')  # TODO: paths
+                        self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {env_file} {self.user}@{self.host}:{self.project_path}/configs/environments/.{self.env.id}')  # TODO: paths
                     else:
                         CLI.info(f'{env_file} does not exists. Skipping...')
 
