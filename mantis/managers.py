@@ -821,9 +821,6 @@ class DefaultManager(object):
         # print(containers)
         return containers
 
-    def print_containers(self):
-        print(self.get_containers())
-
     def docker(self, command, return_output=False):
         if return_output:
             return os.popen(f'{self.docker_connection} docker {command}').read()

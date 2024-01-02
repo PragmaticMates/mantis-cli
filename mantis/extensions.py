@@ -91,4 +91,4 @@ class Nginx():
 
     def reload_webserver(self):
         CLI.info('Reloading nginx...')
-        self.docker(f'exec -i {self.nginx_container} nginx -s reload')
+        self.docker(f'exec {self.nginx_container} nginx -s reload')

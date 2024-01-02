@@ -158,12 +158,12 @@ def main():
                 command, params = command.split(':')
                 params = params.split(',')
             else:
-                params = None
+                params = []
 
             execute(manager, command, params)
 
 
-def execute(manager, command, params=None):
+def execute(manager, command, params):
     shortcuts = {
         '-hc': 'healthcheck',
         '-b': 'build',
@@ -195,7 +195,8 @@ def execute(manager, command, params=None):
         elif manager.environment_id is not None and manager_method in methods_without_environment:
             CLI.error('Redundant environment')
 
-        if params:
-            getattr(manager, manager_method)(*params)
-        else:
-            getattr(manager, manager_method)()
+        # Execute manager method
+        returned_value = getattr(manager, manager_method)(*params)
+
+        if returned_value:
+            print(returned_value)
