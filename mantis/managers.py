@@ -425,71 +425,45 @@ class DefaultManager(object):
         suffix = self.get_image_suffix(service)
         return f'{self.IMAGE_PREFIX}{suffix}'.replace('-', '_')
 
-    def has_healthcheck(self, service):
-        container = self.get_container_name(service)
+    def has_healthcheck(self, container):
         command = f'inspect --format="{{{{json .State.Health}}}}" {container} | grep "Status"'
+        return self.docker(command, return_output=True)
 
-        if self.docker(command, return_output=True):
-            CLI.info(f"Service '{service}' has healthcheck")
-            return True
-        else:
-            CLI.error(f"Service '{service}' doesn't have healthcheck")
-
-    def check_health(self, service):
-        if self.has_healthcheck(service):
-            container = self.get_container_name(service)
+    def check_health(self, container):
+        if self.has_healthcheck(container):
             command = f'inspect --format="{{{{json .State.Health.Status}}}}" {container}'
             status = self.docker(command, return_output=True).strip(' \n"')
 
             if status == 'healthy':
-                CLI.success(f"Service '{service}' is healthy")
+                return True, status
             else:
-                CLI.warning(f"Service '{service}' is not healthy yet... Status is {status}.")
+                return False, status
 
-    def healthcheck(self, retries=5, container=None, break_if_successful=False):
-        if container:
-            target = container
-            method = 'gunicorn'  # TODO: method per service
-            success_responses = [200]
-        else:
-            target = f'http://{self.host}'
-            method = 'curl'
-            success_responses = [200, 401]
+    def healthcheck(self, container=None):
+        if container not in self.get_containers():
+            CLI.error(f"Container {container} not found")
 
-        CLI.info(f'Health-checking {Colors.YELLOW}{target}{Colors.ENDC} ({method})...')
-        retries = int(retries)
-        last_status = False
-        status_code = None
+        CLI.info(f'Health-checking {Colors.YELLOW}{container}{Colors.ENDC}...')
+
+        if not self.has_healthcheck(container):
+            CLI.error(f"Container '{container}' doesn't have healthcheck")
+
+        retries = 100  # TODO: configurable?
+        interval = 0.25  # in seconds
 
         for retry in range(retries):
-            if container is None:
-                response = requests.get(target)
-                status_code = response.status_code
-                success = status_code in success_responses
-                result = status_code
-            else:
-                # command = 'curl -s -o /dev/null -w "%%{http_code}" -L -H "Host: %s" %s' % (self.host, url)
-                command = "pgrep -x gunicorn -d ' '"  # TODO: proper healthcheck
-                pids = self.docker(f'container exec -it {container} {command}', return_output=True)
-                pids = pids.strip()
-                pids = [] if pids == '' else pids.split(' ')
-                success = len(pids) > 0
-                result = ', '.join(pids)
+            is_healthy, status = self.check_health(container)
 
-            if success:
-                print(f'#{retry}: {Colors.GREEN}Success{Colors.ENDC}. Result: {result}')
-                last_status = True
-
-                if break_if_successful:
-                    return last_status
+            if is_healthy:
+                print(f"#{retry}/{retries}: Status of '{container}' is {Colors.GREEN}{status}{Colors.ENDC}.")
+                return True
             else:
-                print(f'#{retry}: {Colors.RED}Fail{Colors.ENDC}. Result: {result}')
-                last_status = False
+                print(f"#{retry}/{retries}: Status of '{container}' is {Colors.RED}{status}{Colors.ENDC}.")
 
             if retries > 1:
-                sleep(1)
+                sleep(interval)
 
-        return last_status
+        return False
 
     def build(self, params=''):
         CLI.info(f'Building...')
@@ -640,23 +614,19 @@ class DefaultManager(object):
             return
 
         container_prefix = self.get_container_name(service)
-        print(container_prefix)
         old_container = self.get_containers(prefix=container_prefix)[0]
 
         # run new container
         self.up(f'--no-deps --no-recreate --scale {service}=2')
 
         # healthcheck
-        # TODO: configurable retries number
-        num_retries = 30
-
         new_containers = self.get_containers(prefix=container_prefix, exclude=[old_container])
 
         if len(new_containers) != 1:
             CLI.error(f'Expecting single new container. Returned value: {new_containers}')
 
         new_container = new_containers[0]
-        self.healthcheck(retries=num_retries, container=new_container, break_if_successful=True)
+        self.healthcheck(container=new_container)
 
         # reload_webserver
         self.reload_webserver()
