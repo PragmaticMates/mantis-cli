@@ -425,6 +425,27 @@ class DefaultManager(object):
         suffix = self.get_image_suffix(service)
         return f'{self.IMAGE_PREFIX}{suffix}'.replace('-', '_')
 
+    def has_healthcheck(self, service):
+        container = self.get_container_name(service)
+        command = f'inspect --format="{{{{json .State.Health}}}}" {container} | grep "Status"'
+
+        if self.docker(command, return_output=True):
+            CLI.info(f"Service '{service}' has healthcheck")
+            return True
+        else:
+            CLI.error(f"Service '{service}' doesn't have healthcheck")
+
+    def check_health(self, service):
+        if self.has_healthcheck(service):
+            container = self.get_container_name(service)
+            command = f'inspect --format="{{{{json .State.Health.Status}}}}" {container}'
+            status = self.docker(command, return_output=True).strip(' \n"')
+
+            if status == 'healthy':
+                CLI.success(f"Service '{service}' is healthy")
+            else:
+                CLI.warning(f"Service '{service}' is not healthy yet... Status is {status}.")
+
     def healthcheck(self, retries=5, container=None, break_if_successful=False):
         if container:
             target = container
