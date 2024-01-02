@@ -567,29 +567,32 @@ class DefaultManager(object):
                 else:
                     CLI.info(f'{self.compose_file} does not exists. Skipping...')
 
-    def restart(self):
+    def restart(self, service=None):
+        if service:
+            return self.restart_service(service)
+
         CLI.info('Restarting...')
-        steps = 4
+        steps = 3
 
         # run down project containers
         CLI.step(1, steps, 'Running down project containers...')
         self.down()
 
         # stop and remove all other containers
-        CLI.step(2, steps, 'Stopping and removing remaining containers...')
-
-        containers = self.get_containers()
-
-        for container in containers:
-            self.docker(f'container stop {container}', return_output=True)
-            self.docker(f'container rm {container}')
+        # CLI.step(2, steps, 'Stopping and removing remaining containers...')
+        #
+        # containers = self.get_containers()
+        #
+        # for container in containers:
+        #     self.docker(f'container stop {container}', return_output=True)
+        #     self.docker(f'container rm {container}')
 
         # recreate project
-        CLI.step(3, steps, 'Recreating project containers...')
+        CLI.step(2, steps, 'Recreating project containers...')
         self.up()
 
         # clean
-        CLI.step(4, steps, 'Prune Docker images and volumes')
+        CLI.step(3, steps, 'Prune Docker images and volumes')
         self.clean()
 
     def deploy(self):
@@ -599,6 +602,65 @@ class DefaultManager(object):
         self.pull()
         self.reload()
 
+    def zero_downtime(self, service=None):
+        container = self.get_container_name(service)
+
+        # run new container
+        self.docker_compose(f'run -d --service-ports --name={container}-new {service}')
+
+        # healthcheck
+        # TODO: configurable retries number
+        num_retries = 30
+        # num_retries = 20
+
+        self.healthcheck(retries=num_retries, service=f'{service}-new', break_if_successful=True)
+
+        # rename old container
+        CLI.info(f'Renaming old container [{container}-old]...')
+
+        if container in self.get_containers():
+            self.docker(f'container rename {container} {container}-old')
+        else:
+            CLI.info(f'{container}-old was not running')
+
+        # rename new container
+        CLI.info(f'Renaming new container [{container}]...')
+        self.docker(f'container rename {container}-new {container}')
+
+        # TODO: hook into this step from extension
+        CLI.info('Reloading webserver...')
+        self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
+
+        # Stop old container
+        CLI.info(f'Stopping old container of service {service}: {container}-old')
+        if container in self.get_containers():
+            CLI.info(f'Stopping old container [{container}-old]...')
+            self.docker(f'container stop {container}-old')
+
+            CLI.info(f'Removing old container [{container}-old]...')
+            self.docker(f'container rm {container}-old')
+        else:
+            CLI.info(f'{container}-old was not running')
+
+    def restart_service(self, service):
+        container = self.get_container_name(service)
+
+        CLI.underline(f'Recreating {service} container ({container})...')
+
+        if container in self.get_containers():
+            CLI.info(f'Stopping container [{container}]...')
+            self.docker(f'container stop {container}')
+
+            CLI.info(f'Removing container [{container}]...')
+            self.docker(f'container rm {container}')
+        else:
+            CLI.info(f'{container} was not running')
+
+        CLI.info(f'Creating new container [{container}]...')
+        # self.docker_compose(f'run -d --service-ports --name={container} {service}')
+        self.up(f'--no-deps --no-recreate {service}')
+        # docker-compose up -d --no-deps --scale $service_name=2 --no-recreate $service_name
+
     def reload(self):
         CLI.info('Reloading containers...')
         zero_downtime_services = self.config['containers']['deploy']['zero_downtime']
@@ -606,73 +668,15 @@ class DefaultManager(object):
 
         steps = 4
 
-        step = 1
-        CLI.step(step, steps, f'Zero downtime services: {zero_downtime_services}')
+        CLI.step(1, steps, f'Zero downtime services: {zero_downtime_services}')
 
         for service in zero_downtime_services:
-            container = self.get_container_name(service)
+            self.zero_downtime(service)
 
-            # run new container
-            self.docker_compose(f'run -d --service-ports --name={container}-new {service}')
-
-            # healthcheck
-            # TODO: configurable retries number
-            num_retries = 30
-            # num_retries = 20
-
-            self.healthcheck(retries=num_retries, service=f'{service}-new', break_if_successful=True)
-
-            # rename old container
-            CLI.info(f'Renaming old container [{container}-old]...')
-
-            if container in self.get_containers():
-                self.docker(f'container rename {container} {container}-old')
-            else:
-                CLI.info(f'{container}-old was not running')
-
-            # rename new container
-            CLI.info(f'Renaming new container [{container}]...')
-            self.docker(f'container rename {container}-new {container}')
-
-        step += 1
-        # TODO: hook into this step from extension
-        CLI.step(step, steps, 'Reloading webserver...')
-        self.docker(f'exec -it {self.CONTAINER_WEBSERVER} {self.WEBSERVER} -s reload')
-
-        step += 1
-        CLI.step(step, steps, f'Stopping old zero downtime services: {zero_downtime_services}')
-
-        for service in zero_downtime_services:
-            container = self.get_container_name(service)
-
-            if container in self.get_containers():
-                CLI.info(f'Stopping old container [{container}-old]...')
-                self.docker(f'container stop {container}-old')
-
-                CLI.info(f'Removing old container [{container}-old]...')
-                self.docker(f'container rm {container}-old')
-            else:
-                CLI.info(f'{container}-old was not running')
-
-        step += 1
-        CLI.step(step, steps, f'Restart services: {restart_services}')
+        CLI.step(4, steps, f'Restart services: {restart_services}')
 
         for service in restart_services:
-            container = self.get_container_name(service)
-
-            CLI.underline(f'Recreating {service} container ({container})...')
-
-            if container in self.get_containers():
-                CLI.info(f'Stopping container [{container}]...')
-                self.docker(f'container stop {container}')
-
-                CLI.info(f'Removing container [{container}]...')
-                self.docker(f'container rm {container}')
-            else:
-                CLI.info(f'{container} was not running')
-
-            CLI.info(f'Creating new container [{container}]...')
-            self.docker_compose(f'run -d --service-ports --name={container} {service}')
+            self.restart_service(service)
 
     def stop(self, params=None):
         CLI.info('Stopping containers...')
