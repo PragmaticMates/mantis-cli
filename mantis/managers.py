@@ -128,29 +128,11 @@ class DefaultManager(object):
         self.connection = self.config.get('connections', {}).get(self.env.id, None)
 
         # containers
-        # self.CONTAINER_PREFIX = self.config['containers']['prefix']
         self.CONTAINER_PREFIX = self.PROJECT_NAME
         self.IMAGE_PREFIX = self.PROJECT_NAME
 
-        if 'containers' in self.config:
-            # TODO: refactor
-            self.CONTAINER_WEBSERVER = f"{self.CONTAINER_PREFIX}{self.get_container_suffix('webserver')}"
-
-            compose_prefix = f"docker-compose.{self.config['compose']['name']}".rstrip('.')
-            self.compose_file = os.path.join(self.compose_path, f'{compose_prefix}.{self.env.id}.yml')
-
-        # TODO: refactor
-        self.DATABASE = self.config.get('db', 'postgres')
-        self.CACHE = self.config.get('cache', 'redis')
-        self.WEBSERVER = self.config.get('webserver', 'nginx')
-
-        self.database_config = f'{self.configs_path}/{self.DATABASE}/{self.env.file_prefix}{self.env.id}.conf'
-        self.cache_config = f'{self.configs_path}/{self.CACHE}/{self.env.file_prefix}{self.env.id}.conf'
-        self.webserver_html = f'{self.configs_path}/{self.WEBSERVER}/html/'
-        self.webserver_config_proxy = f'{self.configs_path}/{self.WEBSERVER}/proxy_directives.conf'
-        self.webserver_config_default = f'{self.configs_path}/{self.WEBSERVER}/default.conf'
-        self.webserver_config_site = f'{self.configs_path}/{self.WEBSERVER}/sites/{self.env.file_prefix}{self.env.id}.conf'
-        self.htpasswd = f'{self.configs_path}/{self.WEBSERVER}/secrets/.htpasswd'
+        compose_prefix = f"docker-compose.{self.config['compose']['name']}".rstrip('.')
+        self.compose_file = os.path.join(self.compose_path, f'{compose_prefix}.{self.env.id}.yml')
 
     def check_environment_encryption(self, env_file):
         decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)        # .env.encrypted
@@ -412,7 +394,7 @@ class DefaultManager(object):
 
     def get_container_suffix(self, service):
         delimiter = '-'
-        return self.config.get('containers', {}).get('suffixes', {}).get(service, f'{delimiter}{service}')
+        return f'{delimiter}{service}'
 
     def get_container_name(self, service):
         suffix = self.get_container_suffix(service)
@@ -420,15 +402,15 @@ class DefaultManager(object):
 
     def get_image_suffix(self, service):
         delimiter = '_'
-        return self.config.get('containers', {}).get('suffixes', {}).get(service, f'{delimiter}{service}')
+        return f'{delimiter}{service}'
 
     def get_image_name(self, service):
         suffix = self.get_image_suffix(service)
         return f'{self.IMAGE_PREFIX}{suffix}'.replace('-', '_')
 
     def has_healthcheck(self, container):
-        command = f'inspect --format="{{{{json .State.Health}}}}" {container} | grep "Status"'
-        return self.docker(command, return_output=True)
+        healthcheck_config = self.get_healthcheck_config(container)
+        return healthcheck_config and healthcheck_config.get('Test')
 
     def check_health(self, container):
         if self.has_healthcheck(container):
@@ -449,21 +431,29 @@ class DefaultManager(object):
         if not self.has_healthcheck(container):
             CLI.error(f"Container '{container}' doesn't have healthcheck")
 
-        retries = 100  # TODO: configurable?
-        interval = 0.25  # in seconds
+        healthcheck_config = self.get_healthcheck_config(container)
+        coeficient = 10
+        healthcheck_interval = healthcheck_config['Interval'] / 1000000000
+        healthcheck_retries = healthcheck_config['Retries']
+        interval = healthcheck_interval / coeficient
+        retries = healthcheck_retries * coeficient
+
+        CLI.info(f'Interval: {Colors.FAINT}{healthcheck_interval}{Colors.ENDC} s -> {Colors.YELLOW}{interval} s')
+        CLI.info(f'Retries: {Colors.FAINT}{healthcheck_retries}{Colors.ENDC} -> {Colors.YELLOW}{retries}')
+
         start = time.time()
 
         for retry in range(retries):
             is_healthy, status = self.check_health(container)
 
             if is_healthy:
-                print(f"#{retry}/{retries}: Status of '{container}' is {Colors.GREEN}{status}{Colors.ENDC}.")
+                print(f"#{retry+1}/{retries}: Status of '{container}' is {Colors.GREEN}{status}{Colors.ENDC}.")
                 end = time.time()
                 loading_time = end - start
-                CLI.info(f'It took {Colors.UNDERLINE}{loading_time} s{Colors.ENDC} to start container {container}')
+                print(f'Container {Colors.YELLOW}{container}{Colors.ENDC} took {Colors.BLUE}{Colors.UNDERLINE}{loading_time} s{Colors.ENDC} to become healthy')
                 return True
             else:
-                print(f"#{retry}/{retries}: Status of '{container}' is {Colors.RED}{status}{Colors.ENDC}.")
+                print(f"#{retry+1}/{retries}: Status of '{container}' is {Colors.RED}{status}{Colors.ENDC}.")
 
             if retries > 1:
                 sleep(interval)
@@ -506,16 +496,28 @@ class DefaultManager(object):
         if not self.connection:
             return CLI.warning('Connection not defined. Skipping uploading files')
 
+        # TODO: refactor
+        DATABASE = self.config.get('db', 'postgres')
+        CACHE = self.config.get('cache', 'redis')
+        WEBSERVER = self.config.get('webserver', 'nginx')
+        DATABASE_CONFIG = f'{self.configs_path}/{DATABASE}/{self.env.file_prefix}{self.env.id}.conf'
+        CACHE_CONFIG = f'{self.configs_path}/{CACHE}/{self.env.file_prefix}{self.env.id}.conf'
+        WEBSERVER_HTML = f'{self.configs_path}/{WEBSERVER}/html/'
+        WEBSERVER_CONFIG_PROXY = f'{self.configs_path}/{WEBSERVER}/proxy_directives.conf'
+        WEBSERVER_CONFIG_DEFAULT = f'{self.configs_path}/{WEBSERVER}/default.conf'
+        WEBSERVER_CONFIG_SITE = f'{self.configs_path}/{WEBSERVER}/sites/{self.env.file_prefix}{self.env.id}.conf'
+        HTPASSWD = f'{self.configs_path}/{WEBSERVER}/secrets/.htpasswd'
+        
         mapping = {
             # TODO: paths
             'services': {
-                self.database_config: f'{self.project_path}/configs/{self.DATABASE}/',
-                self.cache_config: f'{self.project_path}/configs/{self.CACHE}/',
-                self.webserver_html: f'{self.project_path}/configs/{self.WEBSERVER}/html/',
-                self.webserver_config_default: f'{self.project_path}/configs/{self.WEBSERVER}/',
-                self.webserver_config_proxy: f'{self.project_path}/configs/{self.WEBSERVER}/',
-                self.webserver_config_site: f'{self.project_path}/configs/{self.WEBSERVER}/sites/',
-                self.htpasswd: f'{self.project_path}/configs/{self.WEBSERVER}/secrets/'
+                DATABASE_CONFIG: f'{self.project_path}/configs/{DATABASE}/',
+                CACHE_CONFIG: f'{self.project_path}/configs/{CACHE}/',
+                WEBSERVER_HTML: f'{self.project_path}/configs/{WEBSERVER}/html/',
+                WEBSERVER_CONFIG_DEFAULT: f'{self.project_path}/configs/{WEBSERVER}/',
+                WEBSERVER_CONFIG_PROXY: f'{self.project_path}/configs/{WEBSERVER}/',
+                WEBSERVER_CONFIG_SITE: f'{self.project_path}/configs/{WEBSERVER}/sites/',
+                HTPASSWD: f'{self.project_path}/configs/{WEBSERVER}/secrets/'
             }
 
             # TODO: other contexts
@@ -571,50 +573,42 @@ class DefaultManager(object):
             return self.restart_service(service)
 
         CLI.info('Restarting...')
-        steps = 3
 
         # run down project containers
-        CLI.step(1, steps, 'Running down project containers...')
+        CLI.step(1, 3, 'Running down project containers...')
         self.down()
 
-        # stop and remove all other containers
-        CLI.step(2, steps, 'Stopping and removing remaining containers...')
-
-        containers = self.get_containers()
-
-        for container in containers:
-            self.docker(f'container stop {container}', return_output=True)
-            self.docker(f'container rm {container}')
-
         # recreate project
-        CLI.step(2, steps, 'Recreating project containers...')
+        CLI.step(2, 3, 'Recreating project containers...')
         self.up()
 
         # remove suffixes and reload webserver
         self.remove_suffixes()
-        self.reload_webserver()
+        self.try_to_reload_webserver()
 
         # clean
-        CLI.step(3, steps, 'Prune Docker images and volumes')
+        CLI.step(3, 3, 'Prune Docker images and volumes')
         self.clean()
 
     def deploy(self):
         CLI.info('Deploying...')
-        self.clean()
         self.upload()
         self.pull()
 
-        if len(self.get_containers()) == 0:
-            self.up()
-            self.remove_suffixes()
-            self.reload_webserver()
-        else:
-            self.reload()
+        if len(self.get_containers()) != 0:
+            self.zero_downtime()
+
+        self.up()
+        self.remove_suffixes()
+        self.try_to_reload_webserver()
+
+        self.clean()
 
     def zero_downtime(self, service=None):
         if not service:
-            zero_downtime_services = self.config['containers']['deploy']['zero_downtime']
-            for service in zero_downtime_services:
+            zero_downtime_services = self.config.get('zero_downtime', [])
+            for index, service in enumerate(zero_downtime_services):
+                CLI.step(index+1, len(zero_downtime_services), f'Zero downtime services: {zero_downtime_services}')
                 self.zero_downtime(service)
             return
 
@@ -636,8 +630,8 @@ class DefaultManager(object):
         new_container = new_containers[0]
         self.healthcheck(container=new_container)
 
-        # reload_webserver
-        self.reload_webserver()
+        # reload webserver
+        self.try_to_reload_webserver()
 
         # Stop and remove old container
         CLI.info(f'Stopping old container of service {service}: {old_container}')
@@ -656,10 +650,10 @@ class DefaultManager(object):
         self.docker(f'container rename {new_container} {container_prefix}')
 
         # reload webserver
-        self.reload_webserver()
+        self.try_to_reload_webserver()
 
-    def remove_suffixes(self):
-        for container in self.get_containers():
+    def remove_suffixes(self, prefix=''):
+        for container in self.get_containers(prefix=prefix):
             if container.split('-')[-1].isdigit():
                 CLI.info(f'Removing suffix of container {container}')
                 new_container = container.rsplit('-', maxsplit=1)[0]
@@ -670,34 +664,26 @@ class DefaultManager(object):
 
         CLI.underline(f'Recreating {service} container ({container})...')
 
-        if container in self.get_containers():
-            CLI.info(f'Stopping container [{container}]...')
-            self.docker(f'container stop {container}')
+        app_containers = self.get_containers(prefix=container)
+        for app_container in app_containers:
+            if app_container in self.get_containers():
+                CLI.info(f'Stopping container [{app_container}]...')
+                self.docker(f'container stop {app_container}')
 
-            CLI.info(f'Removing container [{container}]...')
-            self.docker(f'container rm {container}')
-        else:
-            CLI.info(f'{container} was not running')
+                CLI.info(f'Removing container [{app_container}]...')
+                self.docker(f'container rm {app_container}')
+            else:
+                CLI.info(f'{app_container} was not running')
 
         CLI.info(f'Creating new container [{container}]...')
         self.up(f'--no-deps --no-recreate {service}')
+        self.remove_suffixes(prefix=container)
 
-    def reload(self):
-        CLI.info('Reloading containers...')
-        zero_downtime_services = self.config['containers']['deploy']['zero_downtime']
-        restart_services = self.config['containers']['deploy']['restart']
-
-        steps = 2
-
-        CLI.step(1, steps, f'Zero downtime services: {zero_downtime_services}')
-
-        for service in zero_downtime_services:
-            self.zero_downtime(service)
-
-        CLI.step(2, steps, f'Restart services: {restart_services}')
-
-        for service in restart_services:
-            self.restart_service(service)
+    def try_to_reload_webserver(self):
+        try:
+            self.reload_webserver()
+        except AttributeError:
+            CLI.warning('Tried to reload webserver, but no suitable extension found!')
 
     def stop(self, params=None):
         CLI.info('Stopping containers...')
@@ -709,6 +695,17 @@ class DefaultManager(object):
         for index, container in enumerate(containers):
             CLI.step(index + 1, steps, f'Stopping {container}')
             self.docker(f'container stop {container}')
+
+    def kill(self, params=None):
+        CLI.info('Killing containers...')
+
+        containers = self.get_containers() if not params else params.split(' ')
+
+        steps = len(containers)
+
+        for index, container in enumerate(containers):
+            CLI.step(index + 1, steps, f'Killing {container}')
+            self.docker(f'container kill {container}')
 
     def start(self, params=''):
         CLI.info('Starting containers...')
@@ -811,14 +808,34 @@ class DefaultManager(object):
         # Remove empty strings
         containers = list(filter(None, containers))
 
+        # get project containers only
+        containers = list(filter(lambda c: self.get_container_project(c) == self.PROJECT_NAME, containers))
+
         # find containers starting with custom prefix
         containers = list(filter(lambda s: s.startswith(prefix), containers))
 
         # exclude not matching containers
         containers = list(filter(lambda s: s not in exclude, containers))
 
-        # print(containers)
         return containers
+
+    def get_container_project(self, container):
+        try:
+            container_details = json.loads(self.docker(f'container inspect {container}', return_output=True))
+            return container_details[0]["Config"]["Labels"]["com.docker.compose.project"]
+        except IndexError:
+            pass
+
+        return None
+
+    def get_healthcheck_config(self, container):
+        try:
+            container_details = json.loads(self.docker(f'container inspect {container}', return_output=True))
+            return container_details[0]["Config"]["Healthcheck"]
+        except (IndexError, KeyError):
+            pass
+
+        return None
 
     def docker(self, command, return_output=False):
         if return_output:
