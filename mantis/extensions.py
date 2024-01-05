@@ -1,5 +1,4 @@
 from mantis.helpers import CLI
-from mantis.managers import DefaultManager
 
 
 class Django():

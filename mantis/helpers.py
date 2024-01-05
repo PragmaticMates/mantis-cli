@@ -1,3 +1,4 @@
+import os
 import json
 
 
@@ -80,6 +81,34 @@ def random_string(n=10):
     
     chars = string.ascii_lowercase + string.ascii_uppercase + string.digits
     return ''.join(random.choice(chars) for _ in range(n))
+
+
+def find_config():
+    DEFAULT_PATH = 'configs/mantis.json'
+    env_path = os.environ.get('MANTIS_CONFIG', None)
+
+    if env_path and env_path != '':
+        CLI.info(f'Mantis config defined by environment variable $MANTIS_CONFIG: {env_path}')
+        return env_path
+
+    CLI.warning('Environment variable $MANTIS_CONFIG not found. Looking for file mantis.json...')
+    paths = os.popen('find . -name mantis.json').read().strip().split('\n')
+
+    # Remove empty strings
+    paths = list(filter(None, paths))
+
+    total_mantis_files = len(paths)
+
+    if total_mantis_files == 0:
+        CLI.warning(f'mantis.json file not found. Using default value: {DEFAULT_PATH}')
+        return DEFAULT_PATH
+
+    if total_mantis_files == 1:
+        CLI.info(f'Found 1 mantis.json file: {paths[0]}')
+        return paths[0]
+
+    paths_per_line = "\n".join(paths)
+    CLI.error(f'Found {total_mantis_files} mantis.json files: \n{paths_per_line}\n\nDefine which one to use using $MANTIS_CONFIG environment variable!')
 
 
 def load_config(config_file):

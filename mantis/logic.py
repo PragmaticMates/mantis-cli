@@ -1,7 +1,7 @@
 import os, sys
 
 from mantis import VERSION
-from mantis.helpers import Colors, CLI, load_config
+from mantis.helpers import Colors, CLI, find_config, load_config
 
 
 def parse_args():
@@ -55,11 +55,11 @@ def get_extension_classes(extensions):
 
 def get_manager(environment_id, mode):
     # config file
-    config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
+    config_file = find_config()
     config = load_config(config_file)
 
     # class name of the manager
-    manager_class_name = config.get('manager_class', 'mantis.managers.DefaultManager')
+    manager_class_name = config.get('manager_class', 'mantis.managers.BaseManager')
 
     # get manager class
     manager_class = import_string(manager_class_name)
@@ -74,7 +74,7 @@ def get_manager(environment_id, mode):
     class MantisManager(*[manager_class] + extension_classes):
         pass
 
-    manager = MantisManager(config=config, environment_id=environment_id, mode=mode)
+    manager = MantisManager(config_file=config_file, environment_id=environment_id, mode=mode)
 
     # set extensions data
     for extension, extension_params in extensions.items():

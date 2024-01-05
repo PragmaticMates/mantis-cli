@@ -10,15 +10,23 @@ from time import sleep
 
 from mantis.crypto import Crypto
 from mantis.environment import Environment
-from mantis.helpers import CLI, Colors, load_config
+from mantis.helpers import CLI, Colors, find_config, load_config
 
 
-class DefaultManager(object):
+class BaseManager(object):
     environment_id = None
 
-    def __init__(self, config=None, environment_id=None, mode='remote'):
+    def __init__(self, config_file=None, environment_id=None, mode='remote'):
         self.environment_id = environment_id
         self.mode = mode
+
+        # config file
+        self.config_file = config_file
+
+        if not config_file:
+            self.config_file = find_config()
+
+        config = load_config(self.config_file)
 
         # init config
         self.init_config(config)
@@ -107,9 +115,7 @@ class DefaultManager(object):
         return ''
 
     def init_config(self, config):
-        self.config_file = os.environ.get('MANTIS_CONFIG', 'configs/mantis.json')
-        self.config = config or load_config(self.config_file)
-
+        self.config = config
         self.configs_path = self.config.get('configs', {}).get('folder', 'configs/')
         self.compose_path = self.config.get('compose', {}).get('folder', 'configs/compose')
         self.key_file = path.join(f'{dirname(self.config_file)}', 'mantis.key')
