@@ -117,6 +117,7 @@ class BaseManager(object):
     def init_config(self, config):
         self.config = config
         self.configs_path = self.config.get('configs', {}).get('folder', 'configs/')
+        self.compose_command = self.config.get('compose', {}).get('command', 'docker compose')
         self.compose_path = self.config.get('compose', {}).get('folder', 'configs/compose')
         self.key_file = path.join(f'{dirname(self.config_file)}', 'mantis.key')
 
@@ -851,4 +852,4 @@ class BaseManager(object):
 
     def docker_compose(self, command, use_connection=True):
         docker_connection = self.docker_connection if use_connection else ''
-        self.cmd(f'{docker_connection} docker compose -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}')
+        self.cmd(f'{docker_connection} {self.compose_command} -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}')
