@@ -190,7 +190,8 @@ class BaseManager(object):
 
     def read_key(self):
         if not os.path.exists(self.key_file):
-            return None
+            CLI.warning(f'File {self.key_file} does not exist. Reading key from $MANTIS_KEY...')
+            return os.environ.get('MANTIS_KEY', None)
 
         with open(self.key_file, "r") as f:
             return f.read()
