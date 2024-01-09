@@ -89,10 +89,10 @@ def main():
     params = parse_args()
 
     # version info
-    version_info = f'Mantis (v{VERSION})'
+    version_info = f'Mantis v{VERSION}'
 
     if params['commands'] == ['--version']:
-        exit(version_info)
+        return print(version_info)
 
     if len(params['commands']) == 0:
         CLI.error('Missing commands')
@@ -135,7 +135,7 @@ def main():
     else:
         host_intro = ''
 
-    heading = f'{version_info} '\
+    heading = f'{version_info}, '\
               f'{environment_intro}'\
               f'{host_intro}'\
               f'mode: {Colors.GREEN}{manager.mode}{Colors.ENDC}, '\
