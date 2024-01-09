@@ -326,11 +326,17 @@ class BaseManager(object):
                 CLI.warning(f'Save it to {env_file} manually.')
 
     def check_env(self):
+        if not hasattr(self.env, 'encrypted_files'):
+            CLI.error('No encrypted files')
+
         # check if pair file exists
         for encrypted_env_file in self.env.encrypted_files:
             env_file = encrypted_env_file.rstrip('.encrypted')
             if not os.path.exists(env_file):
                 CLI.warning(f'Environment file {env_file} does not exist')
+
+        if not hasattr(self.env, 'files'):
+            CLI.error('No environment files')
 
         for env_file in self.env.files:
             env_file_encrypted = f'{env_file}.encrypted'
@@ -483,8 +489,42 @@ class BaseManager(object):
 
         CLI.info(f'Args = {build_args}')
 
-        # Build using docker compose
-        self.docker_compose(f'build {build_args} {params} --pull', use_connection=False)
+        build_tool = self.config.get('build', {}).get('tool', 'compose')
+
+        if build_tool == 'compose':
+            # Build all services using docker compose
+            self.docker_compose(f'build {build_args} {params} --pull', use_connection=False)
+        elif build_tool == 'docker':
+            for service, info in self.services_to_build().items():
+                platform = f"--platform={info['platform']}" if info['platform'] != '' else ''
+                image = f"-t {info['image']}" if info['image'] != '' else ''
+
+                # Build service using docker
+                self.docker(f"build {info['context']} {build_args} {platform} {image} -f {info['dockerfile']} {params}", use_connection=False)
+        else:
+            CLI.error(f'Unknown build tool: {build_tool}')
+
+    def services_to_build(self):
+        import yaml
+
+        with open(self.compose_file, 'r') as file:
+            compose_data = yaml.safe_load(file)
+
+        data = {}
+
+        services = compose_data.get('services', {})
+        for service_name, service_config in services.items():
+            build = service_config.get('build', None)
+
+            if build:
+                data[service_name] = {
+                    'dockerfile': build.get('dockerfile', 'Dockerfile'),
+                    'context': build.get('context', '.'),
+                    'image': service_config.get('image', ''),
+                    'platform': service_config.get('platform', '')
+                }
+
+        return data
 
     def push(self, params=''):
         CLI.info(f'Pushing...')
@@ -845,11 +885,13 @@ class BaseManager(object):
 
         return None
 
-    def docker(self, command, return_output=False):
-        if return_output:
-            return os.popen(f'{self.docker_connection} docker {command}').read()
+    def docker(self, command, return_output=False, use_connection=True):
+        docker_connection = self.docker_connection if use_connection else ''
 
-        self.cmd(f'{self.docker_connection} docker {command}')
+        if return_output:
+            return os.popen(f'{docker_connection} docker {command}').read()
+
+        self.cmd(f'{docker_connection} docker {command}')
 
     def docker_compose(self, command, use_connection=True):
         docker_connection = self.docker_connection if use_connection else ''

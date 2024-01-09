@@ -46,7 +46,7 @@ def get_extension_classes(extensions):
 
     # extensions
     for extension in extensions:
-        extension_class_name = extension if '.' in extension else f"mantis.extensions.{extension}"
+        extension_class_name = extension if '.' in extension else f"mantis.extensions.{extension.lower()}.{extension}"
         extension_class = import_string(extension_class_name)
         extension_classes.append(extension_class)
 

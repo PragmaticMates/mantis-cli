@@ -16,6 +16,9 @@ class Environment(object):
         # environment files
         self.path = self._get_path(self.id)
 
+        if not self.path:
+            return
+
         if not os.path.exists(self.path):
             CLI.error(f"Environment path '{self.path}' does not exist")
 
@@ -40,7 +43,7 @@ class Environment(object):
                 CLI.info(f"Found environment path: '{environment_path}'")
                 return environment_path
 
-        CLI.error(f"Environment path not found. Tried: {', '.join(possible_folders)}")
+        CLI.danger(f"Environment path not found. Tried: {', '.join(possible_folders)}")
 
     def read(self, path):
         if not os.path.exists(path):
