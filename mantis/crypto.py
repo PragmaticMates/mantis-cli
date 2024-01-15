@@ -10,6 +10,8 @@ except ImportError:
     # TODO: only if using environment encryption!
     raise ImportError('Install pycryptodome and cryptography!')
 
+from mantis.helpers import CLI
+
 
 class Crypto(object):
     @staticmethod
@@ -43,9 +45,20 @@ class Crypto(object):
     @staticmethod
     def decrypt_deterministically(secret, key):
         import ast
-        data = ast.literal_eval(b64decode(secret).decode())
-        cipher = AES.new(key.strip().encode(), AES.MODE_SIV)
-        data = cipher.decrypt_and_verify(data['ciphertext'], data['tag'])
+
+        try:
+            data = ast.literal_eval(b64decode(secret).decode())
+        except UnicodeDecodeError:
+            CLI.error('Decryption failed. Check if data are not corrupted.')
+
+        try:
+            cipher = AES.new(key.strip().encode(), AES.MODE_SIV)
+            data = cipher.decrypt_and_verify(data['ciphertext'], data['tag'])
+        except ValueError as e:
+            if str(e) == 'MAC check failed':
+                CLI.error('MAC check failed. You are probably decrypting with incorrect key.')
+            CLI.error(str(e))
+
         return data.decode()
 
     @staticmethod
