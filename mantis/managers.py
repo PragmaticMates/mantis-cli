@@ -3,6 +3,7 @@ import os
 import datetime
 import requests
 import time
+import yaml
 from distutils.util import strtobool
 from os import path
 from os.path import dirname, normpath
@@ -128,7 +129,6 @@ class BaseManager(object):
         self.env = Environment(
             environment_id=self.environment_id,
             folder=self.config.get('environment', {}).get('folder', 'environments'),
-            file_prefix=self.config.get('environment', {}).get('file_prefix', '')
         )
 
         # connection
@@ -426,6 +426,15 @@ class BaseManager(object):
         healthcheck_config = self.get_healthcheck_config(container)
         return healthcheck_config and healthcheck_config.get('Test')
 
+    def get_healthcheck_start_period(self, container):
+        healthcheck_config = self.get_healthcheck_config(container)
+
+        try:
+            return healthcheck_config['StartPeriod'] / 1000000000
+        except (KeyError, TypeError):
+            # TODO: return default value as fallback?
+            return None
+
     def check_health(self, container):
         if self.has_healthcheck(container):
             command = f'inspect --format="{{{{json .State.Health.Status}}}}" {container}'
@@ -442,37 +451,48 @@ class BaseManager(object):
 
         CLI.info(f'Health-checking {Colors.YELLOW}{container}{Colors.ENDC}...')
 
-        if not self.has_healthcheck(container):
-            CLI.error(f"Container '{container}' doesn't have healthcheck")
+        if self.has_healthcheck(container):
+            healthcheck_config = self.get_healthcheck_config(container)
+            coeficient = 10
+            healthcheck_interval = healthcheck_config.get('Interval', 1000000000) / 1000000000
+            healthcheck_retries = healthcheck_config.get('Retries', 10)
+            interval = healthcheck_interval / coeficient
+            retries = healthcheck_retries * coeficient
 
-        healthcheck_config = self.get_healthcheck_config(container)
-        coeficient = 10
-        healthcheck_interval = healthcheck_config['Interval'] / 1000000000
-        healthcheck_retries = healthcheck_config['Retries']
-        interval = healthcheck_interval / coeficient
-        retries = healthcheck_retries * coeficient
+            CLI.info(f'Interval: {Colors.FAINT}{healthcheck_interval}{Colors.ENDC} s -> {Colors.YELLOW}{interval} s')
+            CLI.info(f'Retries: {Colors.FAINT}{healthcheck_retries}{Colors.ENDC} -> {Colors.YELLOW}{retries}')
 
-        CLI.info(f'Interval: {Colors.FAINT}{healthcheck_interval}{Colors.ENDC} s -> {Colors.YELLOW}{interval} s')
-        CLI.info(f'Retries: {Colors.FAINT}{healthcheck_retries}{Colors.ENDC} -> {Colors.YELLOW}{retries}')
+            start = time.time()
 
-        start = time.time()
+            for retry in range(retries):
+                is_healthy, status = self.check_health(container)
 
-        for retry in range(retries):
-            is_healthy, status = self.check_health(container)
+                if is_healthy:
+                    print(f"#{retry + 1}/{retries}: Status of '{container}' is {Colors.GREEN}{status}{Colors.ENDC}.")
+                    end = time.time()
+                    loading_time = end - start
+                    print(f'Container {Colors.YELLOW}{container}{Colors.ENDC} took {Colors.BLUE}{Colors.UNDERLINE}{loading_time} s{Colors.ENDC} to become healthy')
+                    return True
+                else:
+                    print(f"#{retry + 1}/{retries}: Status of '{container}' is {Colors.RED}{status}{Colors.ENDC}.")
 
-            if is_healthy:
-                print(f"#{retry+1}/{retries}: Status of '{container}' is {Colors.GREEN}{status}{Colors.ENDC}.")
-                end = time.time()
-                loading_time = end - start
-                print(f'Container {Colors.YELLOW}{container}{Colors.ENDC} took {Colors.BLUE}{Colors.UNDERLINE}{loading_time} s{Colors.ENDC} to become healthy')
-                return True
-            else:
-                print(f"#{retry+1}/{retries}: Status of '{container}' is {Colors.RED}{status}{Colors.ENDC}.")
+                if retries > 1:
+                    sleep(interval)
+        else:
+            CLI.warning(f"Container '{container}' doesn't have healthcheck command defined. Looking for start period value...")
+            start_period = self.get_healthcheck_start_period(container)
 
-            if retries > 1:
-                sleep(interval)
+            if start_period is None:
+                CLI.danger(f"Container '{container}' doesn't have neither healthcheck command or start period defined.")
+                CLI.warning(f'Stopping and removing container {container}')
+                self.docker(f'container stop {container}')
+                self.docker(f'container rm {container}')
+                exit()
 
-        return False
+            # If container doesn't have healthcheck command, sleep for N seconds
+            CLI.info(f'Sleeping for {start_period} seconds...')
+            sleep(start_period)
+            return None
 
     def build(self, params=''):
         CLI.info(f'Building...')
@@ -490,6 +510,7 @@ class BaseManager(object):
         CLI.info(f'Args = {build_args}')
 
         build_tool = self.config.get('build', {}).get('tool', 'compose')
+        available_tools = ['compose', 'docker']
 
         if build_tool == 'compose':
             # Build all services using docker compose
@@ -502,11 +523,9 @@ class BaseManager(object):
                 # Build service using docker
                 self.docker(f"build {info['context']} {build_args} {platform} {image} -f {info['dockerfile']} {params}", use_connection=False)
         else:
-            CLI.error(f'Unknown build tool: {build_tool}')
+            CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
     def services_to_build(self):
-        import yaml
-
         with open(self.compose_file, 'r') as file:
             compose_data = yaml.safe_load(file)
 
@@ -544,33 +563,6 @@ class BaseManager(object):
         if not self.connection:
             return CLI.warning('Connection not defined. Skipping uploading files')
 
-        # TODO: refactor
-        DATABASE = self.config.get('db', 'postgres')
-        CACHE = self.config.get('cache', 'redis')
-        WEBSERVER = self.config.get('webserver', 'nginx')
-        DATABASE_CONFIG = f'{self.configs_path}/{DATABASE}/{self.env.file_prefix}{self.env.id}.conf'
-        CACHE_CONFIG = f'{self.configs_path}/{CACHE}/{self.env.file_prefix}{self.env.id}.conf'
-        WEBSERVER_HTML = f'{self.configs_path}/{WEBSERVER}/html/'
-        WEBSERVER_CONFIG_PROXY = f'{self.configs_path}/{WEBSERVER}/proxy_directives.conf'
-        WEBSERVER_CONFIG_DEFAULT = f'{self.configs_path}/{WEBSERVER}/default.conf'
-        WEBSERVER_CONFIG_SITE = f'{self.configs_path}/{WEBSERVER}/sites/{self.env.file_prefix}{self.env.id}.conf'
-        HTPASSWD = f'{self.configs_path}/{WEBSERVER}/secrets/.htpasswd'
-        
-        mapping = {
-            # TODO: paths
-            'services': {
-                DATABASE_CONFIG: f'{self.project_path}/configs/{DATABASE}/',
-                CACHE_CONFIG: f'{self.project_path}/configs/{CACHE}/',
-                WEBSERVER_HTML: f'{self.project_path}/configs/{WEBSERVER}/html/',
-                WEBSERVER_CONFIG_DEFAULT: f'{self.project_path}/configs/{WEBSERVER}/',
-                WEBSERVER_CONFIG_PROXY: f'{self.project_path}/configs/{WEBSERVER}/',
-                WEBSERVER_CONFIG_SITE: f'{self.project_path}/configs/{WEBSERVER}/sites/',
-                HTPASSWD: f'{self.project_path}/configs/{WEBSERVER}/secrets/'
-            }
-
-            # TODO: other contexts
-        }
-
         if context == 'all':
             self.upload('services')
             self.upload('compose')
@@ -591,8 +583,35 @@ class BaseManager(object):
         else:
             CLI.info('Uploading...')
 
-            # TODO: refactor
             if context == 'services':
+                CLI.danger('DEPRECATED. NOT uploading service files! If you are using custom configs, include them in your custom Docker image instead of copying them to server')
+                return
+
+                # TODO: refactor
+                DATABASE = self.config.get('db', 'postgres')
+                CACHE = self.config.get('cache', 'redis')
+                WEBSERVER = self.config.get('webserver', 'nginx')
+                DATABASE_CONFIG = f'{self.configs_path}/{DATABASE}/{self.env.id}.conf'
+                CACHE_CONFIG = f'{self.configs_path}/{CACHE}/{self.env.id}.conf'
+                WEBSERVER_HTML = f'{self.configs_path}/{WEBSERVER}/html/'
+                WEBSERVER_CONFIG_PROXY = f'{self.configs_path}/{WEBSERVER}/proxy_directives.conf'
+                WEBSERVER_CONFIG_DEFAULT = f'{self.configs_path}/{WEBSERVER}/default.conf'
+                WEBSERVER_CONFIG_SITE = f'{self.configs_path}/{WEBSERVER}/sites/{self.env.id}.conf'
+                HTPASSWD = f'{self.configs_path}/{WEBSERVER}/secrets/.htpasswd'
+
+                mapping = {
+                    # TODO: paths
+                    'services': {
+                        DATABASE_CONFIG: f'{self.project_path}/configs/{DATABASE}/',
+                        CACHE_CONFIG: f'{self.project_path}/configs/{CACHE}/',
+                        WEBSERVER_HTML: f'{self.project_path}/configs/{WEBSERVER}/html/',
+                        WEBSERVER_CONFIG_DEFAULT: f'{self.project_path}/configs/{WEBSERVER}/',
+                        WEBSERVER_CONFIG_PROXY: f'{self.project_path}/configs/{WEBSERVER}/',
+                        WEBSERVER_CONFIG_SITE: f'{self.project_path}/configs/{WEBSERVER}/sites/',
+                        HTPASSWD: f'{self.project_path}/configs/{WEBSERVER}/secrets/'
+                    }
+                }
+
                 for local_path, remote_path in mapping['services'].items():
                     if os.path.exists(local_path):
                         self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {local_path} {self.user}@{self.host}:{remote_path}')
@@ -661,10 +680,12 @@ class BaseManager(object):
             return
 
         container_prefix = self.get_container_name(service)
-        old_container = self.get_containers(prefix=container_prefix)[0]
 
-        if not self.has_healthcheck(old_container):
-            CLI.error(f"Container '{old_container}' doesn't have healthcheck")
+        try:
+            old_container = self.get_containers(prefix=container_prefix)[0]
+        except IndexError:
+            CLI.danger(f'Old container for service {service} not found. Skipping zero-downtime deployment...')
+            return
 
         # run new container
         self.up(f'--no-deps --no-recreate --scale {service}=2')
@@ -871,7 +892,7 @@ class BaseManager(object):
         try:
             container_details = json.loads(self.docker(f'container inspect {container}', return_output=True))
             return container_details[0]["Config"]["Labels"]["com.docker.compose.project"]
-        except IndexError:
+        except (IndexError, KeyError):
             pass
 
         return None

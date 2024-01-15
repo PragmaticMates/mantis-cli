@@ -4,10 +4,9 @@ from mantis.helpers import CLI, Colors
 
 
 class Environment(object):
-    def __init__(self, environment_id, folder, file_prefix):
+    def __init__(self, environment_id, folder):
         self.id = environment_id
         self.folder = folder
-        self.file_prefix = file_prefix
 
         if self.id:
             self.setup()
