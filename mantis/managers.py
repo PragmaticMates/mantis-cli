@@ -559,81 +559,24 @@ class BaseManager(object):
         # Pull using docker compose
         self.docker_compose(f'pull {params}')
 
-    def upload(self, context='services'):
-        if not self.connection:
-            return CLI.warning('Connection not defined. Skipping uploading files')
-
-        if context == 'all':
-            self.upload('services')
-            self.upload('compose')
-            self.upload('mantis')
-        elif context == 'services':
-            CLI.warning('Uploading configs for context "services" [webserver, database, cache, htpasswd]')
-        elif context == 'compose':
-            CLI.warning('Uploading configs for context "compose" [docker compose configs and environment]')
-        elif context == 'mantis':
-            CLI.warning('Uploading configs for mantis [mantis.json]')
-        else:
-            CLI.error(f'Unknown context "{context}". Available: services, compose, mantis or all')
-
+    def upload(self):
         if self.env.id == 'local':
             print('Skipping for local...')
+        elif not self.connection:
+            CLI.warning('Connection not defined. Skipping uploading files')
         elif self.mode == 'host':
             CLI.warning('Not uploading due to host mode! Be sure your configs on host are up to date!')
-        else:
-            CLI.info('Uploading...')
+        elif self.mode == 'ssh':
+            CLI.info('Uploading docker compose configs, environment files and mantis')
 
-            if context == 'services':
-                CLI.danger('DEPRECATED. NOT uploading service files! If you are using custom configs, include them in your custom Docker image instead of copying them to server')
-                return
+            files_to_upload = [self.config_file, self.compose_file] + self.env.files
 
-                # TODO: refactor
-                DATABASE = self.config.get('db', 'postgres')
-                CACHE = self.config.get('cache', 'redis')
-                WEBSERVER = self.config.get('webserver', 'nginx')
-                DATABASE_CONFIG = f'{self.configs_path}/{DATABASE}/{self.env.id}.conf'
-                CACHE_CONFIG = f'{self.configs_path}/{CACHE}/{self.env.id}.conf'
-                WEBSERVER_HTML = f'{self.configs_path}/{WEBSERVER}/html/'
-                WEBSERVER_CONFIG_PROXY = f'{self.configs_path}/{WEBSERVER}/proxy_directives.conf'
-                WEBSERVER_CONFIG_DEFAULT = f'{self.configs_path}/{WEBSERVER}/default.conf'
-                WEBSERVER_CONFIG_SITE = f'{self.configs_path}/{WEBSERVER}/sites/{self.env.id}.conf'
-                HTPASSWD = f'{self.configs_path}/{WEBSERVER}/secrets/.htpasswd'
-
-                mapping = {
-                    # TODO: paths
-                    'services': {
-                        DATABASE_CONFIG: f'{self.project_path}/configs/{DATABASE}/',
-                        CACHE_CONFIG: f'{self.project_path}/configs/{CACHE}/',
-                        WEBSERVER_HTML: f'{self.project_path}/configs/{WEBSERVER}/html/',
-                        WEBSERVER_CONFIG_DEFAULT: f'{self.project_path}/configs/{WEBSERVER}/',
-                        WEBSERVER_CONFIG_PROXY: f'{self.project_path}/configs/{WEBSERVER}/',
-                        WEBSERVER_CONFIG_SITE: f'{self.project_path}/configs/{WEBSERVER}/sites/',
-                        HTPASSWD: f'{self.project_path}/configs/{WEBSERVER}/secrets/'
-                    }
-                }
-
-                for local_path, remote_path in mapping['services'].items():
-                    if os.path.exists(local_path):
-                        self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {local_path} {self.user}@{self.host}:{remote_path}')
-                    else:
-                        CLI.info(f'{local_path} does not exists. Skipping...')
-            elif context == 'mantis':
-                if os.path.exists(self.config_file):
-                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.config_file} {self.user}@{self.host}:{self.project_path}/configs/')  # TODO: paths
+            # mantis config file
+            for file in files_to_upload:
+                if os.path.exists(file):
+                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {file} {self.user}@{self.host}:{self.project_path}/{file}')
                 else:
                     CLI.info(f'{self.config_file} does not exists. Skipping...')
-
-            elif context == 'compose':
-                for env_file in self.env.files:
-                    if os.path.exists(env_file):
-                        self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {env_file} {self.user}@{self.host}:{self.project_path}/configs/environments/.{self.env.id}')  # TODO: paths
-                    else:
-                        CLI.info(f'{env_file} does not exists. Skipping...')
-
-                if os.path.exists(self.compose_file):
-                    self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {self.compose_file} {self.user}@{self.host}:{self.project_path}/configs/docker/')  # TODO: paths
-                else:
-                    CLI.info(f'{self.compose_file} does not exists. Skipping...')
 
     def restart(self, service=None):
         if service:
