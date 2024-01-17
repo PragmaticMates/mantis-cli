@@ -1,7 +1,6 @@
 import json
 import os
 import datetime
-import requests
 import time
 import yaml
 from distutils.util import strtobool
