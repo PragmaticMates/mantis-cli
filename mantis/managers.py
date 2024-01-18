@@ -106,6 +106,8 @@ class BaseManager(object):
             return ''
 
         if self.mode == 'remote':
+            if self.connection is None:
+                CLI.error(f'Connection for environment {self.env.id} not defined!')
             if self.connection.startswith('ssh://'):
                 return f'DOCKER_HOST="{self.connection}"'
             elif self.connection.startswith('context://'):
