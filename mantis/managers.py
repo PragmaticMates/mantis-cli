@@ -656,7 +656,7 @@ class BaseManager(object):
             CLI.info(f'Removing old container [{old_container}]...')
             self.docker(f'container rm {old_container}')
         else:
-            CLI.info(f'{container} was not running')
+            CLI.info(f'{old_container} was not running')
 
         # rename new container
         CLI.info(f'Renaming new container [{new_container}]...')

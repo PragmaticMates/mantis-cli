@@ -108,8 +108,25 @@ def find_config():
         return paths[0]
 
     paths_per_line = "\n".join(paths)
-    CLI.error(f'Found {total_mantis_files} mantis.json files: \n{paths_per_line}\n\nDefine which one to use using $MANTIS_CONFIG environment variable!')
+    CLI.warning(f'Found {total_mantis_files} mantis.json files:')
+    
+    for index, path in enumerate(paths):
+        CLI.info(f'[{index+1}] {path}')
+    CLI.danger(f'[0] Exit now and define $MANTIS_CONFIG environment variable')
 
+    path_index = None
+    while path_index is None:
+        path_index = input('Define which one to use: ')
+        if not path_index.isdigit() or int(path_index) > len(paths):
+            path_index = None
+        else:
+            path_index = int(path_index)
+
+    if path_index == 0:
+        exit()
+
+    return paths[path_index-1]
+    
 
 def load_config(config_file):
     with open(config_file) as config:
