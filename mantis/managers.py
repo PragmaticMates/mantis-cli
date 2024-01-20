@@ -767,7 +767,7 @@ class BaseManager(object):
     def clean(self, params=''):  # todo clean on all nodes
         CLI.info('Cleaning...')
         # self.docker(f'builder prune')
-        self.docker(f'system prune {params} --force')
+        self.docker(f'system prune {params} -a --force')
         # self.docker(f'container prune')
         # self.docker(f'container prune --force')
 
