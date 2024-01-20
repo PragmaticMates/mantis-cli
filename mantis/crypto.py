@@ -2,15 +2,12 @@ from base64 import b64encode, b64decode
 
 try:
     from Crypto.Cipher import AES
-    from Crypto.Random import get_random_bytes
     from cryptography.fernet import Fernet
 except ImportError:
     # not using cryptography
-    # pip install pycryptodome>=3.11.0
-    # TODO: only if using environment encryption!
     raise ImportError('Install pycryptodome and cryptography!')
 
-from mantis.helpers import CLI
+from mantis.helpers import CLI, random_string
 
 
 class Crypto(object):
@@ -18,10 +15,8 @@ class Crypto(object):
     def generate_key(deterministically=False):
         if deterministically:
             # deterministically: length has to be 32, 48 or 64
-            x = random_string(64)
-            from icecream import ic
-            return x
-
+            return random_string(64)
+            
         return Fernet.generate_key()
 
     @staticmethod
