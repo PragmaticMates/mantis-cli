@@ -529,6 +529,12 @@ class BaseManager(object):
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
+    def services(self):
+        with open(self.compose_file, 'r') as file:
+            compose_data = yaml.safe_load(file)
+
+        return compose_data.get('services', {}).keys()
+    
     def services_to_build(self):
         with open(self.compose_file, 'r') as file:
             compose_data = yaml.safe_load(file)
@@ -671,9 +677,10 @@ class BaseManager(object):
     def remove_suffixes(self, prefix=''):
         for container in self.get_containers(prefix=prefix):
             if container.split('-')[-1].isdigit():
-                CLI.info(f'Removing suffix of container {container}')
-                new_container = container.rsplit('-', maxsplit=1)[0]
-                self.docker(f'container rename {container} {new_container}')
+                if container not in self.services():
+                    CLI.info(f'Removing suffix of container {container}')
+                    new_container = container.rsplit('-', maxsplit=1)[0]
+                    self.docker(f'container rename {container} {new_container}')
 
     def restart_service(self, service):
         container = self.get_container_name(service)
@@ -757,10 +764,10 @@ class BaseManager(object):
             CLI.step(index + 1, steps, f'Removing {container}')
             self.docker(f'container rm {container}')
 
-    def clean(self):  # todo clean on all nodes
+    def clean(self, params=''):  # todo clean on all nodes
         CLI.info('Cleaning...')
         # self.docker(f'builder prune')
-        self.docker(f'system prune --volumes --force')
+        self.docker(f'system prune {params} --force')
         # self.docker(f'container prune')
         # self.docker(f'container prune --force')
 
