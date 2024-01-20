@@ -55,7 +55,7 @@ def get_extension_classes(extensions):
 
 def get_manager(environment_id, mode):
     # config file
-    config_file = find_config()
+    config_file = find_config(environment_id)
     config = load_config(config_file)
 
     # class name of the manager

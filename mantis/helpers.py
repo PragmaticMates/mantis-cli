@@ -83,35 +83,45 @@ def random_string(n=10):
     return ''.join(random.choice(chars) for _ in range(n))
 
 
-def find_config():
-    DEFAULT_PATH = 'configs/mantis.json'
+def find_config(environment_id=None):
     env_path = os.environ.get('MANTIS_CONFIG', None)
 
     if env_path and env_path != '':
         CLI.info(f'Mantis config defined by environment variable $MANTIS_CONFIG: {env_path}')
         return env_path
 
-    CLI.warning('Environment variable $MANTIS_CONFIG not found. Looking for file mantis.json...')
+    CLI.info('Environment variable $MANTIS_CONFIG not found. Looking for file mantis.json...')
     paths = os.popen('find . -name mantis.json').read().strip().split('\n')
 
     # Remove empty strings
     paths = list(filter(None, paths))
 
+    # Count found mantis files
     total_mantis_files = len(paths)
 
+    # No mantis file found
     if total_mantis_files == 0:
-        CLI.warning(f'mantis.json file not found. Using default value: {DEFAULT_PATH}')
+        DEFAULT_PATH = 'configs/mantis.json'
+        CLI.info(f'mantis.json file not found. Using default value: {DEFAULT_PATH}')
         return DEFAULT_PATH
 
+    # Single mantis file found
     if total_mantis_files == 1:
         CLI.info(f'Found 1 mantis.json file: {paths[0]}')
         return paths[0]
 
-    paths_per_line = "\n".join(paths)
-    CLI.warning(f'Found {total_mantis_files} mantis.json files:')
+    # Multiple mantis files found
+    CLI.info(f'Found {total_mantis_files} mantis.json files:')
     
     for index, path in enumerate(paths):
-        CLI.info(f'[{index+1}] {path}')
+        config_connections = load_config(path).get('connections', {}).keys()
+        connection_for_environment_exists = environment_id in config_connections
+        
+        if connection_for_environment_exists:
+            CLI.success(f'[{index+1}] {path}')
+        else:
+            CLI.warning(f'[{index+1}] {path}')
+    
     CLI.danger(f'[0] Exit now and define $MANTIS_CONFIG environment variable')
 
     path_index = None

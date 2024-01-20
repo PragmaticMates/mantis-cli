@@ -24,7 +24,7 @@ class BaseManager(object):
         self.config_file = config_file
 
         if not config_file:
-            self.config_file = find_config()
+            self.config_file = find_config(self.environment_id)
 
         config = load_config(self.config_file)
 
