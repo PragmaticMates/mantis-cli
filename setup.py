@@ -15,7 +15,7 @@ setup(
     url='https://github.com/PragmaticMates/mantis-cli',
     packages=find_packages(),
     include_package_data=True,
-    install_requires=['cffi', 'cryptography', 'pycryptodome', 'PyYAML'],
+    install_requires=['cffi', 'cryptography', 'pycryptodome', 'PyYAML', 'prettytable'],
     entry_points={
         'console_scripts': ['mantis=mantis.command_line:run'],
     },

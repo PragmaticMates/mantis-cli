@@ -1,5 +1,7 @@
 import os
 import json
+from os.path import dirname, normpath
+from prettytable import PrettyTable
 
 
 class Colors:
@@ -39,40 +41,47 @@ class Colors:
 
 class CLI(object):
     @staticmethod
-    def bold(text, end='\n'):
-        print(f'{Colors.BOLD}{text}{Colors.ENDC}', end=end)
-
-    @staticmethod
-    def info(text, end='\n'):
-        print(f'{Colors.BLUE}{text}{Colors.ENDC}', end=end)
-
-    @staticmethod
-    def pink(text, end='\n'):
-        print(f'{Colors.PINK}{text}{Colors.ENDC}', end=end)
-
-    @staticmethod
-    def success(text, end='\n'):
-        print(f'{Colors.GREEN}{text}{Colors.ENDC}', end=end)
+    def print_or_return(text, color, end='\n', return_value=False):
+        s = f'{color}{text}{Colors.ENDC}'
+        if return_value:
+            return f'{s}{end}'
+        print(s, end=end)
 
     @staticmethod
     def error(text):
         exit(f'{Colors.RED}{text}{Colors.ENDC}')
 
     @staticmethod
-    def warning(text, end='\n'):
-        print(f'{Colors.YELLOW}{text}{Colors.ENDC}', end=end)
+    def bold(text, end='\n', return_value=False):
+        return CLI.print_or_return(text=text, color=Colors.BOLD, end=end, return_value=return_value)
 
     @staticmethod
-    def danger(text, end='\n'):
-        print(f'{Colors.RED}{text}{Colors.ENDC}', end=end)
+    def info(text, end='\n', return_value=False):
+        return CLI.print_or_return(text=text, color=Colors.BLUE, end=end, return_value=return_value)
 
     @staticmethod
-    def underline(text, end='\n'):
-        print(f'{Colors.UNDERLINE}{text}{Colors.ENDC}', end=end)
+    def pink(text, end='\n', return_value=False):
+        return CLI.print_or_return(text=text, color=Colors.PINK, end=end, return_value=return_value)
 
     @staticmethod
-    def step(index, total, text, end='\n'):
-        print(f'{Colors.YELLOW}[{index}/{total}] {text}{Colors.ENDC}', end=end)
+    def success(text, end='\n', return_value=False):
+        return CLI.print_or_return(text=text, color=Colors.GREEN, end=end, return_value=return_value)
+
+    @staticmethod
+    def warning(text, end='\n', return_value=False):
+        return CLI.print_or_return(text=text, color=Colors.YELLOW, end=end, return_value=return_value)
+
+    @staticmethod
+    def danger(text, end='\n', return_value=False):
+        return CLI.print_or_return(text=text, color=Colors.RED, end=end, return_value=return_value)
+
+    @staticmethod
+    def underline(text, end='\n', return_value=False):
+        return CLI.print_or_return(text=text, color=Colors.UNDERLINE, end=end, return_value=return_value)
+
+    @staticmethod
+    def step(index, total, text, end='\n', return_value=False):
+        return CLI.print_or_return(text=f'[{index}/{total}] {text}', color=Colors.YELLOW, end=end, return_value=return_value)
 
 
 def random_string(n=10):
@@ -113,15 +122,22 @@ def find_config(environment_id=None):
     # Multiple mantis files found
     CLI.info(f'Found {total_mantis_files} mantis.json files:')
     
-    for index, path in enumerate(paths):
-        config_connections = load_config(path).get('connections', {}).keys()
-        connection_for_environment_exists = environment_id in config_connections
-        
-        if connection_for_environment_exists:
-            CLI.success(f'[{index+1}] {path}')
-        else:
-            CLI.warning(f'[{index+1}] {path}')
+    table = PrettyTable(align='l')
+    table.field_names = ["#", "Path", "Project name", "Connections"]
     
+    for index, path in enumerate(paths):
+        config = load_config(path)
+        connections = config.get('connections', {}).keys()
+        project_name = config.get('project_name', '')
+        
+        colorful_connections = []
+        for connection in connections:
+            color = 'success' if connection == environment_id else 'warning'
+            colorful_connections.append(getattr(CLI, color)(connection, end='', return_value=True))
+            
+        table.add_row([index+1, normpath(dirname(path)), project_name, ', '.join(colorful_connections)])
+            
+    print(table)
     CLI.danger(f'[0] Exit now and define $MANTIS_CONFIG environment variable')
 
     path_index = None

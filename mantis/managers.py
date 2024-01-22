@@ -1,9 +1,7 @@
 import json
 import os
-import datetime
 import time
 import yaml
-from distutils.util import strtobool
 from os import path
 from os.path import dirname, normpath
 from time import sleep
