@@ -1,6 +1,7 @@
 import os
 import json
-from os.path import dirname, normpath
+from json.decoder import JSONDecodeError
+from os.path import dirname, normpath, abspath
 from prettytable import PrettyTable
 
 
@@ -152,8 +153,51 @@ def find_config(environment_id=None):
         exit()
 
     return paths[path_index-1]
-    
+
+
+def find_keys_only_in_config(config, template, parent_key=""):
+    differences = []
+
+    # Iterate over keys in config
+    for key in config:
+        # Construct the full key path
+        full_key = parent_key + "." + key if parent_key else key
+
+        # Check if key exists in template
+        if key not in template:
+            differences.append(full_key)
+        else:
+            # Recursively compare nested dictionaries
+            if isinstance(config[key], dict) and isinstance(template[key], dict):
+                nested_differences = find_keys_only_in_config(config[key], template[key], parent_key=full_key)
+                differences.extend(nested_differences)
+
+    return differences
+
 
 def load_config(config_file):
-    with open(config_file) as config:
-        return json.load(config)
+    if not os.path.exists(config_file):
+        CLI.warning(f'File {config_file} does not exist. Returning empty config')
+        return {}
+
+    with open(config_file, "r") as config:
+        try:
+            return json.load(config)
+        except JSONDecodeError as e:
+            CLI.error(f"Failed to load config from file {config_file}: {e}")
+
+
+def check_config(config):
+    # Load config template file
+    current_directory = dirname(abspath(__file__))
+    template_path = normpath(f'{current_directory}/mantis.tpl')
+    template = load_config(template_path)
+
+    # validate config file
+    config_keys_only = find_keys_only_in_config(config, template)
+
+    # remove custom connections
+    config_keys_only = list(filter(lambda x: not x.startswith('connections.'), config_keys_only))
+
+    if config_keys_only:
+        CLI.error(f"Config file validation failed. Unknown config keys: {config_keys_only}")

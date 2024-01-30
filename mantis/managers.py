@@ -8,7 +8,7 @@ from time import sleep
 
 from mantis.crypto import Crypto
 from mantis.environment import Environment
-from mantis.helpers import CLI, Colors, find_config, load_config
+from mantis.helpers import CLI, Colors, find_config, load_config, check_config
 
 
 class BaseManager(object):
@@ -116,6 +116,7 @@ class BaseManager(object):
 
     def init_config(self, config):
         self.config = config
+        self.check_config()
         self.config_file_path = path.normpath(path.join(self.config_file, os.pardir))
         self.key_path = self.config.get('encryption', {}).get('folder', '<MANTIS>').replace('<MANTIS>', self.config_file_path)
         self.configs_path = self.config.get('configs', {}).get('folder', '<MANTIS>/configs').replace('<MANTIS>', self.config_file_path)
@@ -125,7 +126,10 @@ class BaseManager(object):
         self.key_file = path.normpath(path.join(self.key_path, 'mantis.key'))
         
         # Get environment settings
-        self.PROJECT_NAME = self.config['project_name']
+        self.PROJECT_NAME = self.config.get('project_name', "")
+
+    def check_config(self):
+        check_config(self.config)
 
     def init_environment(self):
         self.env = Environment(
@@ -140,7 +144,7 @@ class BaseManager(object):
         self.CONTAINER_PREFIX = self.PROJECT_NAME
         self.IMAGE_PREFIX = self.PROJECT_NAME
 
-        compose_prefix = f"docker-compose.{self.config['compose']['name']}".rstrip('.')
+        compose_prefix = f"docker-compose.{self.config.get('compose', {}).get('name', '')}".rstrip('.')
         self.compose_file = os.path.join(self.compose_path, f'{compose_prefix}.{self.env.id}.yml')
 
     def check_environment_encryption(self, env_file):
