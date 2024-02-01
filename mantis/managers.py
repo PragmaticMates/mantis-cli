@@ -613,7 +613,7 @@ class BaseManager(object):
         self.try_to_reload_webserver()
 
         # clean
-        CLI.step(3, 3, 'Prune Docker images and volumes')
+        CLI.step(3, 3, 'Prune Docker images')
         self.clean()
 
     def deploy(self):
