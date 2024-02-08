@@ -47,7 +47,7 @@ class Crypto(object):
             CLI.error('Decryption failed. Check if data are not corrupted.')
 
         try:
-            cipher = AES.new(key.strip().encode(), AES.MODE_SIV)
+            cipher = AES.new(key.encode(), AES.MODE_SIV)
             data = cipher.decrypt_and_verify(data['ciphertext'], data['tag'])
         except ValueError as e:
             if str(e) == 'MAC check failed':

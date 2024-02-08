@@ -200,7 +200,7 @@ class BaseManager(object):
             return os.environ.get('MANTIS_KEY', None)
 
         with open(self.key_file, "r") as f:
-            return f.read()
+            return f.read().strip()
 
     def generate_key(self):
         CLI.info(f'Deterministic encryption: ', end='')
