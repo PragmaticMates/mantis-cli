@@ -5,6 +5,9 @@
     },
     "Postgres": {
       "service": null
+    },
+    "Nginx": {
+      "service": null
     }
   },
   "project_name": "",

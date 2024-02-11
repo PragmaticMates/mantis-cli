@@ -84,6 +84,16 @@ class CLI(object):
     def step(index, total, text, end='\n', return_value=False):
         return CLI.print_or_return(text=f'[{index}/{total}] {text}', color=Colors.YELLOW, end=end, return_value=return_value)
 
+    @staticmethod
+    def link(uri, label=None):
+        if label is None: 
+            label = uri
+        parameters = ''
+
+        # OSC 8 ; params ; URI ST <name> OSC 8 ;; ST 
+        escape_mask = '\033]8;{};{}\033\\{}\033]8;;\033\\'
+
+        return escape_mask.format(parameters, uri, label)
 
 def random_string(n=10):
     import random
@@ -187,6 +197,7 @@ def load_config(config_file):
             CLI.error(f"Failed to load config from file {config_file}: {e}")
 
 
+
 def check_config(config):
     # Load config template file
     current_directory = dirname(abspath(__file__))
@@ -200,4 +211,5 @@ def check_config(config):
     config_keys_only = list(filter(lambda x: not x.startswith('connections.'), config_keys_only))
 
     if config_keys_only:
-        CLI.error(f"Config file validation failed. Unknown config keys: {config_keys_only}")
+        template_link = CLI.link('https://github.com/PragmaticMates/mantis-cli/blob/master/mantis/mantis.tpl', 'template')
+        CLI.error(f"Config file validation failed. Unknown config keys: {config_keys_only}. Check {template_link} for available attributes.")
