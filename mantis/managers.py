@@ -524,14 +524,14 @@ class BaseManager(object):
         elif build_tool == 'docker':
             for service, info in self.services_to_build().items():
                 platform = f"--platform={info['platform']}" if info['platform'] != '' else ''
-                image = f"-t {info['image']}" if info['image'] != '' else ''
+                image = info['image'] if info['image'] != '' else f'{self.PROJECT_NAME}-{service}'.lstrip('-')
 
                 # build paths for docker build command (paths in compose are relative to compose file, but paths for docker command are relative to $PWD)
                 context = normpath(path.join(dirname(self.compose_file), info['context']))
                 dockerfile = normpath(path.join(context, info['dockerfile']))
 
                 # Build service using docker
-                self.docker(f"build {context} {build_args} {platform} {image} -f {dockerfile} {params}", use_connection=False)
+                self.docker(f"build {context} {build_args} {platform} -t {image} -f {dockerfile} {params}", use_connection=False)
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
