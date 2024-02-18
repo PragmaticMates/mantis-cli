@@ -6,7 +6,16 @@ class Django():
 
     @property
     def django_container(self):
-        return f"{self.CONTAINER_PREFIX}{self.get_container_suffix(self.django_service)}"
+        container_name = f"{self.CONTAINER_PREFIX}{self.get_container_suffix(self.django_service)}"
+        container_name_with_suffix = f"{container_name}-1"
+
+        if container_name_with_suffix in self.get_containers():
+            return container_name_with_suffix
+        
+        if container_name in self.get_containers():
+            return container_name
+        
+        CLI.error(f"Container {container_name} not found")
 
     def shell(self):
         CLI.info('Connecting to Django shell...')
