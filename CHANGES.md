@@ -74,7 +74,9 @@
 
 ## v12.2.0 (2024-01-05) 
 - custom docker compose command 
-- automatic config path discover, v12.1.0 
+
+## v12.1.0 (2024-01-04)
+- automatic config path discover
 
 ## v12.0.0 (2024-01-03) 
 - improved deployment 
