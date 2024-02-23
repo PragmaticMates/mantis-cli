@@ -1,5 +1,9 @@
 # Release notes
 
+## v15.0.0 (2024-02-23)
+- README.md
+- CHANGES.md
+
 ## v14.6.0 (2024-02-18)
 - django container checks for suffix as well
 
