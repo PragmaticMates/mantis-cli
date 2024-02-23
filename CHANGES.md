@@ -1,7 +1,7 @@
 # Release notes
 
 ## v14.6.0 (2024-02-18)
-- django container checks for suffix as well which
+- django container checks for suffix as well
 
 ## v14.5.5 (2024-02-15)
 - fixed local mantis image during build using docker tool
