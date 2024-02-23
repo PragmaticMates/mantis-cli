@@ -61,12 +61,10 @@ Connection for each environment except localhost can be defined either as an SSH
 For example:
 
 ```json
-...
 "connections": {
     "stage": "context://<context_name>",
     "production": "ssh://<user>@<host>:<port>"
 }
-...
 ```
 
 ### Encryption
@@ -95,9 +93,9 @@ mantis [--mode=remote|ssh|host] [environment] --command[:params]
 
 ### Modes
 
-    --mode=remote  connects to host remotely from local machine (default)
-    --mode=ssh     connects to host via ssh and run mantis on remote machine
-    --mode=host    runs mantis on remote machine directly')
+    --mode=remote  runs commands remotely from local machine using DOCKER_HOST or DOCKER_CONTEXT (default)
+    --mode=ssh     connects to host via ssh and run all mantis commands on remote machine directly (nantis-cli needs to be installed on server)
+    --mode=host    runs mantis on host machine directly without invoking connection (used as proxy for ssh mode)')
 
 ### Environments
 

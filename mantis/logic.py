@@ -103,9 +103,9 @@ def main():
 
     if mode not in ['remote', 'ssh', 'host']:
         CLI.error('Incorrect mode. Usage of modes:\n\
-    --mode=remote \tconnects to host remotely from local machine (default)\n\
-    --mode=ssh \t\tconnects to host via ssh and run mantis on remote machine\n\
-    --mode=host \truns mantis on remote machine directly')
+    --mode=remote \truns commands remotely from local machine using DOCKER_HOST or DOCKER_CONTEXT (default)\n\
+    --mode=ssh \t\tconnects to host via ssh and run all mantis commands on remote machine directly (nantis-cli needs to be installed on server)\n\
+    --mode=host \truns mantis on host machine directly without invoking connection (used as proxy for ssh mode)')
 
     hostname = os.popen('hostname').read().rstrip("\n")
 
@@ -146,7 +146,7 @@ def main():
     if mode == 'ssh':
         cmds = [
             f'cd {manager.project_path}',
-            f'time mantis {environment_id} --mode=host {" ".join(commands)}'
+            f'mantis {environment_id} --mode=host {" ".join(commands)}'
         ]
         cmd = ';'.join(cmds)
         exec = f"ssh -t {manager.user}@{manager.host} -p {manager.port} '{cmd}'"
