@@ -49,11 +49,25 @@ You can use ``<MANTIS>`` variable in your paths if needed as a relative referenc
 | project_path             | string | path to folder with project files on remote server           |
 | connections              | dict   | definition of your connections for each environment          |
 
-See [template file](https://github.com/PragmaticMates/mantis-cli/blob/master/mantis/mantis.tpl) for exact JSON structure.
-
 TODO:
 - default values
-- definition of connections
+
+See [template file](https://github.com/PragmaticMates/mantis-cli/blob/master/mantis/mantis.tpl) for exact JSON structure.
+
+### Connections
+
+Connection for each environment except localhost can be defined either as an SSH or Docker context:
+
+For example:
+
+```json
+...
+"connections": {
+    "stage": "context://<context_name>",
+    "production": "ssh://<user>@<host>:<port>"
+}
+...
+```
 
 ### Encryption
 
