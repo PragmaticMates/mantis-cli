@@ -83,6 +83,26 @@ Save key to **mantis.key** file:
 echo <MANTIS_KEY> > /path/to/encryption/folder/mantis.key
 ```
 
+Then you can encrypt your environment files using symmetric encryption. 
+Every environment variable is encrypted separately instead of encrypting the whole file for better tracking of changes in VCS.
+
+```bash
+mantis <ENVIRONEMNT> --encrypt-env
+```
+
+Decryption is easy like this:
+
+```bash
+mantis <ENVIRONEMNT> --decrypt-env
+```
+
+When decrypting, mantis prompts user for confirmation. 
+You can bypass that by forcing decryption which can be useful in CI/CD pipeline:
+
+```bash
+mantis <ENVIRONEMNT> --decrypt-env:force
+```
+
 ## Usage
 
 General usage of mantis-cli has this format:
@@ -210,6 +230,53 @@ The deployment process consists of multiple steps:
 - cleaning docker resources (without volumes)
 
 Docker container names use '-' as word separator (docker compose v2 convention).
+
+### 4. Inspect
+
+Once deployed, you can verify the container status:
+
+```bash
+mantis <ENVIRONEMNT> --status
+```
+
+list all docker networks:
+
+```bash
+mantis <ENVIRONMENT> --networks
+```
+
+and also check all container logs:
+
+```bash
+mantis <ENVIRONEMNT> --logs
+```
+
+If you need to follow logs of a specific container, you can do it by passing container name to command:
+
+```bash
+mantis <ENVIRONMENT> --logs:<container-name>
+```
+
+### 5. Another useful commands
+
+Sometimes, instead of calling whole deployment process, you just need to call compose commands directly:
+
+```bash
+mantis <ENVIRONEMNT> --up
+mantis <ENVIRONEMNT> --down
+mantis <ENVIRONEMNT> --restart
+mantis <ENVIRONEMNT> --stop
+mantis <ENVIRONEMNT> --kill
+mantis <ENVIRONEMNT> --start
+```
+
+Commands over a single container:
+
+```bash
+mantis <ENVIRONMENT> --bash:container-name
+mantis <ENVIRONMENT> --sh:container-name
+mantis <ENVIRONMENT> --run:params
+```
 
 ## Zero-downtime deployment
 
