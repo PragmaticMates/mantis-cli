@@ -93,9 +93,22 @@ mantis [--mode=remote|ssh|host] [environment] --command[:params]
 
 ### Modes
 
-    --mode=remote  runs commands remotely from local machine using DOCKER_HOST or DOCKER_CONTEXT (default)
-    --mode=ssh     connects to host via ssh and run all mantis commands on remote machine directly (nantis-cli needs to be installed on server)
-    --mode=host    runs mantis on host machine directly without invoking connection (used as proxy for ssh mode)')
+Mantis can operate in 3 different modes depending on a way it connects to remote machhine
+
+
+#### Remote mode ```--mode=remote``` 
+
+Runs commands remotely from local machine using DOCKER_HOST or DOCKER_CONTEXT (default)
+
+#### SSH mode ```--mode=ssh```
+
+Connects to host via ssh and run all mantis commands on remote machine directly (nantis-cli needs to be installed on server)
+
+
+#### Host mode ```--mode=host```
+
+Runs mantis on host machine directly without invoking connection (used as proxy for ssh mode)
+
 
 ### Environments
 
