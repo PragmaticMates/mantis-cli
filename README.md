@@ -193,7 +193,7 @@ mantis <ENVIRONEMNT --push
 
 ### 3. Deployment
 
-Deployment to your remote server is being executing by calling simple command:
+Deployment to your remote server is being executed by calling simple command:
 
 ```bash
 mantis <ENVIRONMENT> --deploy
