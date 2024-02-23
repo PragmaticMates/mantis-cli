@@ -8,6 +8,7 @@ setup(
     version=VERSION,
     description='Management command to build and deploy webapps, especially based on Django',
     long_description=open('README.md').read(),
+    long_description_content_type="text/markdown",
     author='Erik Telepovský',
     author_email='info@pragmaticmates.com',
     maintainer='Pragmatic Mates',
