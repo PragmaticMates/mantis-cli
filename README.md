@@ -223,7 +223,7 @@ The deployment process consists of multiple steps:
 
 - If using --mode=ssh, mantis uploads mantis config, environment files and compose file to server
 - pulling docker images from repositories
-- zero-downtime deployment of running containers (if any)
+- [zero-downtime deployment](https://github.com/PragmaticMates/mantis-cli?tab=readme-ov-file#zero-downtime-deployment) of running containers (if any)
 - calling docker compose up to start containers
 - removing numeric suffixes from container names (if scale==1)
 - reloading webserver (if found suitable extension)
