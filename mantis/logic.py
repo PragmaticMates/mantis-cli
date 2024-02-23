@@ -1,44 +1,123 @@
-import os, sys
+import os
+import json
+from json.decoder import JSONDecodeError
+from os.path import dirname, normpath, abspath
+from prettytable import PrettyTable
 
-from mantis import VERSION
-from mantis.helpers import Colors, CLI, find_config, load_config
+from mantis.helpers import CLI, import_string
 
 
-def parse_args():
-    import sys
+def find_config(environment_id=None):
+    env_path = os.environ.get('MANTIS_CONFIG', None)
 
-    d = {
-        'environment_id': None,
-        'commands': [],
-        'settings': {}
-    }
+    if env_path and env_path != '':
+        CLI.info(f'Mantis config defined by environment variable $MANTIS_CONFIG: {env_path}')
+        return env_path
 
-    arguments = sys.argv.copy()
-    arguments.pop(0)
+    CLI.info('Environment variable $MANTIS_CONFIG not found. Looking for file mantis.json...')
+    paths = os.popen('find . -name mantis.json').read().strip().split('\n')
 
-    for arg in arguments:
-        if not arg.startswith('-'):
-            d['environment_id'] = arg
-        # elif '=' in arg and ':' not in arg:
-        elif '=' in arg:
-            s, v = arg.split('=', maxsplit=1)
-            d['settings'][s.strip('-')] = v
+    # Remove empty strings
+    paths = list(filter(None, paths))
+
+    # Count found mantis files
+    total_mantis_files = len(paths)
+
+    # No mantis file found
+    if total_mantis_files == 0:
+        DEFAULT_PATH = 'configs/mantis.json'
+        CLI.info(f'mantis.json file not found. Using default value: {DEFAULT_PATH}')
+        return DEFAULT_PATH
+
+    # Single mantis file found
+    if total_mantis_files == 1:
+        CLI.info(f'Found 1 mantis.json file: {paths[0]}')
+        return paths[0]
+
+    # Multiple mantis files found
+    CLI.info(f'Found {total_mantis_files} mantis.json files:')
+
+    table = PrettyTable(align='l')
+    table.field_names = ["#", "Path", "Project name", "Connections"]
+
+    for index, path in enumerate(paths):
+        config = load_config(path)
+        connections = config.get('connections', {}).keys()
+        project_name = config.get('project_name', '')
+
+        colorful_connections = []
+        for connection in connections:
+            color = 'success' if connection == environment_id else 'warning'
+            colorful_connections.append(getattr(CLI, color)(connection, end='', return_value=True))
+
+        table.add_row([index + 1, normpath(dirname(path)), project_name, ', '.join(colorful_connections)])
+
+    print(table)
+    CLI.danger(f'[0] Exit now and define $MANTIS_CONFIG environment variable')
+
+    path_index = None
+    while path_index is None:
+        path_index = input('Define which one to use: ')
+        if not path_index.isdigit() or int(path_index) > len(paths):
+            path_index = None
         else:
-            d['commands'].append(arg)
+            path_index = int(path_index)
 
-    return d
+    if path_index == 0:
+        exit()
 
-
-def nested_set(dic, keys, value):
-    for key in keys[:-1]:
-        dic = dic.setdefault(key, {})
-    dic[keys[-1]] = value
+    return paths[path_index - 1]
 
 
-def import_string(path):
-    components = path.split('.')
-    mod = __import__('.'.join(components[0:-1]), globals(), locals(), [components[-1]])
-    return getattr(mod, components[-1])
+def find_keys_only_in_config(config, template, parent_key=""):
+    differences = []
+
+    # Iterate over keys in config
+    for key in config:
+        # Construct the full key path
+        full_key = parent_key + "." + key if parent_key else key
+
+        # Check if key exists in template
+        if key not in template:
+            differences.append(full_key)
+        else:
+            # Recursively compare nested dictionaries
+            if isinstance(config[key], dict) and isinstance(template[key], dict):
+                nested_differences = find_keys_only_in_config(config[key], template[key], parent_key=full_key)
+                differences.extend(nested_differences)
+
+    return differences
+
+
+def load_config(config_file):
+    if not os.path.exists(config_file):
+        CLI.warning(f'File {config_file} does not exist. Returning empty config')
+        return {}
+
+    with open(config_file, "r") as config:
+        try:
+            return json.load(config)
+        except JSONDecodeError as e:
+            CLI.error(f"Failed to load config from file {config_file}: {e}")
+
+
+def check_config(config):
+    # Load config template file
+    current_directory = dirname(abspath(__file__))
+    template_path = normpath(f'{current_directory}/mantis.tpl')
+    template = load_config(template_path)
+
+    # validate config file
+    config_keys_only = find_keys_only_in_config(config, template)
+
+    # remove custom connections
+    config_keys_only = list(filter(lambda x: not x.startswith('connections.'), config_keys_only))
+
+    if config_keys_only:
+        template_link = CLI.link('https://github.com/PragmaticMates/mantis-cli/blob/master/mantis/mantis.tpl',
+                                 'template')
+        CLI.error(
+            f"Config file validation failed. Unknown config keys: {config_keys_only}. Check {template_link} for available attributes.")
 
 
 def get_extension_classes(extensions):
@@ -82,85 +161,6 @@ def get_manager(environment_id, mode):
             setattr(manager, f'{extension}_service'.lower(), extension_params['service'])
 
     return manager
-
-
-def main():
-    # check params
-    params = parse_args()
-
-    # version info
-    version_info = f'Mantis v{VERSION}'
-
-    if params['commands'] == ['--version']:
-        return print(version_info)
-
-    if len(params['commands']) == 0:
-        CLI.error('Missing commands')
-
-    environment_id = params['environment_id']
-    commands = params['commands']
-    mode = params['settings'].get('mode', 'remote')
-
-    if mode not in ['remote', 'ssh', 'host']:
-        CLI.error('Incorrect mode. Usage of modes:\n\
-    --mode=remote \truns commands remotely from local machine using DOCKER_HOST or DOCKER_CONTEXT (default)\n\
-    --mode=ssh \t\tconnects to host via ssh and run all mantis commands on remote machine directly (nantis-cli needs to be installed on server)\n\
-    --mode=host \truns mantis on host machine directly without invoking connection (used as proxy for ssh mode)')
-
-    hostname = os.popen('hostname').read().rstrip("\n")
-
-    # get manager
-    manager = get_manager(environment_id, mode)
-
-    # check config settings
-    settings_config = params['settings'].get('config', None)
-
-    if settings_config:
-        # override manager config
-        for override_config in settings_config.split(','):
-            key, value = override_config.split('=')
-            nested_set(
-                dic=manager.config,
-                keys=key.split('.'),
-                value=value
-            )
-
-    environment_intro = f'Environment ID = {Colors.BOLD}{manager.environment_id}{Colors.ENDC}, ' if manager.environment_id else ''
-
-    if manager.connection:
-        if manager.host:
-            host_intro = f'{Colors.RED}{manager.host}{Colors.ENDC}, '
-        else:
-            CLI.error(f'Invalid host: {manager.host}')
-    else:
-        host_intro = ''
-
-    heading = f'{version_info}, '\
-              f'{environment_intro}'\
-              f'{host_intro}'\
-              f'mode: {Colors.GREEN}{manager.mode}{Colors.ENDC}, '\
-              f'hostname: {Colors.BLUE}{hostname}{Colors.ENDC}'
-
-    print(heading)
-
-    if mode == 'ssh':
-        cmds = [
-            f'cd {manager.project_path}',
-            f'mantis {environment_id} --mode=host {" ".join(commands)}'
-        ]
-        cmd = ';'.join(cmds)
-        exec = f"ssh -t {manager.user}@{manager.host} -p {manager.port} '{cmd}'"
-        os.system(exec)
-    else:
-        # execute all commands
-        for command in commands:
-            if ':' in command:
-                command, params = command.split(':')
-                params = params.split(',')
-            else:
-                params = []
-
-            execute(manager, command, params)
 
 
 def execute(manager, command, params):

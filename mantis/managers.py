@@ -8,7 +8,8 @@ from time import sleep
 
 from mantis.crypto import Crypto
 from mantis.environment import Environment
-from mantis.helpers import CLI, Colors, find_config, load_config, check_config
+from mantis.helpers import CLI, Colors
+from mantis.logic import find_config, load_config, check_config
 
 
 class BaseManager(object):
