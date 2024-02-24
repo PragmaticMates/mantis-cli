@@ -642,7 +642,8 @@ class BaseManager(object):
                 replicas = self.get_deploy_replicas(service)
                 number_of_containers = self.get_number_of_containers(service)
 
-                if number_of_containers != 0 and number_of_containers != replicas:
+                # ensure the number of containers is at least as default number of replicas
+                if number_of_containers > replicas:
                     scales[service] = number_of_containers
 
             scale_param = ' '.join([f'--scale {service}={scale}' for service, scale in scales.items()])
@@ -672,7 +673,7 @@ class BaseManager(object):
 
         # run new containers
         scale = num_containers * 2
-        self.up(f'--no-deps --no-recreate --scale {service}={scale}')
+        self.scale(service, scale)
 
         # healthcheck
         new_containers = self.get_containers(prefix=container_prefix, exclude=old_containers)
@@ -790,6 +791,9 @@ class BaseManager(object):
     def down(self, params=''):
         CLI.info(f'Running down {params}...')
         self.docker_compose(f'down {params}')
+
+    def scale(self, service, scale):
+        self.up(f'--no-deps --no-recreate --scale {service}={scale}')
 
     def remove(self, params=''):
         CLI.info('Removing containers...')
