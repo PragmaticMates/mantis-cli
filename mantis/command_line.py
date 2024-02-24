@@ -171,6 +171,6 @@ def help(manager):
 
         docs = method.__doc__ or ''
 
-        table.add_row([command, docs.strip()])
+        table.add_row([f"{command}{params}", docs.strip()])
 
     print(table)

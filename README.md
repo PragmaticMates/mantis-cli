@@ -137,49 +137,63 @@ The environment is also used as an identifier for remote connection.
 
 ### Commands
 
-| command / shortcut                        | environment required | description                                                                                                 | params         |
-|-------------------------------------------|:--------------------:|-------------------------------------------------------------------------------------------------------------|----------------|
-| *--version*                               |        false         | prints the mantis-cli version                                                                               |                |
-| *--check-config*                          |        false         | validates config file according to template                                                                 |                |
-| *--generate-key*                          |        false         | creates new encryption key                                                                                  |                |
-| *--read-key*                              |        false         | returns value of mantis encryption key                                                                      |                |
-| *--encrypt-env[:force]*                   |         TRUE         | encrypts all environment files (force param skips user confirmation)                                        |                |
-| *--decrypt-env[:force]*                   |         TRUE         | decrypts all environment files (force param skips user confirmation)                                        |                |
-| *--check-env*                             |         TRUE         | compares encrypted and decrypted env files                                                                  |                |
-| *--contexts*                              |        false         | prints all docker contexts                                                                                  |                |
-| *--create-context*                        |        false         | creates docker context using user inputs                                                                    |                |
-| *--healthcheck:container-name / -hc*      |         TRUE         | checks health of given project container                                                                    | container name |
-| *--build[:params] / -b*                   |         TRUE         | builds all services with Dockerfiles                                                                        | custom params  |
-| *--services*                              |         TRUE         | prints all defined services                                                                                 |                |
-| *--services-to-build*                     |         TRUE         | prints all services which will be build                                                                     |                |
-| *--push*                                  |         TRUE         | push built images to repository                                                                             |                |
-| *--pull / -p*                             |         TRUE         | pulls required images for services                                                                          |                |
-| *--upload / -u*                           |         TRUE         | uploads mantis config, compose file <br/>and environment files to server                                    |                |
-| *--restart*                               |         TRUE         | restarts all containers by calling compose down and up                                                      |                |
-| *--deploy / -d*                           |         TRUE         | uploads files, pulls images, runs zero-downtime deployment, <br/>removes suffixes, reloads webserver, clean |                |
-| *--zero-downtime[:service]*               |         TRUE         | runs zero-downtime deployment of services (or given service)                                                | service        |
-| *--remove-suffixes[:prefix]*              |         TRUE         | removes numerical suffixes from container names (if scale == 1)                                             | prefix         |
-| *--restart-service:service*               |         TRUE         | stops, removes and recreates container for given service                                                    | service        |
-| *--stop[:container-name]*                 |         TRUE         | stops all or given project container                                                                        | container name |
-| *--kill[:container-name]*                 |         TRUE         | kills all or given project container                                                                        | container name |
-| *--start[:container-name]*                |         TRUE         | starts all or given project container                                                                       | container name |
-| *--run:params*                            |         TRUE         | calls compose run with params                                                                               | params         |
-| *--up[:params]*                           |         TRUE         | calls compose up (with optional params)                                                                     | params         |
-| *--down[:params]*                         |         TRUE         | calls compose down (with optional params)                                                                   | params         |
-| *--remove[:params]*                       |         TRUE         | removes all or given project container                                                                      | container name |
-| *--clean / -c*                            |         TRUE         | clean images, containers, networks                                                                          |                |
-| *--clean:--volumes*                       |         TRUE         | same as --clean but also removes volumes                                                                    |                |
-| *--status / -s*                           |         TRUE         | prints images and containers                                                                                |                |
-| *--networks / -n*                         |         TRUE         | prints docker networks                                                                                      |                |
-| *--logs[:container-name] / -l*            |         TRUE         | prints logs of all or given project container                                                               | container name |
-| *--bash:container-name*                   |         TRUE         | runs bash in container                                                                                      | container name |
-| *--sh:container-name*                     |         TRUE         | runs sh in container                                                                                        | container name |
-| *--get-containers[:prefix]*               |         TRUE         | prints all project containers                                                                               | container name |
-| *--get-container-project:container-name*  |         TRUE         | prints project name of given container                                                                      | container name |
-| *--get-service-containers:service*        |         TRUE         | prints container names of given service                                                                     | container name |
-| *--get-number-of-containers:service*      |         TRUE         | prints number of containers for given service                                                               | container name |
-| *--get-healthcheck-config:container-name* |         TRUE         | prints health-check config (if any) of given container                                                      | container name |
-| *--get-deploy-replicas:service*           |         TRUE         | returns default number of deploy replicas of given services                                                 | container name |
+| Command / Shortcut                           | Description                                                                                                                     |
+|----------------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------|
+| --bash:params                                | Runs bash in container                                                                                                          |
+| --build[:params] / -b                        | Builds all services with Dockerfiles                                                                                            |
+| --check-config                               | Validates config file according to template                                                                                     |
+| --check-env                                  | Compares encrypted and decrypted env files                                                                                      |
+| --check-health:container                     | Checks current health of given container                                                                                        |
+| --clean[:params] / -c                        | Clean images, containers, networks                                                                                              |
+| --contexts                                   | Prints all docker contexts                                                                                                      |
+| --create-context                             | Creates docker context using user inputs                                                                                        |
+| --decrypt-env[:params,env_file,return_value] | Decrypts all environment files (force param skips user confirmation)                                                            |
+| --deploy / -d                                | Runs deployment process: uploads files, pulls images, runs zero-downtime deployment, removes suffixes, reloads webserver, clean |
+| --down[:params]                              | Calls compose down (with optional params)                                                                                       |
+| --encrypt-env[:params,env_file,return_value] | Encrypts all environment files (force param skips user confirmation)                                                            |
+| --exec:params                                | Executes command in container                                                                                                   |
+| --generate-key                               | Creates new encryption key                                                                                                      |
+| --get-container-name:service                 | Constructs container name with project prefix for given service                                                                 |
+| --get-container-suffix:service               | Returns the suffix used for containers for given service                                                                        |
+| --get-deploy-replicas:service                | Returns default number of deploy replicas of given services                                                                     |
+| --get-healthcheck-config:container           | Prints health-check config (if any) of given container                                                                          |
+| --get-healthcheck-start-period:container     | Returns healthcheck start period for given container (if any)                                                                   |
+| --get-image-name:service                     | Constructs image name for given service                                                                                         |
+| --get-image-suffix:service                   | Returns the suffix used for image for given service                                                                             |
+| --get-number-of-containers:service           | Prints number of containers for given service                                                                                   |
+| --get-service-containers:service             | Prints container names of given service                                                                                         |
+| --has-healthcheck:container                  | Checks if given container has defined healthcheck                                                                               |
+| --healthcheck[:container] / -hc              | Execute health-check of given project container                                                                                 |
+| --kill[:params]                              | Kills all or given project container                                                                                            |
+| --logs[:params] / -l                         | Prints logs of all or given project container                                                                                   |
+| --manage:params                              | Runs Django manage command                                                                                                      |
+| --networks / -n                              | Prints docker networks                                                                                                          |
+| --pg-dump[:data_only,table]                  | Backups PostgreSQL database [data and structure]                                                                                |
+| --pg-dump-data[:table]                       | Backups PostgreSQL database [data only]                                                                                         |
+| --pg-restore[:filename,table]                | Restores database from backup [data and structure]                                                                              |
+| --pg-restore-data:params                     | Restores database from backup [data only]                                                                                       |
+| --psql                                       | Starts psql console                                                                                                             |
+| --pull[:params] / -p                         | Pulls required images for services                                                                                              |
+| --push[:params]                              | Push built images to repository                                                                                                 |
+| --read-key                                   | Returns value of mantis encryption key                                                                                          |
+| --remove[:params]                            | Removes all or given project container                                                                                          |
+| --remove-suffixes[:prefix]                   | Removes numerical suffixes from container names (if scale == 1)                                                                 |
+| --restart[:service]                          | Restarts all containers by calling compose down and up                                                                          |
+| --restart-service:service                    | Stops, removes and recreates container for given service                                                                        |
+| --run:params                                 | Calls compose run with params                                                                                                   |
+| --scale:service,scale                        | Scales service to given scale                                                                                                   |
+| --send-test-email                            | Sends test email to admins using Django 'sendtestemail' command                                                                 |
+| --services                                   | Prints all defined services                                                                                                     |
+| --services-to-build                          | Prints all services which will be build                                                                                         |
+| --sh:params                                  | Runs sh in container                                                                                                            |
+| --shell                                      | Runs and connects to Django shell                                                                                               |
+| --start[:params]                             | Starts all or given project container                                                                                           |
+| --status / -s                                | Prints images and containers                                                                                                    |
+| --stop[:params]                              | Stops all or given project container                                                                                            |
+| --try-to-reload-webserver                    | Tries to reload webserver (if suitable extension is available)                                                                  |
+| --up[:params]                                | Calls compose up (with optional params)                                                                                         |
+| --upload / -u                                | Uploads mantis config, compose file <br/>and environment files to server                                                        |
+| --zero-downtime[:service]                    | Runs zero-downtime deployment of services (or given service)                                                                    |
 
 Few examples:
 

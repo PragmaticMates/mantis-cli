@@ -1,3 +1,5 @@
+import datetime
+
 from mantis.helpers import CLI
 
 
@@ -9,6 +11,9 @@ class Postgres():
         return f"{self.CONTAINER_PREFIX}{self.get_container_suffix(self.postgres_service)}"
 
     def psql(self):
+        """
+        Starts psql console
+        """
         CLI.info('Starting psql...')
         env = self.env.load()
         self.docker(f'exec -it {self.postgres_container} psql -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W')
@@ -16,6 +21,9 @@ class Postgres():
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
     def pg_dump(self, data_only=False, table=None):
+        """
+        Backups PostgreSQL database [data and structure]
+        """
         if data_only:
             compressed = True
             data_only_param = '--data-only'
@@ -39,9 +47,15 @@ class Postgres():
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
     def pg_dump_data(self, table=None):
+        """
+        Backups PostgreSQL database [data only]
+        """
         self.pg_dump(data_only=True, table=table)
 
     def pg_restore(self, filename, table=None):
+        """
+        Restores database from backup [data and structure]
+        """
         if table:
             CLI.info(f'Restoring table {table} from file {filename}')
             table_params = f'--table {table}'
@@ -57,5 +71,8 @@ class Postgres():
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html
 
     def pg_restore_data(self, params):
+        """
+        Restores database from backup [data only]
+        """
         filename, table = params.split(',')
         self.pg_restore(filename=filename, table=table)

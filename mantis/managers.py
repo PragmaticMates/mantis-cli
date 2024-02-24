@@ -241,6 +241,11 @@ class AbstractManager(object):
         )
 
     def get_container_project(self, container):
+        """
+        Prints project name of given container
+        :param container: container name
+        :return: project name
+        """
         try:
             container_details = json.loads(self.docker(f'container inspect {container}', return_output=True))
             return container_details[0]["Config"]["Labels"]["com.docker.compose.project"]
@@ -250,6 +255,12 @@ class AbstractManager(object):
         return None
 
     def get_containers(self, prefix='', exclude=[]):
+        """
+        Prints all project containers
+        :param prefix: container prefix
+        :param exclude: exclude containers
+        :return: list of container names
+        """
         containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True) \
             .strip('\n').strip().split('\n')
 
@@ -280,6 +291,9 @@ class BaseManager(AbstractManager):
         check_config(self.config)
 
     def read_key(self):
+        """
+        Returns value of mantis encryption key
+        """
         if not os.path.exists(self.key_file):
             CLI.warning(f'File {self.key_file} does not exist. Reading key from $MANTIS_KEY...')
             return os.environ.get('MANTIS_KEY', None)
@@ -288,6 +302,9 @@ class BaseManager(AbstractManager):
             return f.read().strip()
 
     def generate_key(self):
+        """
+        Creates new encryption key
+        """
         CLI.info(f'Deterministic encryption: ', end='')
         CLI.warning(self.encrypt_deterministically)
 
@@ -297,6 +314,9 @@ class BaseManager(AbstractManager):
         CLI.danger(f'Save it to {self.key_file} and keep safe !!!')
 
     def encrypt_env(self, params='', env_file=None, return_value=False):
+        """
+        Encrypts all environment files (force param skips user confirmation)
+        """
         if env_file is None:
             CLI.info(f'Environment file not specified. Walking all environment files...')
 
@@ -354,6 +374,9 @@ class BaseManager(AbstractManager):
                 CLI.warning(f'Save it to {env_file_encrypted} manually.')
 
     def decrypt_env(self, params='', env_file=None, return_value=False):
+        """
+        Decrypts all environment files (force param skips user confirmation)
+        """
         if env_file is None:
             CLI.info(f'Environment file not specified. Walking all environment files...')
 
@@ -417,6 +440,9 @@ class BaseManager(AbstractManager):
                 CLI.warning(f'Save it to {env_file} manually.')
 
     def check_env(self):
+        """
+        Compares encrypted and decrypted env files
+        """
         if not hasattr(self.env, 'encrypted_files'):
             CLI.error('No encrypted files')
 
@@ -441,9 +467,15 @@ class BaseManager(AbstractManager):
             self.check_environment_encryption(env_file)
 
     def contexts(self):
+        """
+        Prints all docker contexts
+        """
         self.cmd('docker context ls')
 
     def create_context(self):
+        """
+        Creates docker context using user inputs
+        """
         CLI.info('Creating docker context')
         protocol = input("Protocol: (U)nix or (S)sh: ")
 
@@ -484,33 +516,57 @@ class BaseManager(AbstractManager):
         self.contexts()
 
     def get_container_suffix(self, service):
+        """
+        Returns the suffix used for containers for given service
+        """
         delimiter = '-'
         return f'{delimiter}{service}'
 
     def get_container_name(self, service):
+        """
+        Constructs container name with project prefix for given service
+        """
         suffix = self.get_container_suffix(service)
         return f'{self.CONTAINER_PREFIX}{suffix}'.replace('_', '-')
 
     def get_service_containers(self, service):
-        x = self.docker_compose("ps --format '{{.Names}}' %s" % service, return_output=True)
-        return x.strip().split('\n')
+        """
+        Prints container names of given service
+        """
+        containers = self.docker_compose("ps --format '{{.Names}}' %s" % service, return_output=True)
+        return containers.strip().split('\n')
 
     def get_number_of_containers(self, service):
+        """
+        Prints number of containers for given service
+        """
         return len(self.get_service_containers(service))
 
     def get_image_suffix(self, service):
+        """
+        Returns the suffix used for image for given service
+        """
         delimiter = '_'
         return f'{delimiter}{service}'
 
     def get_image_name(self, service):
+        """
+        Constructs image name for given service
+        """
         suffix = self.get_image_suffix(service)
         return f'{self.IMAGE_PREFIX}{suffix}'.replace('-', '_')
 
     def has_healthcheck(self, container):
+        """
+        Checks if given container has defined healthcheck
+        """
         healthcheck_config = self.get_healthcheck_config(container)
         return healthcheck_config and healthcheck_config.get('Test')
 
     def get_healthcheck_start_period(self, container):
+        """
+        Returns healthcheck start period for given container (if any)
+        """
         healthcheck_config = self.get_healthcheck_config(container)
 
         try:
@@ -520,6 +576,9 @@ class BaseManager(AbstractManager):
             return None
 
     def check_health(self, container):
+        """
+        Checks current health of given container
+        """
         if self.has_healthcheck(container):
             command = f'inspect --format="{{{{json .State.Health.Status}}}}" {container}'
             status = self.docker(command, return_output=True).strip(' \n"')
@@ -530,6 +589,9 @@ class BaseManager(AbstractManager):
                 return False, status
 
     def healthcheck(self, container=None):
+        """
+        Execute health-check of given project container
+        """
         if container not in self.get_containers():
             CLI.error(f"Container {container} not found")
 
@@ -579,6 +641,9 @@ class BaseManager(AbstractManager):
             return None
 
     def build(self, params=''):
+        """
+        Builds all services with Dockerfiles
+        """
         CLI.info(f'Building...')
         CLI.info(f'Params = {params}')
 
@@ -615,12 +680,18 @@ class BaseManager(AbstractManager):
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
     def services(self):
+        """
+        Prints all defined services
+        """
         with open(self.compose_file, 'r') as file:
             compose_data = yaml.safe_load(file)
 
         return compose_data.get('services', {}).keys()
 
     def services_to_build(self):
+        """
+        Prints all services which will be build
+        """
         with open(self.compose_file, 'r') as file:
             compose_data = yaml.safe_load(file)
 
@@ -641,6 +712,9 @@ class BaseManager(AbstractManager):
         return data
 
     def push(self, params=''):
+        """
+        Push built images to repository
+        """
         CLI.info(f'Pushing...')
         CLI.info(f'Params = {params}')
 
@@ -648,6 +722,9 @@ class BaseManager(AbstractManager):
         self.docker_compose(f'push {params}', use_connection=False)
 
     def pull(self, params=''):
+        """
+        Pulls required images for services
+        """
         CLI.info('Pulling...')
         CLI.info(f'Params = {params}')
 
@@ -655,6 +732,9 @@ class BaseManager(AbstractManager):
         self.docker_compose(f'pull {params}')
 
     def upload(self):
+        """
+        Uploads mantis config, compose file <br/>and environment files to server
+        """
         if self.env.id == 'local':
             print('Skipping for local...')
         elif not self.connection:
@@ -674,6 +754,9 @@ class BaseManager(AbstractManager):
                     CLI.info(f'{self.config_file} does not exists. Skipping...')
 
     def restart(self, service=None):
+        """
+        Restarts all containers by calling compose down and up
+        """
         if service:
             return self.restart_service(service)
 
@@ -696,6 +779,9 @@ class BaseManager(AbstractManager):
         self.clean()
 
     def deploy(self):
+        """
+        Runs deployment process: uploads files, pulls images, runs zero-downtime deployment, removes suffixes, reloads webserver, clean
+        """
         CLI.info('Deploying...')
         self.upload()
         self.pull()
@@ -726,6 +812,9 @@ class BaseManager(AbstractManager):
         self.clean()
 
     def zero_downtime(self, service=None):
+        """
+        Runs zero-downtime deployment of services (or given service)
+        """
         if not service:
             zero_downtime_services = self.config.get('zero_downtime', [])
             for index, service in enumerate(zero_downtime_services):
@@ -777,6 +866,9 @@ class BaseManager(AbstractManager):
         self.try_to_reload_webserver()
 
     def remove_suffixes(self, prefix=''):
+        """
+        Removes numerical suffixes from container names (if scale == 1)
+        """
         for service in self.services():
             containers = self.get_service_containers(service)
             num_containers = len(containers)
@@ -793,6 +885,9 @@ class BaseManager(AbstractManager):
                     self.docker(f'container rename {container} {new_container}')
 
     def restart_service(self, service):
+        """
+        Stops, removes and recreates container for given service
+        """
         container = self.get_container_name(service)
 
         CLI.underline(f'Recreating {service} container ({container})...')
@@ -813,12 +908,18 @@ class BaseManager(AbstractManager):
         self.remove_suffixes(prefix=container)
 
     def try_to_reload_webserver(self):
+        """
+        Tries to reload webserver (if suitable extension is available)
+        """
         try:
             self.reload_webserver()
         except AttributeError:
             CLI.warning('Tried to reload webserver, but no suitable extension found!')
 
     def stop(self, params=None):
+        """
+        Stops all or given project container
+        """
         CLI.info('Stopping containers...')
 
         containers = self.get_containers() if not params else params.split(' ')
@@ -830,6 +931,9 @@ class BaseManager(AbstractManager):
             self.docker(f'container stop {container}')
 
     def kill(self, params=None):
+        """
+        Kills all or given project container
+        """
         CLI.info('Killing containers...')
 
         containers = self.get_containers() if not params else params.split(' ')
@@ -841,6 +945,9 @@ class BaseManager(AbstractManager):
             self.docker(f'container kill {container}')
 
     def start(self, params=''):
+        """
+        Starts all or given project container
+        """
         CLI.info('Starting containers...')
 
         containers = self.get_containers() if not params else params.split(' ')
@@ -852,21 +959,36 @@ class BaseManager(AbstractManager):
             self.docker(f'container start {container}')
 
     def run(self, params):
+        """
+        Calls compose run with params
+        """
         CLI.info(f'Running {params}...')
         self.docker_compose(f'run {params}')
 
     def up(self, params=''):
+        """
+        Calls compose up (with optional params)
+        """
         CLI.info(f'Starting up {params}...')
         self.docker_compose(f'up {params} -d')
 
     def down(self, params=''):
+        """
+        Calls compose down (with optional params)
+        """
         CLI.info(f'Running down {params}...')
         self.docker_compose(f'down {params}')
 
     def scale(self, service, scale):
+        """
+        Scales service to given scale
+        """
         self.up(f'--no-deps --no-recreate --scale {service}={scale}')
 
     def remove(self, params=''):
+        """
+        Removes all or given project container
+        """
         CLI.info('Removing containers...')
 
         containers = self.get_containers() if params == '' else params.split(' ')
@@ -878,6 +1000,9 @@ class BaseManager(AbstractManager):
             self.docker(f'container rm {container}')
 
     def clean(self, params=''):  # todo clean on all nodes
+        """
+        Clean images, containers, networks
+        """
         CLI.info('Cleaning...')
         # self.docker(f'builder prune')
         self.docker(f'system prune {params} -a --force')
@@ -885,6 +1010,9 @@ class BaseManager(AbstractManager):
         # self.docker(f'container prune --force')
 
     def status(self):
+        """
+        Prints images and containers
+        """
         CLI.info('Getting status...')
         steps = 2
 
@@ -895,6 +1023,9 @@ class BaseManager(AbstractManager):
         self.docker(f'container ls -a --size')
 
     def networks(self):
+        """
+        Prints docker networks
+        """
         CLI.info('Getting networks...')
         CLI.warning('List of Docker networks')
 
@@ -916,6 +1047,9 @@ class BaseManager(AbstractManager):
                 print(f'{network}\t{containers}'.strip())
 
     def logs(self, params=None):
+        """
+        Prints logs of all or given project container
+        """
         CLI.info('Reading logs...')
 
         containers = params.split(' ') if params else self.get_containers()
@@ -927,20 +1061,32 @@ class BaseManager(AbstractManager):
             self.docker(f'logs {container} {lines}')
 
     def bash(self, params):
+        """
+        Runs bash in container
+        """
         CLI.info('Running bash...')
         self.docker(f'exec -it --user root {params} /bin/bash')
         # self.docker_compose(f'run --entrypoint /bin/bash {container}')
 
     def sh(self, params):
+        """
+        Runs sh in container
+        """
         CLI.info('Logging to container...')
         self.docker(f'exec -it --user root {params} /bin/sh')
 
     def exec(self, params):
+        """
+        Executes command in container
+        """
         container, command = params.split(' ', maxsplit=1)
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')
 
     def get_healthcheck_config(self, container):
+        """
+        Prints health-check config (if any) of given container
+        """
         try:
             container_details = json.loads(self.docker(f'container inspect {container}', return_output=True))
             return container_details[0]["Config"]["Healthcheck"]
@@ -950,6 +1096,9 @@ class BaseManager(AbstractManager):
         return None
 
     def get_deploy_replicas(self, service):
+        """
+        Returns default number of deploy replicas of given services
+        """
         with open(self.compose_file, 'r') as file:
             compose_data = yaml.safe_load(file)
 
