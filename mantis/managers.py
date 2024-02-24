@@ -41,15 +41,15 @@ class AbstractManager(object):
 
     @property
     def host(self):
-        return self.connection_details['host']
+        return self.connection_details['host'] if self.connection_details else None
 
     @property
     def user(self):
-        return self.connection_details['user']
+        return self.connection_details['user'] if self.connection_details else None
 
     @property
     def port(self):
-        return self.connection_details['port']
+        return self.connection_details['port'] if self.connection_details else None
 
     def parse_ssh_connection(self, connection):
         return {
@@ -60,6 +60,9 @@ class AbstractManager(object):
 
     @property
     def connection_details(self):
+        if self.env.id is None:
+            return None
+
         property_name = '_connection_details'
         details = {
             'host': None,
@@ -104,7 +107,7 @@ class AbstractManager(object):
 
     @property
     def docker_connection(self):
-        if 'local' in self.env.id:
+        if self.env.id is None or 'local' in self.env.id:
             return ''
 
         if self.mode == 'remote':

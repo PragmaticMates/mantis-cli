@@ -5,6 +5,7 @@ import sys
 from mantis import VERSION
 from mantis.helpers import Colors, CLI, nested_set
 from mantis.logic import get_manager, execute
+from mantis.managers import AbstractManager
 
 
 def parse_args(arguments):
@@ -40,12 +41,19 @@ def run():
     if params['commands'] == ['--version']:
         return print(version_info)
 
-    if len(params['commands']) == 0:
-        CLI.error('Missing commands')
-
+    # get params
     environment_id = params['environment_id']
     commands = params['commands']
     mode = params['settings'].get('mode', 'remote')
+
+    # get manager
+    manager = get_manager(environment_id, mode)
+
+    if params['commands'] == ['--help']:
+        return help(manager)
+
+    if len(params['commands']) == 0:
+        CLI.error('Missing commands')
 
     if mode not in ['remote', 'ssh', 'host']:
         CLI.error('Incorrect mode. Usage of modes:\n\
@@ -54,9 +62,6 @@ def run():
     --mode=host \truns mantis on host machine directly without invoking connection (used as proxy for ssh mode)')
 
     hostname = os.popen('hostname').read().rstrip("\n")
-
-    # get manager
-    manager = get_manager(environment_id, mode)
 
     # check config settings
     settings_config = params['settings'].get('config', None)
@@ -107,3 +112,49 @@ def run():
                 params = []
 
             execute(manager, command, params)
+
+def help(manager):
+    print(f'\nUsage: mantis [--mode=remote|ssh|host] [environment] --command[:params]')
+    print(f'\nCommands:')
+
+    import inspect
+
+    # Get all methods of the class
+    methods = inspect.getmembers(manager, predicate=inspect.ismethod)
+
+    # Iterate over each method
+    for method_name, method in methods:
+        # skip methods of abstract manager
+        if method_name in dir(AbstractManager):
+            continue
+
+        command = method_name.replace('_', '-')
+
+        # Get the method signature
+        signature = inspect.signature(method)
+
+        # Parameters
+        parameters = list(signature.parameters.keys())
+
+        # Check if parameters are optional
+        params_are_optional = True
+
+        for param_name, param in signature.parameters.items():
+            if not param.default:
+                params_are_optional = False
+
+        # Print method name and its parameters
+        print(f"--{command}", end='')
+
+        if signature.parameters:
+            if not params_are_optional:
+                print('[', end='')
+
+            print(':', end='')
+
+            print(','.join(parameters), end='')
+
+            if not params_are_optional:
+                print(']', end='')
+
+        print()

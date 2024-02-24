@@ -4,6 +4,9 @@
 - refactoring logic, helpers and command_line files
 - deployment preserves number of scaled containers
 - new commands: --get-service-containers:service, --get-number-of-containers:service, --get-deploy-replicas:service
+- AbstractManager class
+- refactoring calling docker and docker compose commands
+- --help command print all available commands
 
 ## v15.0.0 (2024-02-23)
 - README.md

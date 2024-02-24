@@ -182,11 +182,7 @@ def execute(manager, command, params):
         manager_method = command.lstrip('-').replace('-', '_')
 
     if manager_method is None or not hasattr(manager, manager_method):
-        CLI.error(f'Invalid command "{command}"')
-
-        # TODO: more sophisticated way to print usage/help
-        # commands = '\n'.join(manager_methods.keys())
-        # CLI.error(f'\n\nUsage: mantis <ENVIRONMENT> \n{commands}')
+        CLI.error(f'Invalid command "{command}". Check mantis --help for more information.')
     else:
         methods_without_environment = ['contexts', 'create_context', 'check_config', 'generate_key', 'read_key']
 
