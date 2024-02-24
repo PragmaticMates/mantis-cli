@@ -3,6 +3,7 @@
 ## v15.1.0 (2024-02-24)
 - refactoring logic, helpers and command_line files
 - deployment preserves number of scaled containers
+- new commands: --get-service-containers:service, --get-number-of-containers:service, --get-deploy-replicas:service
 
 ## v15.0.0 (2024-02-23)
 - README.md

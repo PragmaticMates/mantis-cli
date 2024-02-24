@@ -179,6 +179,7 @@ The environment is also used as an identifier for remote connection.
 | *--get-service-containers:service*        |         TRUE         | prints container names of given service                                                                     | container name |
 | *--get-number-of-containers:service*      |         TRUE         | prints number of containers for given service                                                               | container name |
 | *--get-healthcheck-config:container-name* |         TRUE         | prints health-check config (if any) of given container                                                      | container name |
+| *--get-deploy-replicas:service*           |         TRUE         | returns default number of deploy replicas of given services                                                 | container name |
 
 Few examples:
 

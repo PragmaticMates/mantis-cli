@@ -639,11 +639,11 @@ class BaseManager(object):
         if is_running:
             scales = {}
             for service in self.services():
-                scales[service] = self.get_number_of_containers(service)
+                replicas = self.get_deploy_replicas(service)
+                number_of_containers = self.get_number_of_containers(service)
 
-            # Remove scaling of 0 containers
-            scales = dict(filter(lambda item: item[1] != 0, scales.items()))
-            # TODO: remove default scales
+                if number_of_containers != 0 and number_of_containers != replicas:
+                    scales[service] = number_of_containers
 
             scale_param = ' '.join([f'--scale {service}={scale}' for service, scale in scales.items()])
 
@@ -897,6 +897,15 @@ class BaseManager(object):
             pass
 
         return None
+
+    def get_deploy_replicas(self, service):
+        with open(self.compose_file, 'r') as file:
+            compose_data = yaml.safe_load(file)
+
+        try:
+            return compose_data['services'][service]['deploy']['replicas']
+        except KeyError:
+            return 1
 
     def docker(self, command, return_output=False, use_connection=True):
         docker_connection = self.docker_connection if use_connection else ''
