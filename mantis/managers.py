@@ -274,6 +274,9 @@ class BaseManager(AbstractManager):
     """
 
     def check_config(self):
+        """
+        Validates config file according to template
+        """
         check_config(self.config)
 
     def read_key(self):

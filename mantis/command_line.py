@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 import os
 import sys
+import inspect
+import prettytable
 
 from mantis import VERSION
 from mantis.helpers import Colors, CLI, nested_set
@@ -53,13 +55,10 @@ def run():
         return help(manager)
 
     if len(params['commands']) == 0:
-        CLI.error('Missing commands')
+        CLI.error('Missing commands. Check mantis --help for more information.')
 
     if mode not in ['remote', 'ssh', 'host']:
-        CLI.error('Incorrect mode. Usage of modes:\n\
-    --mode=remote \truns commands remotely from local machine using DOCKER_HOST or DOCKER_CONTEXT (default)\n\
-    --mode=ssh \t\tconnects to host via ssh and run all mantis commands on remote machine directly (nantis-cli needs to be installed on server)\n\
-    --mode=host \truns mantis on host machine directly without invoking connection (used as proxy for ssh mode)')
+        CLI.error('Incorrect mode. Check mantis --help for more information.')
 
     hostname = os.popen('hostname').read().rstrip("\n")
 
@@ -114,10 +113,22 @@ def run():
             execute(manager, command, params)
 
 def help(manager):
-    print(f'\nUsage: mantis [--mode=remote|ssh|host] [environment] --command[:params]')
+    print(f'\nUsage:\n\
+    mantis [--mode=remote|ssh|host] [environment] --command[:params]')
+
+    print('\nModes:\n\
+    remote \truns commands remotely from local machine using DOCKER_HOST or DOCKER_CONTEXT (default)\n\
+    ssh \tconnects to host via ssh and run all mantis commands on remote machine directly (nantis-cli needs to be installed on server)\n\
+    host \truns mantis on host machine directly without invoking connection (used as proxy for ssh mode)')
+
+    print(f'\nEnvironment:\n\
+    Either "local" or any custom environment identifier defined as connection in your config file.')
+
     print(f'\nCommands:')
 
-    import inspect
+    table = prettytable.PrettyTable(align='l')
+    table.set_style(prettytable.SINGLE_BORDER)
+    table.field_names = ["Command", "Description"]
 
     # Get all methods of the class
     methods = inspect.getmembers(manager, predicate=inspect.ismethod)
@@ -144,17 +155,22 @@ def help(manager):
                 params_are_optional = False
 
         # Print method name and its parameters
-        print(f"--{command}", end='')
+        command = f"--{command}"
+        params = ""
 
         if signature.parameters:
             if not params_are_optional:
-                print('[', end='')
+                params += '['
 
-            print(':', end='')
+            params += ':'
 
-            print(','.join(parameters), end='')
+            params += ','.join(parameters)
 
             if not params_are_optional:
-                print(']', end='')
+                params += ']'
 
-        print()
+        docs = method.__doc__ or ''
+
+        table.add_row([command, docs.strip()])
+
+    print(table)
