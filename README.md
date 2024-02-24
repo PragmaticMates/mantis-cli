@@ -287,6 +287,7 @@ mantis <ENVIRONEMNT> --restart
 mantis <ENVIRONEMNT> --stop
 mantis <ENVIRONEMNT> --kill
 mantis <ENVIRONEMNT> --start
+mantis <ENVIRONEMNT> --clean
 ```
 
 Commands over a single container:
