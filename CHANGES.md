@@ -7,6 +7,7 @@
 - AbstractManager class
 - refactoring calling docker and docker compose commands
 - --help prints all available commands
+- normalized paths
 
 ## v15.0.0 (2024-02-23)
 - README.md

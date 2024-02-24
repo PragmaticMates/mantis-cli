@@ -125,12 +125,16 @@ class AbstractManager(object):
         self.config = config
         check_config(self.config)
         self.config_file_path = path.normpath(path.join(self.config_file, os.pardir))
-        self.key_path = self.config.get('encryption', {}).get('folder', '<MANTIS>').replace('<MANTIS>', self.config_file_path)
-        self.configs_path = self.config.get('configs', {}).get('folder', '<MANTIS>/configs').replace('<MANTIS>', self.config_file_path)
-        self.environment_path = self.config.get('environment', {}).get('folder', '<MANTIS>/environments').replace( '<MANTIS>', self.config_file_path)
-        self.compose_path = self.config.get('compose', {}).get('folder', '<MANTIS>/configs/compose').replace('<MANTIS>', self.config_file_path)
+
+        def normalize(path):
+            return os.path.normpath(path.replace('<MANTIS>', self.config_file_path))
+
+        self.key_path = normalize(self.config.get('encryption', {}).get('folder', '<MANTIS>'))
+        self.key_file = normalize(path.join(self.key_path, 'mantis.key'))
+        self.configs_path = normalize(self.config.get('configs', {}).get('folder', '<MANTIS>/configs'))
+        self.environment_path = normalize(self.config.get('environment', {}).get('folder', '<MANTIS>/environments'))
+        self.compose_path = normalize(self.config.get('compose', {}).get('folder', '<MANTIS>/configs/compose'))
         self.compose_command = self.config.get('compose', {}).get('command', 'docker compose')
-        self.key_file = path.normpath(path.join(self.key_path, 'mantis.key'))
 
         # Get environment settings
         self.PROJECT_NAME = self.config.get('project_name', "")

@@ -32,7 +32,7 @@ class Environment(object):
 
     def _get_path(self, id):
         possible_folder_names = [f'.{id}', id]
-        possible_folders = list(map(lambda x: os.path.join(self.folder, x), possible_folder_names))
+        possible_folders = list(map(lambda x: os.path.normpath(os.path.join(self.folder, x)), possible_folder_names))
 
         for environment_path in possible_folders:
             if os.path.exists(environment_path):
