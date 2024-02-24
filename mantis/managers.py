@@ -12,7 +12,10 @@ from mantis.helpers import CLI, Colors
 from mantis.logic import find_config, load_config, check_config
 
 
-class BaseManager(object):
+class AbstractManager(object):
+    """
+    Abstract manager contains methods which should not be available to call using CLI
+    """
     environment_id = None
 
     def __init__(self, config_file=None, environment_id=None, mode='remote'):
@@ -117,20 +120,17 @@ class BaseManager(object):
 
     def init_config(self, config):
         self.config = config
-        self.check_config()
+        check_config(self.config)
         self.config_file_path = path.normpath(path.join(self.config_file, os.pardir))
         self.key_path = self.config.get('encryption', {}).get('folder', '<MANTIS>').replace('<MANTIS>', self.config_file_path)
         self.configs_path = self.config.get('configs', {}).get('folder', '<MANTIS>/configs').replace('<MANTIS>', self.config_file_path)
-        self.environment_path = self.config.get('environment', {}).get('folder', '<MANTIS>/environments').replace('<MANTIS>', self.config_file_path)
+        self.environment_path = self.config.get('environment', {}).get('folder', '<MANTIS>/environments').replace( '<MANTIS>', self.config_file_path)
         self.compose_path = self.config.get('compose', {}).get('folder', '<MANTIS>/configs/compose').replace('<MANTIS>', self.config_file_path)
         self.compose_command = self.config.get('compose', {}).get('command', 'docker compose')
         self.key_file = path.normpath(path.join(self.key_path, 'mantis.key'))
-        
+
         # Get environment settings
         self.PROJECT_NAME = self.config.get('project_name', "")
-
-    def check_config(self):
-        check_config(self.config)
 
     def init_environment(self):
         self.env = Environment(
@@ -194,6 +194,76 @@ class BaseManager(object):
 
         else:
             CLI.success(f'Encrypted and decrypted environments DO match [{env_file}]...')
+
+    def cmd(self, command):
+        command = command.strip()
+
+        error_message = "Error during running command '%s'" % command
+
+        try:
+            print(command)
+            if os.system(command) != 0:
+                CLI.error(error_message)
+                # raise Exception(error_message)
+        except:
+            CLI.error(error_message)
+            # raise Exception(error_message)
+
+    def docker(self, command, return_output=False, use_connection=True):
+        docker_connection = self.docker_connection if use_connection else ''
+
+        cmd = f'{docker_connection} docker {command}'
+
+        if return_output:
+            return os.popen(cmd).read()
+
+        self.cmd(cmd)
+
+    def docker_compose(self, command, return_output=False, use_connection=True):
+        docker_connection = self.docker_connection if use_connection else ''
+
+        cmd = f'{docker_connection} {self.compose_command} -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}'
+
+        if return_output:
+            return os.popen(cmd).read()
+
+        self.cmd(cmd)
+
+    def get_container_project(self, container):
+        try:
+            container_details = json.loads(self.docker(f'container inspect {container}', return_output=True))
+            return container_details[0]["Config"]["Labels"]["com.docker.compose.project"]
+        except (IndexError, KeyError):
+            pass
+
+        return None
+
+    def get_containers(self, prefix='', exclude=[]):
+        containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)\
+            .strip('\n').strip().split('\n')
+
+        # Remove empty strings
+        containers = list(filter(None, containers))
+
+        # get project containers only
+        containers = list(filter(lambda c: self.get_container_project(c) == self.PROJECT_NAME, containers))
+
+        # find containers starting with custom prefix
+        containers = list(filter(lambda s: s.startswith(prefix), containers))
+
+        # exclude not matching containers
+        containers = list(filter(lambda s: s not in exclude, containers))
+
+        return containers
+
+
+class BaseManager(AbstractManager):
+    """
+    Base manager contains methods which should be available to call using CLI
+    """
+
+    def check_config(self):
+        check_config(self.config)
 
     def read_key(self):
         if not os.path.exists(self.key_file):
@@ -355,20 +425,6 @@ class BaseManager(object):
 
             # check encryption values
             self.check_environment_encryption(env_file)
-
-    def cmd(self, command):
-        command = command.strip()
-
-        error_message = "Error during running command '%s'" % command
-
-        try:
-            print(command)
-            if os.system(command) != 0:
-                CLI.error(error_message)
-                # raise Exception(error_message)
-        except:
-            CLI.error(error_message)
-            # raise Exception(error_message)
 
     def contexts(self):
         self.cmd('docker context ls')
@@ -866,33 +922,6 @@ class BaseManager(object):
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')
 
-    def get_containers(self, prefix='', exclude=[]):
-        containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)\
-            .strip('\n').strip().split('\n')
-
-        # Remove empty strings
-        containers = list(filter(None, containers))
-
-        # get project containers only
-        containers = list(filter(lambda c: self.get_container_project(c) == self.PROJECT_NAME, containers))
-
-        # find containers starting with custom prefix
-        containers = list(filter(lambda s: s.startswith(prefix), containers))
-
-        # exclude not matching containers
-        containers = list(filter(lambda s: s not in exclude, containers))
-
-        return containers
-
-    def get_container_project(self, container):
-        try:
-            container_details = json.loads(self.docker(f'container inspect {container}', return_output=True))
-            return container_details[0]["Config"]["Labels"]["com.docker.compose.project"]
-        except (IndexError, KeyError):
-            pass
-
-        return None
-
     def get_healthcheck_config(self, container):
         try:
             container_details = json.loads(self.docker(f'container inspect {container}', return_output=True))
@@ -910,23 +939,3 @@ class BaseManager(object):
             return compose_data['services'][service]['deploy']['replicas']
         except KeyError:
             return 1
-
-    def docker(self, command, return_output=False, use_connection=True):
-        docker_connection = self.docker_connection if use_connection else ''
-
-        cmd = f'{docker_connection} docker {command}'
-
-        if return_output:
-            return os.popen(cmd).read()
-
-        self.cmd(cmd)
-
-    def docker_compose(self, command, return_output=False, use_connection=True):
-        docker_connection = self.docker_connection if use_connection else ''
-
-        cmd = f'{docker_connection} {self.compose_command} -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}'
-
-        if return_output:
-            return os.popen(cmd).read()
-
-        self.cmd(cmd)
