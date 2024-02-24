@@ -137,46 +137,48 @@ The environment is also used as an identifier for remote connection.
 
 ### Commands
 
-| command / shortcut                         | environment required | description                                                                                                 | params         |
-|--------------------------------------------|:--------------------:|-------------------------------------------------------------------------------------------------------------|----------------|
-| *--version*                                |        false         | prints the mantis-cli version                                                                               |                |
-| *--check-config*                           |        false         | validates config file according to template                                                                 |                |
-| *--generate-key*                           |        false         | creates new encryption key                                                                                  |                |
-| *--read-key*                               |        false         | returns value of mantis encryption key                                                                      |                |
-| *--encrypt-env[:force]*                    |         TRUE         | encrypts all environment files (force param skips user confirmation)                                        |                |
-| *--decrypt-env[:force]*                    |         TRUE         | decrypts all environment files (force param skips user confirmation)                                        |                |
-| *--check-env*                              |         TRUE         | compares encrypted and decrypted env files                                                                  |                |
-| *--contexts*                               |        false         | prints all docker contexts                                                                                  |                |
-| *--create-context*                         |        false         | creates docker context using user inputs                                                                    |                |
-| *--healthcheck:container-name / -hc*       |         TRUE         | checks health of given project container                                                                    | container name |
-| *--build[:params] / -b*                    |         TRUE         | builds all services with Dockerfiles                                                                        | custom params  |
-| *--services*                               |         TRUE         | prints all defined services                                                                                 |                |
-| *--services-to-build*                      |         TRUE         | prints all services which will be build                                                                     |                |
-| *--push*                                   |         TRUE         | push built images to repository                                                                             |                |
-| *--pull / -p*                              |         TRUE         | pulls required images for services                                                                          |                |
-| *--upload / -u*                            |         TRUE         | uploads mantis config, compose file <br/>and environment files to server                                    |                |
-| *--restart*                                |         TRUE         | restarts all containers by calling compose down and up                                                      |                |
-| *--deploy / -d*                            |         TRUE         | uploads files, pulls images, runs zero-downtime deployment, <br/>removes suffixes, reloads webserver, clean |                |
-| *--zero-downtime[:service]*                |         TRUE         | runs zero-downtime deployment of services (or given service)                                                | service        |
-| *--remove-suffixes[:prefix]*               |         TRUE         | removes numerical suffixes from container names (if scale == 1)                                             | prefix         |
-| *--restart-service:service*                |         TRUE         | stops, removes and recreates container for given service                                                    | service        |
-| *--stop[:container-name]*                  |         TRUE         | stops all or given project container                                                                        | container name |
-| *--kill[:container-name]*                  |         TRUE         | kills all or given project container                                                                        | container name |
-| *--start[:container-name]*                 |         TRUE         | starts all or given project container                                                                       | container name |
-| *--run:params*                             |         TRUE         | calls compose run with params                                                                               | params         |
-| *--up[:params]*                            |         TRUE         | calls compose up (with optional params)                                                                     | params         |
-| *--down[:params]*                          |         TRUE         | calls compose down (with optional params)                                                                   | params         |
-| *--remove[:params]*                        |         TRUE         | removes all or given project container                                                                      | container name |
-| *--clean / -c*                             |         TRUE         | clean images, containers, networks                                                                          |                |
-| *--clean:--volumes*                        |         TRUE         | same as --clean but also removes volumes                                                                    |                |
-| *--status / -s*                            |         TRUE         | prints images and containers                                                                                |                |
-| *--networks / -n*                          |         TRUE         | prints docker networks                                                                                      |                |
-| *--logs[:container-name] / -l*             |         TRUE         | prints logs of all or given project container                                                               | container name |
-| *--bash:container-name*                    |         TRUE         | runs bash in container                                                                                      | container name |
-| *--sh:container-name*                      |         TRUE         | runs sh in container                                                                                        | container name |
-| *--get-containers[:prefix]*                |         TRUE         | prints all project containers                                                                               | container name |
-| *--get-container-project:container-name*   |         TRUE         | prints project name of given container                                                                      | container name |
-| *--get-healthcheck-config:container-name*  |         TRUE         | prints health-check config (if any) of given container                                                      | container name |
+| command / shortcut                        | environment required | description                                                                                                 | params         |
+|-------------------------------------------|:--------------------:|-------------------------------------------------------------------------------------------------------------|----------------|
+| *--version*                               |        false         | prints the mantis-cli version                                                                               |                |
+| *--check-config*                          |        false         | validates config file according to template                                                                 |                |
+| *--generate-key*                          |        false         | creates new encryption key                                                                                  |                |
+| *--read-key*                              |        false         | returns value of mantis encryption key                                                                      |                |
+| *--encrypt-env[:force]*                   |         TRUE         | encrypts all environment files (force param skips user confirmation)                                        |                |
+| *--decrypt-env[:force]*                   |         TRUE         | decrypts all environment files (force param skips user confirmation)                                        |                |
+| *--check-env*                             |         TRUE         | compares encrypted and decrypted env files                                                                  |                |
+| *--contexts*                              |        false         | prints all docker contexts                                                                                  |                |
+| *--create-context*                        |        false         | creates docker context using user inputs                                                                    |                |
+| *--healthcheck:container-name / -hc*      |         TRUE         | checks health of given project container                                                                    | container name |
+| *--build[:params] / -b*                   |         TRUE         | builds all services with Dockerfiles                                                                        | custom params  |
+| *--services*                              |         TRUE         | prints all defined services                                                                                 |                |
+| *--services-to-build*                     |         TRUE         | prints all services which will be build                                                                     |                |
+| *--push*                                  |         TRUE         | push built images to repository                                                                             |                |
+| *--pull / -p*                             |         TRUE         | pulls required images for services                                                                          |                |
+| *--upload / -u*                           |         TRUE         | uploads mantis config, compose file <br/>and environment files to server                                    |                |
+| *--restart*                               |         TRUE         | restarts all containers by calling compose down and up                                                      |                |
+| *--deploy / -d*                           |         TRUE         | uploads files, pulls images, runs zero-downtime deployment, <br/>removes suffixes, reloads webserver, clean |                |
+| *--zero-downtime[:service]*               |         TRUE         | runs zero-downtime deployment of services (or given service)                                                | service        |
+| *--remove-suffixes[:prefix]*              |         TRUE         | removes numerical suffixes from container names (if scale == 1)                                             | prefix         |
+| *--restart-service:service*               |         TRUE         | stops, removes and recreates container for given service                                                    | service        |
+| *--stop[:container-name]*                 |         TRUE         | stops all or given project container                                                                        | container name |
+| *--kill[:container-name]*                 |         TRUE         | kills all or given project container                                                                        | container name |
+| *--start[:container-name]*                |         TRUE         | starts all or given project container                                                                       | container name |
+| *--run:params*                            |         TRUE         | calls compose run with params                                                                               | params         |
+| *--up[:params]*                           |         TRUE         | calls compose up (with optional params)                                                                     | params         |
+| *--down[:params]*                         |         TRUE         | calls compose down (with optional params)                                                                   | params         |
+| *--remove[:params]*                       |         TRUE         | removes all or given project container                                                                      | container name |
+| *--clean / -c*                            |         TRUE         | clean images, containers, networks                                                                          |                |
+| *--clean:--volumes*                       |         TRUE         | same as --clean but also removes volumes                                                                    |                |
+| *--status / -s*                           |         TRUE         | prints images and containers                                                                                |                |
+| *--networks / -n*                         |         TRUE         | prints docker networks                                                                                      |                |
+| *--logs[:container-name] / -l*            |         TRUE         | prints logs of all or given project container                                                               | container name |
+| *--bash:container-name*                   |         TRUE         | runs bash in container                                                                                      | container name |
+| *--sh:container-name*                     |         TRUE         | runs sh in container                                                                                        | container name |
+| *--get-containers[:prefix]*               |         TRUE         | prints all project containers                                                                               | container name |
+| *--get-container-project:container-name*  |         TRUE         | prints project name of given container                                                                      | container name |
+| *--get-service-containers:service*        |         TRUE         | prints container names of given service                                                                     | container name |
+| *--get-number-of-containers:service*      |         TRUE         | prints number of containers for given service                                                               | container name |
+| *--get-healthcheck-config:container-name* |         TRUE         | prints health-check config (if any) of given container                                                      | container name |
 
 Few examples:
 

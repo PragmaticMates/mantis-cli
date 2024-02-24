@@ -421,6 +421,13 @@ class BaseManager(object):
         suffix = self.get_container_suffix(service)
         return f'{self.CONTAINER_PREFIX}{suffix}'.replace('_', '-')
 
+    def get_service_containers(self, service):
+        x = self.docker_compose("ps --format '{{.Names}}' %s" % service, return_output=True)
+        return x.strip().split('\n')
+
+    def get_number_of_containers(self, service):
+        return len(self.get_service_containers(service))
+
     def get_image_suffix(self, service):
         delimiter = '_'
         return f'{delimiter}{service}'
@@ -625,7 +632,17 @@ class BaseManager(object):
         if len(self.get_containers()) != 0:
             self.zero_downtime()
 
-        self.up()
+        # Preserve number of scaled containers
+        scales = {}
+        for service in self.services():
+            scales[service] = self.get_number_of_containers(service)
+
+        # Remove scaling of 0 containers
+        scales = dict(filter(lambda item: item[1] != 0, scales.items()))
+
+        scale_param = ' '.join([f'--scale {service}={scale}' for service, scale in scales.items()])
+
+        self.up(f'{scale_param}')
         self.remove_suffixes()
         self.try_to_reload_webserver()
 
@@ -641,48 +658,57 @@ class BaseManager(object):
 
         container_prefix = self.get_container_name(service)
 
-        try:
-            old_container = self.get_containers(prefix=container_prefix)[0]
-        except IndexError:
+        old_containers = self.get_containers(prefix=container_prefix)
+        num_containers = len(old_containers)
+
+        if num_containers == 0:
             CLI.danger(f'Old container for service {service} not found. Skipping zero-downtime deployment...')
             return
 
-        # run new container
-        self.up(f'--no-deps --no-recreate --scale {service}=2')
+        # run new containers
+        scale = num_containers * 2
+        self.up(f'--no-deps --no-recreate --scale {service}={scale}')
 
         # healthcheck
-        new_containers = self.get_containers(prefix=container_prefix, exclude=[old_container])
+        new_containers = self.get_containers(prefix=container_prefix, exclude=old_containers)
 
-        if len(new_containers) != 1:
-            CLI.error(f'Expecting single new container. Returned value: {new_containers}')
-
-        new_container = new_containers[0]
-        self.healthcheck(container=new_container)
+        for new_container in new_containers:
+            self.healthcheck(container=new_container)
 
         # reload webserver
         self.try_to_reload_webserver()
 
         # Stop and remove old container
-        CLI.info(f'Stopping old container of service {service}: {old_container}')
+        CLI.info(f'Stopping old containers of service {service}: {old_containers}')
 
-        if old_container in self.get_containers():
-            CLI.info(f'Stopping old container [{old_container}]...')
-            self.docker(f'container stop {old_container}')
+        for old_container in old_containers:
+            if old_container in self.get_containers():
+                CLI.info(f'Stopping old container [{old_container}]...')
+                self.docker(f'container stop {old_container}')
 
-            CLI.info(f'Removing old container [{old_container}]...')
-            self.docker(f'container rm {old_container}')
-        else:
-            CLI.info(f'{old_container} was not running')
+                CLI.info(f'Removing old container [{old_container}]...')
+                self.docker(f'container rm {old_container}')
+            else:
+                CLI.info(f'{old_container} was not running')
 
         # rename new container
-        CLI.info(f'Renaming new container [{new_container}]...')
-        self.docker(f'container rename {new_container} {container_prefix}')
+        for index, new_container in enumerate(new_containers):
+            CLI.info(f'Renaming new container [{new_container}]...')
+            self.docker(f'container rename {new_container} {container_prefix}-{index+1}')
 
         # reload webserver
         self.try_to_reload_webserver()
 
     def remove_suffixes(self, prefix=''):
-        for container in self.get_containers(prefix=prefix):
+        for service in self.services():
+            containers = self.get_service_containers(service)
+            num_containers = len(containers)
+
+            if num_containers != 1:
+                return CLI.info(f'Service {service} has {num_containers} containers. Skipping removing suffixes')
+
+            container = containers[0]
+
             if container.split('-')[-1].isdigit():
                 if container not in self.services():
                     CLI.info(f'Removing suffix of container {container}')
@@ -870,11 +896,19 @@ class BaseManager(object):
     def docker(self, command, return_output=False, use_connection=True):
         docker_connection = self.docker_connection if use_connection else ''
 
+        cmd = f'{docker_connection} docker {command}'
+
         if return_output:
-            return os.popen(f'{docker_connection} docker {command}').read()
+            return os.popen(cmd).read()
 
-        self.cmd(f'{docker_connection} docker {command}')
+        self.cmd(cmd)
 
-    def docker_compose(self, command, use_connection=True):
+    def docker_compose(self, command, return_output=False, use_connection=True):
         docker_connection = self.docker_connection if use_connection else ''
-        self.cmd(f'{docker_connection} {self.compose_command} -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}')
+
+        cmd = f'{docker_connection} {self.compose_command} -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}'
+
+        if return_output:
+            return os.popen(cmd).read()
+
+        self.cmd(cmd)

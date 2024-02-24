@@ -1,5 +1,9 @@
 # Release notes
 
+## v15.1.0 (2024-02-24)
+- refactoring logic, helpers and command_line files
+- deployment preserves number of scaled containers
+
 ## v15.0.0 (2024-02-23)
 - README.md
 - CHANGES.md
