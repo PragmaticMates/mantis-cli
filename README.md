@@ -193,6 +193,8 @@ mantis production --logs:container-name
 mantis stage --build --push --deploy -s -l
 ```
 
+Check ``mantis --help`` for more details.
+
 ## Flow
 
 ### 1. Build
