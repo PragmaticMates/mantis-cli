@@ -629,18 +629,23 @@ class BaseManager(object):
         self.upload()
         self.pull()
 
-        if len(self.get_containers()) != 0:
+        is_running = len(self.get_containers()) != 0
+
+        if is_running:
             self.zero_downtime()
 
         # Preserve number of scaled containers
-        scales = {}
-        for service in self.services():
-            scales[service] = self.get_number_of_containers(service)
+        scale_param = ''
+        if is_running:
+            scales = {}
+            for service in self.services():
+                scales[service] = self.get_number_of_containers(service)
 
-        # Remove scaling of 0 containers
-        scales = dict(filter(lambda item: item[1] != 0, scales.items()))
+            # Remove scaling of 0 containers
+            scales = dict(filter(lambda item: item[1] != 0, scales.items()))
+            # TODO: remove default scales
 
-        scale_param = ' '.join([f'--scale {service}={scale}' for service, scale in scales.items()])
+            scale_param = ' '.join([f'--scale {service}={scale}' for service, scale in scales.items()])
 
         self.up(f'{scale_param}')
         self.remove_suffixes()
