@@ -227,7 +227,7 @@ Build image names use '_' as word separator.
 Built images needs to be pushed to your repository defined in compose file (you need to authenticate)
 
 ```bash
-mantis <ENVIRONMENT --push
+mantis <ENVIRONMENT> --push
 ```
 
 ### 3. Deployment
