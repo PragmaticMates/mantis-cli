@@ -149,8 +149,8 @@ class AbstractManager(object):
         self.compose_file = os.path.join(self.compose_path, f'{compose_prefix}.{self.env.id}.yml')
 
     def check_environment_encryption(self, env_file):
-        decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)        # .env.encrypted
-        loaded_environment = self.env.load(env_file)                                          # .env
+        decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)  # .env.encrypted
+        loaded_environment = self.env.load(env_file)  # .env
 
         if decrypted_environment is None:
             env_file_encrypted = f'{env_file}.encrypted'
@@ -209,25 +209,29 @@ class AbstractManager(object):
             CLI.error(error_message)
             # raise Exception(error_message)
 
-    def docker(self, command, return_output=False, use_connection=True):
+    def docker_command(self, command, return_output=False, use_connection=True):
         docker_connection = self.docker_connection if use_connection else ''
 
-        cmd = f'{docker_connection} docker {command}'
+        cmd = f'{docker_connection} {command}'
 
         if return_output:
             return os.popen(cmd).read()
 
         self.cmd(cmd)
+
+    def docker(self, command, return_output=False, use_connection=True):
+        return self.docker_command(
+            command=f'docker {command}',
+            return_output=return_output,
+            use_connection=use_connection
+        )
 
     def docker_compose(self, command, return_output=False, use_connection=True):
-        docker_connection = self.docker_connection if use_connection else ''
-
-        cmd = f'{docker_connection} {self.compose_command} -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}'
-
-        if return_output:
-            return os.popen(cmd).read()
-
-        self.cmd(cmd)
+        return self.docker_command(
+            command=f'{self.compose_command} -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}',
+            return_output=return_output,
+            use_connection=use_connection
+        )
 
     def get_container_project(self, container):
         try:
@@ -239,7 +243,7 @@ class AbstractManager(object):
         return None
 
     def get_containers(self, prefix='', exclude=[]):
-        containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True)\
+        containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True) \
             .strip('\n').strip().split('\n')
 
         # Remove empty strings
@@ -454,9 +458,9 @@ class BaseManager(AbstractManager):
         description = input("Description: ")
         name = input("Name: ")
 
-        command = f'docker context create \\\n'\
-                  f'    --docker {endpoint} \\\n'\
-                  f'    --description="{description}" \\\n'\
+        command = f'docker context create \\\n' \
+                  f'    --docker {endpoint} \\\n' \
+                  f'    --description="{description}" \\\n' \
                   f'    {name}'
 
         CLI.warning(command)
@@ -595,7 +599,8 @@ class BaseManager(AbstractManager):
                 dockerfile = normpath(path.join(context, info['dockerfile']))
 
                 # Build service using docker
-                self.docker(f"build {context} {build_args} {platform} -t {image} -f {dockerfile} {params}", use_connection=False)
+                self.docker(f"build {context} {build_args} {platform} -t {image} -f {dockerfile} {params}",
+                            use_connection=False)
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
@@ -604,7 +609,7 @@ class BaseManager(AbstractManager):
             compose_data = yaml.safe_load(file)
 
         return compose_data.get('services', {}).keys()
-    
+
     def services_to_build(self):
         with open(self.compose_file, 'r') as file:
             compose_data = yaml.safe_load(file)
@@ -714,7 +719,7 @@ class BaseManager(AbstractManager):
         if not service:
             zero_downtime_services = self.config.get('zero_downtime', [])
             for index, service in enumerate(zero_downtime_services):
-                CLI.step(index+1, len(zero_downtime_services), f'Zero downtime services: {zero_downtime_services}')
+                CLI.step(index + 1, len(zero_downtime_services), f'Zero downtime services: {zero_downtime_services}')
                 self.zero_downtime(service)
             return
 
@@ -756,7 +761,7 @@ class BaseManager(AbstractManager):
         # rename new container
         for index, new_container in enumerate(new_containers):
             CLI.info(f'Renaming new container [{new_container}]...')
-            self.docker(f'container rename {new_container} {container_prefix}-{index+1}')
+            self.docker(f'container rename {new_container} {container_prefix}-{index + 1}')
 
         # reload webserver
         self.try_to_reload_webserver()
@@ -893,7 +898,10 @@ class BaseManager(AbstractManager):
             if index == 0:
                 print(f'{network}\tCONTAINERS')
             else:
-                containers = self.docker(f'network inspect -f \'{{{{ range $key, $value := .Containers }}}}{{{{ .Name }}}} {{{{ end }}}}\' {network_name}', return_output=True)
+                containers = self.docker(
+                    command=f'network inspect -f \'{{{{ range $key, $value := .Containers }}}}{{{{ .Name }}}} {{{{ end }}}}\' {network_name}',
+                    return_output=True
+                )
                 containers = ', '.join(containers.split())
                 print(f'{network}\t{containers}'.strip())
 
