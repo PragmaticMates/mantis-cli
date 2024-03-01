@@ -1,5 +1,8 @@
 # Release notes
 
+## v15.3.0 (2024-03-01)
+- reading build args also from compose file
+
 ## v15.2.0 (2024-03-01)
 - cache_from for docker build command
 
