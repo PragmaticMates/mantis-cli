@@ -1,5 +1,8 @@
 # Release notes
 
+## v15.2.0 (2024-03-01)
+- cache_from for docker build command
+
 ## v15.1.0 (2024-02-24)
 - refactoring logic, helpers and command_line files
 - deployment preserves number of scaled containers
