@@ -667,7 +667,7 @@ class BaseManager(AbstractManager):
         elif build_tool == 'docker':
             for service, info in self.services_to_build().items():
                 platform = f"--platform={info['platform']}" if info['platform'] != '' else ''
-                cache_from = ' '.join([f"--cache-from={cache}" for cache in info['cache_from']]) if info['cache_from'] != [] else ''
+                cache_from = ' '.join([f"--cache-from {cache}" for cache in info['cache_from']]) if info['cache_from'] != [] else ''
                 args = ' '.join([f"--build-arg {key}={value}" for key, value in info['args'].items()]) if info['args'] != {} else ''
                 image = info['image'] if info['image'] != '' else f'{self.PROJECT_NAME}-{service}'.lstrip('-')
 

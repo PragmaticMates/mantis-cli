@@ -1,5 +1,8 @@
 # Release notes
 
+## v15.3.1 (2024-03-01)
+--cache-from={cache} replaced with --cache-from {cache}
+
 ## v15.3.0 (2024-03-01)
 - reading build args also from compose file
 
