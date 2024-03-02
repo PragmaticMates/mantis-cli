@@ -1083,7 +1083,10 @@ class BaseManager(AbstractManager):
         if not self.connection:
             CLI.error('Missing connection details')
 
-        CLI.info(f'Executing connection: {self.connection}')
+        if not self.host:
+            CLI.error('Unknown host')
+
+        CLI.info(f'Executing SSH connection: {self.connection}')
         os.system(f'ssh {self.user}@{self.host} -p {self.port or 22}')
 
     def exec(self, params):

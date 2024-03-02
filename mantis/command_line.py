@@ -77,11 +77,8 @@ def run():
 
     environment_intro = f'Environment ID = {Colors.BOLD}{manager.environment_id}{Colors.ENDC}, ' if manager.environment_id else ''
 
-    if manager.connection:
-        if manager.host:
-            host_intro = f'{Colors.RED}{manager.host}{Colors.ENDC}, '
-        else:
-            CLI.error(f'Invalid host: {manager.host}')
+    if manager.connection and manager.host:
+        host_intro = f'{Colors.RED}{manager.host}{Colors.ENDC}, '
     else:
         host_intro = ''
 
