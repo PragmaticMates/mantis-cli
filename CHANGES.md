@@ -1,7 +1,10 @@
 # Release notes
 
+## v16.0.0 (2024-03-02)
+- new command: --ssh connects to host using SSH port
+
 ## v15.3.1 (2024-03-01)
---cache-from={cache} replaced with --cache-from {cache}
+- --cache-from={cache} replaced with --cache-from {cache}
 
 ## v15.3.0 (2024-03-01)
 - reading build args also from compose file

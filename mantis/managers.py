@@ -1079,6 +1079,13 @@ class BaseManager(AbstractManager):
         CLI.info('Logging to container...')
         self.docker(f'exec -it --user root {params} /bin/sh')
 
+    def ssh(self):
+        if not self.connection:
+            CLI.error('Missing connection details')
+
+        CLI.info(f'Executing connection: {self.connection}')
+        os.system(f'ssh {self.user}@{self.host} -p {self.port or 22}')
+
     def exec(self, params):
         """
         Executes command in container
