@@ -1,5 +1,9 @@
 # Release notes
 
+## v17.0.0 (2024-03-14)
+- mantis reads project name from compose file instead of config
+- command deploy takes dirty parameter (without zero-downtime and cleaning)
+
 ## v16.0.0 (2024-03-02)
 - new command: --ssh connects to host using SSH port
 
