@@ -6,7 +6,7 @@ class Nginx():
 
     @property
     def nginx_container(self):
-        return f"{self.CONTAINER_PREFIX}{self.get_container_suffix(self.nginx_service)}"
+        return self.get_container_name(self.nginx_service)
 
     def reload_webserver(self):
         """

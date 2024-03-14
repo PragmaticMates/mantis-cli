@@ -6,7 +6,7 @@ class Django():
 
     @property
     def django_container(self):
-        container_name = f"{self.CONTAINER_PREFIX}{self.get_container_suffix(self.django_service)}"
+        container_name = self.get_container_name(self.django_service)
         container_name_with_suffix = f"{container_name}-1"
 
         if container_name_with_suffix in self.get_containers():

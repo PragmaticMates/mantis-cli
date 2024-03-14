@@ -8,7 +8,7 @@ class Postgres():
 
     @property
     def postgres_container(self):
-        return f"{self.CONTAINER_PREFIX}{self.get_container_suffix(self.postgres_service)}"
+        return self.get_container_name(self.postgres_service)
 
     def psql(self):
         """
