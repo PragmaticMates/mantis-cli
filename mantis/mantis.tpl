@@ -18,7 +18,8 @@
     "folder": "<MANTIS>/.."
   },
   "build": {
-    "tool": "compose"
+    "tool": "compose",
+    "args": {}
   },
   "compose": {
     "command": "docker-compose",

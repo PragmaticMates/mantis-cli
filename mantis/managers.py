@@ -37,7 +37,7 @@ class AbstractManager(object):
         self.init_environment()
 
         self.KEY = self.read_key()
-        self.encrypt_deterministically = self.config.get('encryption', {}).get('deterministic', True)
+        self.encrypt_deterministically = self.config['encryption']['deterministic']
 
     @property
     def host(self):
@@ -101,7 +101,7 @@ class AbstractManager(object):
         setattr(self, property_name, details)
 
         # set project path
-        self.project_path = self.config.get('project_path', f'/home/{self.user}/')
+        self.project_path = self.config['project_path']
 
         return details
 
@@ -122,22 +122,24 @@ class AbstractManager(object):
         return ''
 
     def init_config(self, config):
-        self.config = config
-        check_config(self.config)
-        self.config_file_path = path.normpath(path.join(self.config_file, os.pardir))
+        check_config(config)
+        config_file_path = path.normpath(path.join(self.config_file, os.pardir))
 
         def normalize(path):
-            return os.path.normpath(path.replace('<MANTIS>', self.config_file_path))
+            return os.path.normpath(path.replace('<MANTIS>', config_file_path))
 
         # Load config template file
-        template = load_template_config()
+        defaults = load_template_config()
 
-        self.key_path = normalize(self.config.get('encryption', {}).get('folder', template['encryption']['folder']))
-        self.key_file = normalize(path.join(self.key_path, 'mantis.key'))
-        self.configs_path = normalize(self.config.get('configs', {}).get('folder', template['configs']['folder']))
-        self.environment_path = normalize(self.config.get('environment', {}).get('folder', template['environment']['folder']))
-        self.compose_path = normalize(self.config.get('compose', {}).get('folder', template['compose']['folder']))
-        self.compose_command = self.config.get('compose', {}).get('command', template['compose']['command'])
+        # Merge custom config and default values
+        defaults.update(config)
+
+        # Save merged config to variable
+        self.config = defaults.copy()
+
+        self.key_file = normalize(path.join(self.config['encryption']['folder'], 'mantis.key'))
+        self.environment_path = normalize(self.config['environment']['folder'])
+        self.compose_path = normalize(self.config['compose']['folder'])
 
     def init_environment(self):
         self.env = Environment(
@@ -146,10 +148,10 @@ class AbstractManager(object):
         )
 
         # connection
-        self.connection = self.config.get('connections', {}).get(self.env.id, None)
+        self.connection = self.config['connections'].get(self.env.id, None)
 
         # compose file
-        compose_prefix = f"docker-compose.{self.config.get('compose', {}).get('name', '')}".rstrip('.')
+        compose_prefix = f"docker-compose.{self.config['compose']['name']}".rstrip('.')
         self.compose_file = os.path.join(self.compose_path, f'{compose_prefix}.{self.env.id}.yml')
 
         # containers
@@ -236,8 +238,10 @@ class AbstractManager(object):
         )
 
     def docker_compose(self, command, return_output=False, use_connection=True):
+        compose_command = self.config['compose']['command']
+
         return self.docker_command(
-            command=f'{self.compose_command} -f {self.compose_file} {command}',
+            command=f'{compose_command} -f {self.compose_file} {command}',
             return_output=return_output,
             use_connection=use_connection
         )
@@ -650,7 +654,7 @@ class BaseManager(AbstractManager):
         CLI.info(f'Params = {params}')
 
         # Construct build args from config
-        build_args = self.config.get('build', {}).get('args', {})
+        build_args = self.config['build']['args']
         build_args = ','.join(map('='.join, build_args.items()))
 
         if build_args != '':
@@ -660,7 +664,7 @@ class BaseManager(AbstractManager):
 
         CLI.info(f'Args = {build_args}')
 
-        build_tool = self.config.get('build', {}).get('tool', 'compose')
+        build_tool = self.config['build']['tool']
         available_tools = ['compose', 'docker']
 
         if build_tool == 'compose':
@@ -837,7 +841,7 @@ class BaseManager(AbstractManager):
         Runs zero-downtime deployment of services (or given service)
         """
         if not service:
-            zero_downtime_services = self.config.get('zero_downtime', [])
+            zero_downtime_services = self.config['zero_downtime']
             for index, service in enumerate(zero_downtime_services):
                 CLI.step(index + 1, len(zero_downtime_services), f'Zero downtime services: {zero_downtime_services}')
                 self.zero_downtime(service)
