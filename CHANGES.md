@@ -1,5 +1,8 @@
 # Release notes
 
+## v19.1.1 (2424-03-14)
+- fixed container names in extensions
+
 ## v19.1.0 (2424-03-14)
 - new commands: --backup-volume and --restore-volume
 
