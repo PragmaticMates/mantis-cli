@@ -30,7 +30,6 @@ You can use ``<MANTIS>`` variable in your paths if needed as a relative referenc
 |--------------------------|--------|--------------------------------------------------------------|
 | manager_class            | string | class path to mantis manager class                           |
 | extensions               | dict   | Django, Postgres, Nginx                                      |
-| project_name             | string | slug of your project name used as prefix for containers      |
 | encryption               | dict   | encryption settings                                          |
 | encryption.deterministic | bool   | if True, encryption hash is always the same for same value   |
 | encryption.folder        | bool   | path to folder with your environment files                   |
@@ -40,7 +39,6 @@ You can use ``<MANTIS>`` variable in your paths if needed as a relative referenc
 | build.tool               | string | "docker" or "compose"                                        |
 | compose                  | dict   | docker compose settings                                      |
 | compose.command          | string | standalone "docker-compose" or "docker compose" plugin       |
-| compose.name             | string | docker compose suffix: "docker-compose.ENVIRONMENT.NAME.yml" |
 | compose.folder           | string | path to folder with compose files                            |
 | environment              | dict   | environment settings                                         |
 | environment.folder       | string | path to folder with environment files                        |
@@ -194,6 +192,8 @@ The environment is also used as an identifier for remote connection.
 | --up[:params]                                | Calls compose up (with optional params)                                                                                         |
 | --upload / -u                                | Uploads mantis config, compose file <br/>and environment files to server                                                        |
 | --zero-downtime[:service]                    | Runs zero-downtime deployment of services (or given service)                                                                    |
+| --backup-volume:volume                       | Backups volume to a file                                                                                                        |
+| --restore-volume:volume,file                 | Restores volume from a file                                                                                                     |
 
 Few examples:
 
