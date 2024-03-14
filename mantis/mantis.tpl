@@ -10,7 +10,6 @@
       "service": null
     }
   },
-  "project_name": "",
   "encryption": {
     "deterministic": true,
     "folder": ""

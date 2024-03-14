@@ -39,9 +39,9 @@ class Postgres():
 
         now = datetime.datetime.now()
         # filename = now.strftime("%Y%m%d%H%M%S")
-        filename = now.strftime(f"{self.PROJECT_NAME}_%Y%m%d_%H%M{data_only_suffix}.{extension}")
-        CLI.info(f'Backuping database into file {filename}')
         env = self.env.load()
+        filename = now.strftime(f"{env['POSTGRES_DBNAME']}_%Y%m%d_%H%M{data_only_suffix}.{extension}")
+        CLI.info(f'Backuping database into file {filename}')
         self.docker(f'exec -it {self.postgres_container} bash -c \'pg_dump {compressed_params} {data_only_param} -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {table_params} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
         # https://blog.sleeplessbeastie.eu/2014/03/23/how-to-non-interactively-provide-password-for-the-postgresql-interactive-terminal/
         # TODO: https://www.postgresql.org/docs/9.1/libpq-pgpass.html

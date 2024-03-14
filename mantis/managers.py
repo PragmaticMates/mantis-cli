@@ -136,9 +136,6 @@ class AbstractManager(object):
         self.compose_path = normalize(self.config.get('compose', {}).get('folder', '<MANTIS>/configs/compose'))
         self.compose_command = self.config.get('compose', {}).get('command', 'docker compose')
 
-        # Get environment settings
-        self.PROJECT_NAME = self.config.get('project_name', "")
-
     def init_environment(self):
         self.env = Environment(
             environment_id=self.environment_id,
@@ -148,12 +145,14 @@ class AbstractManager(object):
         # connection
         self.connection = self.config.get('connections', {}).get(self.env.id, None)
 
-        # containers
-        self.CONTAINER_PREFIX = self.PROJECT_NAME
-        self.IMAGE_PREFIX = self.PROJECT_NAME
-
+        # compose file
         compose_prefix = f"docker-compose.{self.config.get('compose', {}).get('name', '')}".rstrip('.')
         self.compose_file = os.path.join(self.compose_path, f'{compose_prefix}.{self.env.id}.yml')
+
+        # containers
+        self.PROJECT_NAME = self.project_name()
+        self.CONTAINER_PREFIX = self.PROJECT_NAME
+        self.IMAGE_PREFIX = self.PROJECT_NAME
 
     def check_environment_encryption(self, env_file):
         decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)  # .env.encrypted
@@ -235,7 +234,7 @@ class AbstractManager(object):
 
     def docker_compose(self, command, return_output=False, use_connection=True):
         return self.docker_command(
-            command=f'{self.compose_command} -f {self.compose_file} --project-name={self.PROJECT_NAME} {command}',
+            command=f'{self.compose_command} -f {self.compose_file} {command}',
             return_output=return_output,
             use_connection=use_connection
         )
@@ -669,7 +668,7 @@ class BaseManager(AbstractManager):
                 platform = f"--platform={info['platform']}" if info['platform'] != '' else ''
                 cache_from = ' '.join([f"--cache-from {cache}" for cache in info['cache_from']]) if info['cache_from'] != [] else ''
                 args = ' '.join([f"--build-arg {key}={value}" for key, value in info['args'].items()]) if info['args'] != {} else ''
-                image = info['image'] if info['image'] != '' else f'{self.PROJECT_NAME}-{service}'.lstrip('-')
+                image = info['image'] if info['image'] != '' else f"{info['project_name']}-{service}".lstrip('-')
 
                 # build paths for docker build command (paths in compose are relative to compose file, but paths for docker command are relative to $PWD)
                 context = normpath(path.join(dirname(self.compose_file), info['context']))
@@ -680,6 +679,15 @@ class BaseManager(AbstractManager):
                             use_connection=False)
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
+
+    def project_name(self):
+        """
+        Returns project name by compose name
+        """
+        with open(self.compose_file, 'r') as file:
+            compose_data = yaml.safe_load(file)
+
+        return compose_data.get('name', '')
 
     def services(self):
         """
@@ -705,6 +713,7 @@ class BaseManager(AbstractManager):
 
             if build:
                 data[service_name] = {
+                    'project_name': compose_data.get('name', ''),
                     'dockerfile': build.get('dockerfile', 'Dockerfile'),
                     'context': build.get('context', '.'),
                     'cache_from': build.get('cache_from', []),
@@ -782,17 +791,21 @@ class BaseManager(AbstractManager):
         CLI.step(3, 3, 'Prune Docker images')
         self.clean()
 
-    def deploy(self):
+    def deploy(self, dirty=False):
         """
         Runs deployment process: uploads files, pulls images, runs zero-downtime deployment, removes suffixes, reloads webserver, clean
         """
         CLI.info('Deploying...')
+
+        if dirty:
+            CLI.warning('...but dirty (no zero-downtime, without cleaning)') 
+
         self.upload()
         self.pull()
 
         is_running = len(self.get_containers()) != 0
 
-        if is_running:
+        if is_running and not dirty:
             self.zero_downtime()
 
         # Preserve number of scaled containers
@@ -813,7 +826,8 @@ class BaseManager(AbstractManager):
         self.remove_suffixes()
         self.try_to_reload_webserver()
 
-        self.clean()
+        if not dirty:
+            self.clean()
 
     def zero_downtime(self, service=None):
         """

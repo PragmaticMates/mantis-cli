@@ -38,19 +38,20 @@ def find_config(environment_id=None):
     CLI.info(f'Found {total_mantis_files} mantis.json files:')
 
     table = PrettyTable(align='l')
-    table.field_names = ["#", "Path", "Project name", "Connections"]
+    table.field_names = ["#", "Path", "Connections"]
 
     for index, path in enumerate(paths):
         config = load_config(path)
         connections = config.get('connections', {}).keys()
-        project_name = config.get('project_name', '')
+
+        # TODO: get project names from compose files
 
         colorful_connections = []
         for connection in connections:
             color = 'success' if connection == environment_id else 'warning'
             colorful_connections.append(getattr(CLI, color)(connection, end='', return_value=True))
 
-        table.add_row([index + 1, normpath(dirname(path)), project_name, ', '.join(colorful_connections)])
+        table.add_row([index + 1, normpath(dirname(path)), ', '.join(colorful_connections)])
 
     print(table)
     CLI.danger(f'[0] Exit now and define $MANTIS_CONFIG environment variable')
