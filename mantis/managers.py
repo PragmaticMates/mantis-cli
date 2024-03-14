@@ -9,7 +9,7 @@ from time import sleep
 from mantis.crypto import Crypto
 from mantis.environment import Environment
 from mantis.helpers import CLI, Colors
-from mantis.logic import find_config, load_config, check_config
+from mantis.logic import find_config, load_config, check_config, load_template_config
 
 
 class AbstractManager(object):
@@ -101,7 +101,7 @@ class AbstractManager(object):
         setattr(self, property_name, details)
 
         # set project path
-        self.project_path = self.config.get('project_path', f'/home/{self.user}/public_html/web')
+        self.project_path = self.config.get('project_path', f'/home/{self.user}/')
 
         return details
 
@@ -129,12 +129,15 @@ class AbstractManager(object):
         def normalize(path):
             return os.path.normpath(path.replace('<MANTIS>', self.config_file_path))
 
-        self.key_path = normalize(self.config.get('encryption', {}).get('folder', '<MANTIS>'))
+        # Load config template file
+        template = load_template_config()
+
+        self.key_path = normalize(self.config.get('encryption', {}).get('folder', template['encryption']['folder']))
         self.key_file = normalize(path.join(self.key_path, 'mantis.key'))
-        self.configs_path = normalize(self.config.get('configs', {}).get('folder', '<MANTIS>/configs'))
-        self.environment_path = normalize(self.config.get('environment', {}).get('folder', '<MANTIS>/environments'))
-        self.compose_path = normalize(self.config.get('compose', {}).get('folder', '<MANTIS>/configs/compose'))
-        self.compose_command = self.config.get('compose', {}).get('command', 'docker compose')
+        self.configs_path = normalize(self.config.get('configs', {}).get('folder', template['configs']['folder']))
+        self.environment_path = normalize(self.config.get('environment', {}).get('folder', template['environment']['folder']))
+        self.compose_path = normalize(self.config.get('compose', {}).get('folder', template['compose']['folder']))
+        self.compose_command = self.config.get('compose', {}).get('command', template['compose']['command'])
 
     def init_environment(self):
         self.env = Environment(

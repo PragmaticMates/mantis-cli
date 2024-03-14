@@ -12,25 +12,25 @@
   },
   "encryption": {
     "deterministic": true,
-    "folder": ""
+    "folder": "<MANTIS>"
   },
   "configs": {
-    "folder": "./"
+    "folder": "<MANTIS>/.."
   },
   "build": {
-    "tool": "docker"
+    "tool": "compose"
   },
   "compose": {
     "command": "docker-compose",
     "name": "",
-    "folder": ""
+    "folder": "<MANTIS>/../compose"
   },
   "environment": {
-    "folder": "env",
+    "folder": "<MANTIS>/../environments",
     "file_prefix": ""
   },
   "zero_downtime": [],
-  "project_path": "",
+  "project_path": "~",
   "connections": {
   }
 }

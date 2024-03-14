@@ -102,11 +102,15 @@ def load_config(config_file):
             CLI.error(f"Failed to load config from file {config_file}: {e}")
 
 
-def check_config(config):
-    # Load config template file
+def load_template_config():
     current_directory = dirname(abspath(__file__))
     template_path = normpath(f'{current_directory}/mantis.tpl')
-    template = load_config(template_path)
+    return load_config(template_path)
+
+
+def check_config(config):
+    # Load config template file
+    template = load_template_config()
 
     # validate config file
     config_keys_only = find_keys_only_in_config(config, template)
