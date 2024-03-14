@@ -2,6 +2,7 @@ import json
 import os
 import time
 import yaml
+from collections import defaultdict
 from os import path
 from os.path import dirname, normpath
 from time import sleep
@@ -692,15 +693,14 @@ class BaseManager(AbstractManager):
         """
         Returns project names by compose files
         """
-        projects = {}
+        projects = defaultdict(list)
 
         for compose_file in self.compose_files:
             with open(compose_file, 'r') as file:
                 compose_data = yaml.safe_load(file)
                 name = compose_data.get('name', '')
                 services = compose_data.get('services', {}).keys()
-
-                projects[name] = services
+                projects[name].extend(services)
 
         return projects
 

@@ -1,5 +1,9 @@
 # Release notes
 
+## v19.0.0 (2024-03-14)
+- support for multiple compose files
+- each environment has own folder for compose files 
+
 ## v18.0.0 (2024-03-14)
 - complete refactoring of config file
 - default values are loaded from template
