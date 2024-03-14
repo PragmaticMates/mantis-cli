@@ -3,6 +3,7 @@ import os
 import time
 import yaml
 from collections import defaultdict
+from datetime import datetime
 from os import path
 from os.path import dirname, normpath
 from time import sleep
@@ -1174,3 +1175,32 @@ class BaseManager(AbstractManager):
                 pass
 
         return replicas
+
+    def backup_volume(self, volume):
+        # backups folder
+        backup_path = os.getcwd() + '/backups/'
+
+        # Get current date, time and timezone name
+        current_datetime = datetime.now()
+        formatted_datetime = current_datetime.strftime('%Y-%m-%dT%H-%M-%S')
+        timezone_name = current_datetime.astimezone().tzname()
+
+        command = f'run --rm \
+        -v {volume}:/{volume} \
+        -v "{backup_path}":/backup \
+        busybox \
+        tar -czvf /backup/{volume}-{formatted_datetime}_{timezone_name}.tar.gz /{volume}'
+
+        self.docker(command)
+
+    def restore_volume(self, volume, file):
+        # backups folder
+        backup_path = os.getcwd() + '/backups/'
+
+        command = f'run --rm \
+        -v {volume}:/{volume} \
+        -v "{backup_path}":/backup \
+        busybox \
+        tar -xzvf /backup/{file}'
+
+        self.docker(command)
