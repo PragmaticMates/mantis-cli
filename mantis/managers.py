@@ -139,7 +139,7 @@ class AbstractManager(object):
 
         self.key_file = normalize(path.join(self.config['encryption']['folder'], 'mantis.key'))
         self.environment_path = normalize(self.config['environment']['folder'])
-        self.compose_path = normalize(self.config['compose']['folder'])
+        self.compose_path = normalize(path.join(self.config['compose']['folder'], self.environment_id))
 
     def init_environment(self):
         self.env = Environment(
@@ -150,14 +150,11 @@ class AbstractManager(object):
         # connection
         self.connection = self.config['connections'].get(self.env.id, None)
 
-        # compose file
-        compose_prefix = f"docker-compose.{self.config['compose']['name']}".rstrip('.')
-        self.compose_file = os.path.join(self.compose_path, f'{compose_prefix}.{self.env.id}.yml')
+        # compose files
+        compose_file_paths = os.popen(f'find {self.compose_path} -name "*.yml" -o -name "*.yaml"').read().strip().split('\n')
 
-        # containers
-        self.PROJECT_NAME = self.project_name()
-        self.CONTAINER_PREFIX = self.PROJECT_NAME
-        self.IMAGE_PREFIX = self.PROJECT_NAME
+        # Remove empty strings
+        self.compose_files = list(filter(None, compose_file_paths))
 
     def check_environment_encryption(self, env_file):
         decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)  # .env.encrypted
@@ -240,8 +237,10 @@ class AbstractManager(object):
     def docker_compose(self, command, return_output=False, use_connection=True):
         compose_command = self.config['compose']['command']
 
+        compose_files = ' '.join([f'-f {compose_file}' for compose_file in self.compose_files])
+
         return self.docker_command(
-            command=f'{compose_command} -f {self.compose_file} {command}',
+            command=f'{compose_command} {compose_files} {command}',
             return_output=return_output,
             use_connection=use_connection
         )
@@ -274,7 +273,7 @@ class AbstractManager(object):
         containers = list(filter(None, containers))
 
         # get project containers only
-        containers = list(filter(lambda c: self.get_container_project(c) == self.PROJECT_NAME, containers))
+        containers = list(filter(lambda c: self.get_container_project(c) in self.project_services().keys(), containers))
 
         # find containers starting with custom prefix
         containers = list(filter(lambda s: s.startswith(prefix), containers))
@@ -533,7 +532,8 @@ class BaseManager(AbstractManager):
         Constructs container name with project prefix for given service
         """
         suffix = self.get_container_suffix(service)
-        return f'{self.CONTAINER_PREFIX}{suffix}'.replace('_', '-')
+        prefix = self.get_project_by_service(service)
+        return f'{prefix}{suffix}'.replace('_', '-')
 
     def get_service_containers(self, service):
         """
@@ -560,7 +560,8 @@ class BaseManager(AbstractManager):
         Constructs image name for given service
         """
         suffix = self.get_image_suffix(service)
-        return f'{self.IMAGE_PREFIX}{suffix}'.replace('-', '_')
+        prefix = self.get_project_by_service(service)
+        return f'{prefix}{suffix}'.replace('-', '_')
 
     def has_healthcheck(self, container):
         """
@@ -678,7 +679,7 @@ class BaseManager(AbstractManager):
                 image = info['image'] if info['image'] != '' else f"{info['project_name']}-{service}".lstrip('-')
 
                 # build paths for docker build command (paths in compose are relative to compose file, but paths for docker command are relative to $PWD)
-                context = normpath(path.join(dirname(self.compose_file), info['context']))
+                context = normpath(path.join(dirname(self.compose_path), info['context']))
                 dockerfile = normpath(path.join(context, info['dockerfile']))
 
                 # Build service using docker
@@ -687,47 +688,74 @@ class BaseManager(AbstractManager):
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
-    def project_name(self):
+    def project_services(self):
         """
-        Returns project name by compose name
+        Returns project names by compose files
         """
-        with open(self.compose_file, 'r') as file:
-            compose_data = yaml.safe_load(file)
+        projects = {}
 
-        return compose_data.get('name', '')
+        for compose_file in self.compose_files:
+            with open(compose_file, 'r') as file:
+                compose_data = yaml.safe_load(file)
+                name = compose_data.get('name', '')
+                services = compose_data.get('services', {}).keys()
 
-    def services(self):
+                projects[name] = services
+
+        return projects
+
+    def get_project_by_service(self, service):
+        project_services = self.project_services()
+
+        for project, services in project_services.items():
+            if service in services:
+                return project
+
+        return None
+
+    def services(self, compose_file=None):
         """
-        Prints all defined services
+        Returns all defined services
         """
-        with open(self.compose_file, 'r') as file:
-            compose_data = yaml.safe_load(file)
+        services = []
 
-        return compose_data.get('services', {}).keys()
+        compose_files = [compose_file] if compose_file else self.compose_files
 
-    def services_to_build(self):
+        for compose_file in compose_files:
+            with open(compose_file, 'r') as file:
+                compose_data = yaml.safe_load(file)
+                compose_services = compose_data.get('services', {}).keys()
+
+                services += compose_services
+
+        return services
+
+    def services_to_build(self, compose_file=None):
         """
         Prints all services which will be build
         """
-        with open(self.compose_file, 'r') as file:
-            compose_data = yaml.safe_load(file)
-
         data = {}
 
-        services = compose_data.get('services', {})
-        for service_name, service_config in services.items():
-            build = service_config.get('build', None)
+        compose_files = [compose_file] if compose_file else self.compose_files
 
-            if build:
-                data[service_name] = {
-                    'project_name': compose_data.get('name', ''),
-                    'dockerfile': build.get('dockerfile', 'Dockerfile'),
-                    'context': build.get('context', '.'),
-                    'cache_from': build.get('cache_from', []),
-                    'args': build.get('args', {}),
-                    'image': service_config.get('image', ''),
-                    'platform': service_config.get('platform', '')
-                }
+        for compose_file in compose_files:
+            with open(compose_file, 'r') as file:
+                compose_data = yaml.safe_load(file)
+
+            services = compose_data.get('services', {})
+            for service_name, service_config in services.items():
+                build = service_config.get('build', None)
+
+                if build:
+                    data[service_name] = {
+                        'project_name': compose_data.get('name', ''),
+                        'dockerfile': build.get('dockerfile', 'Dockerfile'),
+                        'context': build.get('context', '.'),
+                        'cache_from': build.get('cache_from', []),
+                        'args': build.get('args', {}),
+                        'image': service_config.get('image', ''),
+                        'platform': service_config.get('platform', '')
+                    }
 
         return data
 
@@ -764,7 +792,7 @@ class BaseManager(AbstractManager):
         elif self.mode == 'ssh':
             CLI.info('Uploading docker compose configs, environment files and mantis')
 
-            files_to_upload = [self.config_file, self.compose_file] + self.env.files
+            files_to_upload = [self.config_file] + self.compose_files + self.env.files
 
             # mantis config file
             for file in files_to_upload:
@@ -1134,10 +1162,15 @@ class BaseManager(AbstractManager):
         """
         Returns default number of deploy replicas of given services
         """
-        with open(self.compose_file, 'r') as file:
-            compose_data = yaml.safe_load(file)
+        replicas = 1
 
-        try:
-            return compose_data['services'][service]['deploy']['replicas']
-        except KeyError:
-            return 1
+        for compose_file in self.compose_files:
+            with open(compose_file, 'r') as file:
+                compose_data = yaml.safe_load(file)
+
+            try:
+                replicas = compose_data['services'][service]['deploy']['replicas']
+            except KeyError:
+                pass
+
+        return replicas

@@ -23,7 +23,6 @@
   },
   "compose": {
     "command": "docker-compose",
-    "name": "",
     "folder": "<MANTIS>/../compose"
   },
   "environment": {
