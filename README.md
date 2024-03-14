@@ -146,7 +146,7 @@ The environment is also used as an identifier for remote connection.
 | --contexts                                   | Prints all docker contexts                                                                                                      |
 | --create-context                             | Creates docker context using user inputs                                                                                        |
 | --decrypt-env[:params,env_file,return_value] | Decrypts all environment files (force param skips user confirmation)                                                            |
-| --deploy / -d                                | Runs deployment process: uploads files, pulls images, runs zero-downtime deployment, removes suffixes, reloads webserver, clean |
+| --deploy[:dirty] / -d                        | Runs deployment process: uploads files, pulls images, runs zero-downtime deployment, removes suffixes, reloads webserver, clean |
 | --down[:params]                              | Calls compose down (with optional params)                                                                                       |
 | --encrypt-env[:params,env_file,return_value] | Encrypts all environment files (force param skips user confirmation)                                                            |
 | --exec:params                                | Executes command in container                                                                                                   |
