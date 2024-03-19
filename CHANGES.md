@@ -1,5 +1,8 @@
 # Release notes
 
+## v19.1.2 (2424-03-19)
+- fixed context for docker builder
+
 ## v19.1.1 (2424-03-14)
 - fixed container names in extensions
 
