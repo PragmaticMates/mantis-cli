@@ -681,7 +681,7 @@ class BaseManager(AbstractManager):
                 image = info['image'] if info['image'] != '' else f"{info['project_name']}-{service}".lstrip('-')
 
                 # build paths for docker build command (paths in compose are relative to compose file, but paths for docker command are relative to $PWD)
-                context = normpath(path.join(dirname(self.compose_path), info['context']))
+                context = normpath(path.join(self.compose_path, info['context']))
                 dockerfile = normpath(path.join(context, info['dockerfile']))
 
                 # Build service using docker
