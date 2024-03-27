@@ -1,5 +1,8 @@
 # Release notes
 
+## v19.1.5 (2424-03-27)
+- deployment checks for running containers only
+
 ## v19.1.4 (2424-03-27)
 - removed "--no-deps" from up command in deployment
 
