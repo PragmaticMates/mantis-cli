@@ -261,14 +261,14 @@ class AbstractManager(object):
 
         return None
 
-    def get_containers(self, prefix='', exclude=[]):
+    def get_containers(self, prefix='', exclude=[], only_running=False):
         """
         Prints all project containers
         :param prefix: container prefix
         :param exclude: exclude containers
         :return: list of container names
         """
-        containers = self.docker(f'container ls -a --format \'{{{{.Names}}}}\'', return_output=True) \
+        containers = self.docker(f'container ls {"" if only_running else "-a"} --format \'{{{{.Names}}}}\'', return_output=True) \
             .strip('\n').strip().split('\n')
 
         # Remove empty strings
@@ -858,7 +858,7 @@ class BaseManager(AbstractManager):
 
             scale_param = ' '.join([f'--scale {service}={scale}' for service, scale in scales.items()])
 
-        self.up(f'{scale_param}')
+        self.up(f'--no-deps {scale_param}')
         self.remove_suffixes()
         self.try_to_reload_webserver()
 
@@ -878,7 +878,7 @@ class BaseManager(AbstractManager):
 
         container_prefix = self.get_container_name(service)
 
-        old_containers = self.get_containers(prefix=container_prefix)
+        old_containers = self.get_containers(prefix=container_prefix, only_running=True)
         num_containers = len(old_containers)
 
         if num_containers == 0:

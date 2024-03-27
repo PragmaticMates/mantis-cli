@@ -1,5 +1,8 @@
 # Release notes
 
+## v19.1.3 (2424-03-27)
+- get_containers() takes only_running param (default=False). Solves issue of scaling containers. 
+
 ## v19.1.2 (2424-03-19)
 - fixed context for docker builder
 
