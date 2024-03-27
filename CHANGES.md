@@ -1,5 +1,8 @@
 # Release notes
 
+## v19.1.4 (2424-03-27)
+- removed "--no-deps" from up command in deployment
+
 ## v19.1.3 (2424-03-27)
 - get_containers() takes only_running param (default=False). Solves issue of scaling containers. 
 

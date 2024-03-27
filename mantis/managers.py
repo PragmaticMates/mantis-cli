@@ -858,7 +858,7 @@ class BaseManager(AbstractManager):
 
             scale_param = ' '.join([f'--scale {service}={scale}' for service, scale in scales.items()])
 
-        self.up(f'--no-deps {scale_param}')
+        self.up(scale_param)
         self.remove_suffixes()
         self.try_to_reload_webserver()
 
