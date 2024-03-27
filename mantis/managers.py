@@ -839,7 +839,7 @@ class BaseManager(AbstractManager):
         self.upload()
         self.pull()
 
-        is_running = len(self.get_containers()) != 0
+        is_running = len(self.get_containers(only_running=True)) != 0
 
         if is_running and not dirty:
             self.zero_downtime()
@@ -890,7 +890,7 @@ class BaseManager(AbstractManager):
         self.scale(service, scale)
 
         # healthcheck
-        new_containers = self.get_containers(prefix=container_prefix, exclude=old_containers)
+        new_containers = self.get_containers(prefix=container_prefix, exclude=old_containers, only_running=True)
 
         for new_container in new_containers:
             self.healthcheck(container=new_container)
