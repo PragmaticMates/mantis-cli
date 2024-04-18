@@ -570,7 +570,8 @@ class BaseManager(AbstractManager):
         Checks if given container has defined healthcheck
         """
         healthcheck_config = self.get_healthcheck_config(container)
-        return healthcheck_config and healthcheck_config.get('Test')
+
+        return healthcheck_config and healthcheck_config.get('Test') != ['NONE']
 
     def get_healthcheck_start_period(self, container):
         """
@@ -915,6 +916,8 @@ class BaseManager(AbstractManager):
         for index, new_container in enumerate(new_containers):
             CLI.info(f'Renaming new container [{new_container}]...')
             self.docker(f'container rename {new_container} {container_prefix}-{index + 1}')
+
+        self.remove_suffixes(prefix=container_prefix)
 
         # reload webserver
         self.try_to_reload_webserver()
