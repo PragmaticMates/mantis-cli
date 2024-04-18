@@ -1,5 +1,9 @@
 # Release notes
 
+## v19.1.6 (2424-04-18)
+- checking healthcheck test command
+- zero-downtime removes suffixes
+
 ## v19.1.5 (2424-03-27)
 - deployment checks for running containers only
 
