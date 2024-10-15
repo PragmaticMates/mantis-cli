@@ -5,12 +5,12 @@ import yaml
 from collections import defaultdict
 from datetime import datetime
 from os import path
-from os.path import dirname, normpath
+from os.path import normpath
 from time import sleep
 
 from mantis.crypto import Crypto
 from mantis.environment import Environment
-from mantis.helpers import CLI, Colors
+from mantis.helpers import CLI, Colors, merge_json
 from mantis.logic import find_config, load_config, check_config, load_template_config
 
 
@@ -157,6 +157,9 @@ class AbstractManager(object):
 
         # Remove empty strings
         self.compose_files = list(filter(None, compose_file_paths))
+
+        # Read compose files
+        self.compose_config = self.read_compose_configs()
 
     def check_environment_encryption(self, env_file):
         decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)  # .env.encrypted
@@ -928,18 +931,28 @@ class BaseManager(AbstractManager):
         """
         for service in self.services():
             containers = self.get_service_containers(service)
+
             num_containers = len(containers)
 
             if num_containers != 1:
-                return CLI.info(f'Service {service} has {num_containers} containers. Skipping removing suffixes')
+                CLI.info(f'Service {service} has {num_containers} containers. Skipping removing suffix.')
+                continue
 
             container = containers[0]
 
-            if container.split('-')[-1].isdigit():
-                if container not in self.services():
-                    CLI.info(f'Removing suffix of container {container}')
-                    new_container = container.rsplit('-', maxsplit=1)[0]
-                    self.docker(f'container rename {container} {new_container}')
+            if not container.split('-')[-1].isdigit():
+                continue
+
+            new_container = container.rsplit('-', maxsplit=1)[0]
+            defined_container_name = self.compose_config.get('services', {}).get(service, {}).get('container_name', None)
+
+            if container == defined_container_name:
+                CLI.info(f'Service {service} has defined the same container name ({defined_container_name}). Skipping removing suffix.')
+                continue
+
+            if container not in self.services():
+                CLI.info(f'Removing suffix of container {container}')
+                self.docker(f'container rename {container} {new_container}')
 
     def restart_service(self, service):
         """
@@ -1161,6 +1174,19 @@ class BaseManager(AbstractManager):
             pass
 
         return None
+
+    def read_compose_configs(self):
+        """
+        Returns merged compose configs
+        """
+        config = {}
+
+        for compose_file in self.compose_files:
+            with open(compose_file, 'r') as file:
+                compose_data = yaml.safe_load(file)
+                config = merge_json(config, compose_data)
+
+        return config
 
     def get_deploy_replicas(self, service):
         """

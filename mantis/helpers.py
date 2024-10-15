@@ -108,5 +108,24 @@ def random_string(n=10):
     chars = string.ascii_lowercase + string.ascii_uppercase + string.digits
     return ''.join(random.choice(chars) for _ in range(n))
 
-
-
+def merge_json(obj1, obj2):
+    # Base case: if both values are dictionaries, merge recursively
+    if isinstance(obj1, dict) and isinstance(obj2, dict):
+        merged = {}
+        for key in obj1.keys() | obj2.keys():  # Union of both sets of keys
+            if key in obj1 and key in obj2:
+                merged[key] = merge_json(obj1[key], obj2[key])
+            elif key in obj1:
+                merged[key] = obj1[key]
+            else:
+                merged[key] = obj2[key]
+        return merged
+    # If both are lists, combine them
+    elif isinstance(obj1, list) and isinstance(obj2, list):
+        return obj1 + obj2
+    # If both values are not dicts or lists, return value from obj2
+    else:
+        if obj1 == obj2:
+            return obj1
+        else:
+            raise ValueError(f'Trying to merge objects: {obj1} and {obj2}')
