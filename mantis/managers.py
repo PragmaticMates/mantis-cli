@@ -141,9 +141,15 @@ class AbstractManager(object):
 
         self.key_file = normalize(path.join(self.config['encryption']['folder'], 'mantis.key'))
         self.environment_path = normalize(self.config['environment']['folder'])
-        self.compose_path = normalize(path.join(self.config['compose']['folder'], self.environment_id))
+
+        if self.environment_id:
+            self.compose_path = normalize(path.join(self.config['compose']['folder'], self.environment_id))
 
     def init_environment(self):
+        if not self.environment_id:
+            self.connection = None
+            return
+
         self.env = Environment(
             environment_id=self.environment_id,
             folder=self.environment_path,
