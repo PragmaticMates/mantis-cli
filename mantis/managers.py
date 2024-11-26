@@ -1167,6 +1167,14 @@ class BaseManager(AbstractManager):
         """
         container, command = params.split(' ', maxsplit=1)
         CLI.info(f'Executing command "{command}" in container {container}...')
+        self.docker(f'exec {container} {command}')
+
+    def exec_it(self, params):
+        """
+        Executes command in container using interactive pseudo-TTY
+        """
+        container, command = params.split(' ', maxsplit=1)
+        CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')
 
     def get_healthcheck_config(self, container):
