@@ -45,6 +45,11 @@ def find_config(environment_id=None):
     table.add_column("Path")
     table.add_column("Connections")
 
+    # Track which configs have matching environments and single connection configs
+    matching_configs = []
+    single_connection_configs = []
+    all_environments = set()
+
     for index, path in enumerate(paths):
         config = load_config(path)
 
@@ -54,21 +59,48 @@ def find_config(environment_id=None):
         if single_connection:
             # Single connection mode - display the connection string
             connections_display = '[green](single)[/green]'
+            single_connection_configs.append((index, path))
         else:
             # Multi-environment mode - display connection keys
-            connections = config.get('connections', {}).keys()
+            connections = list(config.get('connections', {}).keys())
+            all_environments.update(connections)
 
-            # TODO: get project names from compose files
-
+            # Check if any connection matches the environment prefix
+            has_match = False
             colorful_connections = []
             for connection in connections:
-                color = 'green' if connection == environment_id else 'yellow'
+                # Highlight in green if exact match or prefix match
+                matches = environment_id and (connection == environment_id or connection.startswith(environment_id))
+                if matches:
+                    has_match = True
+                color = 'green' if matches else 'yellow'
                 colorful_connections.append(f'[{color}]{connection}[/{color}]')
             connections_display = ', '.join(colorful_connections)
 
+            if has_match:
+                matching_configs.append((index, path))
+
         table.add_row(str(index + 1), normpath(dirname(path)), connections_display)
 
+    # Always print the table when multiple configs found
     console.print(table)
+
+    # If environment was provided but no config has a matching environment, error out
+    if environment_id and not matching_configs:
+        CLI.error(f'Environment "{environment_id}" not found in any config. Available: {", ".join(sorted(all_environments))}')
+
+    # If exactly one config has matching environment, auto-select it
+    if environment_id and len(matching_configs) == 1:
+        selected_path = matching_configs[0][1]
+        CLI.info(f'Auto-selected config: {normpath(dirname(selected_path))}')
+        return selected_path
+
+    # If no environment provided and only one single connection config exists, auto-select it
+    if not environment_id and len(single_connection_configs) == 1:
+        selected_path = single_connection_configs[0][1]
+        CLI.info(f'Auto-selected single connection config: {normpath(dirname(selected_path))}')
+        return selected_path
+
     CLI.danger(f'[0] Exit now and define $MANTIS_CONFIG environment variable')
 
     path_index = None
