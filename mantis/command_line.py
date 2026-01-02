@@ -24,7 +24,39 @@ from mantis import VERSION
 from mantis.helpers import CLI
 from mantis.logic import get_manager
 
-app = typer.Typer(chain=True, rich_markup_mode="rich")
+EPILOG = """\
+[bold]Examples:[/bold]
+
+  mantis -e production status
+
+  mantis -e production deploy --dirty
+
+  mantis -e production build push deploy
+
+  mantis -e prod manage migrate --fake
+
+  mantis -e prod pg-dump --data-only --table users
+
+  mantis -e prod bash web
+
+  mantis -e prod logs django
+
+  mantis status [dim](single connection mode)[/dim]
+
+
+
+[bold]Get help for a specific command:[/bold]
+
+  mantis COMMAND --help
+"""
+
+app = typer.Typer(
+    chain=True,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    epilog=EPILOG,
+    context_settings={"max_content_width": 120},
+)
 
 # Commands that don't require environment
 NO_ENV_COMMANDS = {'generate-key', 'check-config', 'contexts', 'create-context', 'read-key'}
@@ -121,7 +153,7 @@ def deploy(
     state.deploy(dirty=dirty)
 
 
-@app.command()
+@app.command(rich_help_panel="Images")
 def build(
     services: Optional[List[str]] = typer.Argument(None, help="Services to build"),
 ):
@@ -129,7 +161,7 @@ def build(
     state.build(' '.join(services) if services else '')
 
 
-@app.command()
+@app.command(rich_help_panel="Images")
 def pull(
     services: Optional[List[str]] = typer.Argument(None, help="Services to pull"),
 ):
@@ -137,7 +169,7 @@ def pull(
     state.pull(' '.join(services) if services else '')
 
 
-@app.command()
+@app.command(rich_help_panel="Images")
 def push(
     services: Optional[List[str]] = typer.Argument(None, help="Services to push"),
 ):
@@ -145,7 +177,7 @@ def push(
     state.push(' '.join(services) if services else '')
 
 
-@app.command()
+@app.command(rich_help_panel="Files")
 def upload():
     """Uploads config, compose and environment files to server"""
     state.upload()
@@ -159,7 +191,7 @@ def clean(
     state.clean(' '.join(params) if params else '')
 
 
-@app.command()
+@app.command(rich_help_panel="Containers")
 def logs(
     container: Optional[str] = typer.Argument(None, help="Container name"),
 ):
@@ -167,13 +199,13 @@ def logs(
     state.logs(container)
 
 
-@app.command()
+@app.command(rich_help_panel="Containers")
 def networks():
     """Prints docker networks"""
     state.networks()
 
 
-@app.command()
+@app.command(rich_help_panel="Containers")
 def healthcheck(
     container: Optional[str] = typer.Argument(None, help="Container name"),
 ):
@@ -181,7 +213,7 @@ def healthcheck(
     state.healthcheck(container)
 
 
-@app.command()
+@app.command(rich_help_panel="Compose")
 def up(
     params: Optional[List[str]] = typer.Argument(None, help="Compose up parameters"),
 ):
@@ -189,7 +221,7 @@ def up(
     state.up(' '.join(params) if params else '')
 
 
-@app.command()
+@app.command(rich_help_panel="Compose")
 def down(
     params: Optional[List[str]] = typer.Argument(None, help="Compose down parameters"),
 ):
@@ -197,7 +229,7 @@ def down(
     state.down(' '.join(params) if params else '')
 
 
-@app.command()
+@app.command(rich_help_panel="Services")
 def restart(
     service: Optional[str] = typer.Argument(None, help="Service to restart"),
 ):
@@ -205,7 +237,7 @@ def restart(
     state.restart(service)
 
 
-@app.command()
+@app.command(rich_help_panel="Containers")
 def stop(
     containers: Optional[List[str]] = typer.Argument(None, help="Containers to stop"),
 ):
@@ -213,7 +245,7 @@ def stop(
     state.stop(' '.join(containers) if containers else None)
 
 
-@app.command()
+@app.command(rich_help_panel="Containers")
 def start(
     containers: Optional[List[str]] = typer.Argument(None, help="Containers to start"),
 ):
@@ -221,7 +253,7 @@ def start(
     state.start(' '.join(containers) if containers else '')
 
 
-@app.command()
+@app.command(rich_help_panel="Containers")
 def kill(
     containers: Optional[List[str]] = typer.Argument(None, help="Containers to kill"),
 ):
@@ -229,7 +261,7 @@ def kill(
     state.kill(' '.join(containers) if containers else None)
 
 
-@app.command()
+@app.command(rich_help_panel="Containers")
 def remove(
     containers: Optional[List[str]] = typer.Argument(None, help="Containers to remove"),
 ):
@@ -237,7 +269,7 @@ def remove(
     state.remove(' '.join(containers) if containers else '')
 
 
-@app.command("run")
+@app.command("run", rich_help_panel="Compose")
 def run_cmd(
     params: List[str] = typer.Argument(..., help="Compose run parameters"),
 ):
@@ -245,7 +277,7 @@ def run_cmd(
     state.run(' '.join(params))
 
 
-@app.command()
+@app.command(rich_help_panel="Containers")
 def bash(
     container: str = typer.Argument(..., help="Container name"),
 ):
@@ -253,7 +285,7 @@ def bash(
     state.bash(container)
 
 
-@app.command()
+@app.command(rich_help_panel="Containers")
 def sh(
     container: str = typer.Argument(..., help="Container name"),
 ):
@@ -261,13 +293,13 @@ def sh(
     state.sh(container)
 
 
-@app.command("ssh")
+@app.command("ssh", rich_help_panel="Connections")
 def ssh_cmd():
     """Connects to remote host via SSH"""
     state.ssh()
 
 
-@app.command("exec")
+@app.command("exec", rich_help_panel="Containers")
 def exec_cmd(
     container: str = typer.Argument(..., help="Container name"),
     command: List[str] = typer.Argument(..., help="Command to execute"),
@@ -276,7 +308,7 @@ def exec_cmd(
     state.exec(f"{container} {' '.join(command)}")
 
 
-@app.command("exec-it")
+@app.command("exec-it", rich_help_panel="Containers")
 def exec_it(
     container: str = typer.Argument(..., help="Container name"),
     command: List[str] = typer.Argument(..., help="Command to execute"),
@@ -285,7 +317,7 @@ def exec_it(
     state.exec_it(f"{container} {' '.join(command)}")
 
 
-@app.command()
+@app.command(rich_help_panel="Services")
 def scale(
     service: str = typer.Argument(..., help="Service name"),
     num: int = typer.Argument(..., help="Number of instances"),
@@ -294,7 +326,7 @@ def scale(
     state.scale(service, num)
 
 
-@app.command("zero-downtime")
+@app.command("zero-downtime", rich_help_panel="Services")
 def zero_downtime(
     service: Optional[str] = typer.Argument(None, help="Service name"),
 ):
@@ -302,7 +334,7 @@ def zero_downtime(
     state.zero_downtime(service)
 
 
-@app.command("restart-service")
+@app.command("restart-service", rich_help_panel="Services")
 def restart_service(
     service: str = typer.Argument(..., help="Service name"),
 ):
@@ -310,7 +342,7 @@ def restart_service(
     state.restart_service(service)
 
 
-@app.command("remove-suffixes")
+@app.command("remove-suffixes", rich_help_panel="Containers")
 def remove_suffixes(
     prefix: str = typer.Argument("", help="Prefix to match"),
 ):
@@ -322,7 +354,7 @@ def remove_suffixes(
 # Encryption Commands
 # =============================================================================
 
-@app.command("encrypt-env")
+@app.command("encrypt-env", rich_help_panel="Cryptography")
 def encrypt_env(
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
 ):
@@ -330,7 +362,7 @@ def encrypt_env(
     state.encrypt_env(params='force' if force else '')
 
 
-@app.command("decrypt-env")
+@app.command("decrypt-env", rich_help_panel="Cryptography")
 def decrypt_env(
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
 ):
@@ -338,19 +370,19 @@ def decrypt_env(
     state.decrypt_env(params='force' if force else '')
 
 
-@app.command("check-env")
+@app.command("check-env", rich_help_panel="Cryptography")
 def check_env():
     """Compares encrypted and decrypted env files"""
     state.check_env()
 
 
-@app.command("generate-key")
+@app.command("generate-key", rich_help_panel="Cryptography")
 def generate_key():
     """Creates new encryption key"""
     state.generate_key()
 
 
-@app.command("read-key")
+@app.command("read-key", rich_help_panel="Cryptography")
 def read_key():
     """Returns encryption key value"""
     print(state.read_key())
@@ -366,13 +398,13 @@ def check_config():
     state.check_config()
 
 
-@app.command()
+@app.command(rich_help_panel="Connections")
 def contexts():
     """Prints all docker contexts"""
     state.contexts()
 
 
-@app.command("create-context")
+@app.command("create-context", rich_help_panel="Connections")
 def create_context():
     """Creates docker context"""
     state.create_context()
@@ -382,21 +414,21 @@ def create_context():
 # Service Info Commands
 # =============================================================================
 
-@app.command()
+@app.command(rich_help_panel="Services")
 def services():
     """Lists all defined services"""
     for service in state.services():
         print(service)
 
 
-@app.command("services-to-build")
+@app.command("services-to-build", rich_help_panel="Services")
 def services_to_build():
     """Lists services that will be built"""
     for service, info in state.services_to_build().items():
         print(f"{service}: {info}")
 
 
-@app.command("get-container-name")
+@app.command("get-container-name", rich_help_panel="Containers")
 def get_container_name(
     service: str = typer.Argument(..., help="Service name"),
 ):
@@ -404,7 +436,7 @@ def get_container_name(
     print(state.get_container_name(service))
 
 
-@app.command("get-image-name")
+@app.command("get-image-name", rich_help_panel="Images")
 def get_image_name(
     service: str = typer.Argument(..., help="Service name"),
 ):
@@ -416,7 +448,7 @@ def get_image_name(
 # Volume Commands
 # =============================================================================
 
-@app.command("backup-volume")
+@app.command("backup-volume", rich_help_panel="Volumes")
 def backup_volume(
     volume: str = typer.Argument(..., help="Volume name"),
 ):
@@ -424,7 +456,7 @@ def backup_volume(
     state.backup_volume(volume)
 
 
-@app.command("restore-volume")
+@app.command("restore-volume", rich_help_panel="Volumes")
 def restore_volume(
     volume: str = typer.Argument(..., help="Volume name"),
     file: str = typer.Argument(..., help="Backup file"),
@@ -437,13 +469,13 @@ def restore_volume(
 # Django Extension Commands
 # =============================================================================
 
-@app.command()
+@app.command(rich_help_panel="Django")
 def shell():
     """Runs Django shell"""
     state.shell()
 
 
-@app.command()
+@app.command(rich_help_panel="Django")
 def manage(
     command: str = typer.Argument(..., help="Django management command"),
     args: Optional[List[str]] = typer.Argument(None, help="Command arguments"),
@@ -453,7 +485,7 @@ def manage(
     state.manage(full_cmd)
 
 
-@app.command("send-test-email")
+@app.command("send-test-email", rich_help_panel="Django")
 def send_test_email():
     """Sends test email to admins"""
     state.send_test_email()
@@ -463,13 +495,13 @@ def send_test_email():
 # PostgreSQL Extension Commands
 # =============================================================================
 
-@app.command()
+@app.command(rich_help_panel="PostgreSQL")
 def psql():
     """Starts psql console"""
     state.psql()
 
 
-@app.command("pg-dump")
+@app.command("pg-dump", rich_help_panel="PostgreSQL")
 def pg_dump(
     data_only: bool = typer.Option(False, "--data-only", "-d", help="Dump data only"),
     table: Optional[str] = typer.Option(None, "--table", "-t", help="Specific table"),
@@ -478,7 +510,7 @@ def pg_dump(
     state.pg_dump(data_only=data_only, table=table)
 
 
-@app.command("pg-dump-data")
+@app.command("pg-dump-data", rich_help_panel="PostgreSQL")
 def pg_dump_data(
     table: Optional[str] = typer.Option(None, "--table", "-t", help="Specific table"),
 ):
@@ -486,7 +518,7 @@ def pg_dump_data(
     state.pg_dump_data(table=table)
 
 
-@app.command("pg-restore")
+@app.command("pg-restore", rich_help_panel="PostgreSQL")
 def pg_restore(
     filename: str = typer.Argument(..., help="Backup filename"),
     table: Optional[str] = typer.Option(None, "--table", "-t", help="Specific table"),
@@ -495,7 +527,7 @@ def pg_restore(
     state.pg_restore(filename=filename, table=table)
 
 
-@app.command("pg-restore-data")
+@app.command("pg-restore-data", rich_help_panel="PostgreSQL")
 def pg_restore_data(
     filename: str = typer.Argument(..., help="Backup filename"),
     table: str = typer.Argument(..., help="Table name"),
@@ -508,7 +540,7 @@ def pg_restore_data(
 # Nginx Extension Commands
 # =============================================================================
 
-@app.command("reload-webserver")
+@app.command("reload-webserver", rich_help_panel="Nginx")
 def reload_webserver():
     """Reloads nginx webserver"""
     state.reload_webserver()
