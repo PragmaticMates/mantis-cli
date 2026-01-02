@@ -9,7 +9,10 @@ from rich.table import Table
 from mantis import VERSION
 from mantis.helpers import Colors, CLI, nested_set
 from mantis.logic import get_manager, execute
-from mantis.managers import AbstractManager
+from mantis.managers import AbstractManager, BaseManager
+from mantis.extensions.django import Django
+from mantis.extensions.nginx import Nginx
+from mantis.extensions.postgres import Postgres
 
 
 def parse_args(arguments):
@@ -45,6 +48,9 @@ def run():
     if params['commands'] == ['--version']:
         return print(version_info)
 
+    if params['commands'] == ['--help']:
+        return help()
+
     # get params
     environment_id = params['environment_id']
     commands = params['commands']
@@ -52,9 +58,6 @@ def run():
 
     # get manager
     manager = get_manager(environment_id, mode)
-
-    if params['commands'] == ['--help']:
-        return help(manager)
 
     if len(params['commands']) == 0:
         CLI.error('Missing commands. Check mantis --help for more information.')
@@ -118,7 +121,61 @@ def run():
 
             execute(manager, command, params)
 
-def help(manager):
+def get_class_commands(cls, exclude_from=None):
+    """
+    Extract commands from a class for help display.
+    Returns list of tuples: (command_str, description)
+    """
+    commands = []
+    exclude_methods = dir(exclude_from) if exclude_from else []
+
+    methods = inspect.getmembers(cls, predicate=inspect.isfunction)
+
+    for method_name, method in methods:
+        # skip private methods and excluded methods
+        if method_name.startswith('_') or method_name in exclude_methods:
+            continue
+
+        command = method_name.replace('_', '-')
+
+        # Get the method signature
+        signature = inspect.signature(method)
+
+        # Parameters (skip 'self')
+        parameters = [p for p in signature.parameters.keys() if p != 'self']
+
+        # Check if parameters are optional
+        params_are_optional = True
+
+        for param_name, param in signature.parameters.items():
+            if param_name == 'self':
+                continue
+            if param.default == inspect.Parameter.empty:
+                params_are_optional = False
+
+        # Build command string
+        command = f"--{command}"
+        params_str = ""
+
+        if parameters:
+            if not params_are_optional:
+                params_str += '['
+
+            params_str += ':'
+
+            params_str += ','.join(parameters)
+
+            if not params_are_optional:
+                params_str += ']'
+
+        docs = method.__doc__ or ''
+
+        commands.append((f"{command}{params_str}", docs.strip()))
+
+    return commands
+
+
+def help():
     print(f'\nUsage:\n\
     mantis [--mode=remote|ssh|host] [environment] --command[:params]')
 
@@ -131,54 +188,35 @@ def help(manager):
     Either "local" or any custom environment identifier defined as connection in your config file.\n\
     Optional when using single connection mode (config has "connection" instead of "connections").')
 
-    print(f'\nCommands:')
-
     console = Console()
+
+    # Base commands
+    print(f'\nCommands:')
     table = Table(show_header=True, header_style="bold")
     table.add_column("Command", style="cyan")
     table.add_column("Description")
 
-    # Get all methods of the class
-    methods = inspect.getmembers(manager, predicate=inspect.ismethod)
-
-    # Iterate over each method
-    for method_name, method in methods:
-        # skip methods of abstract manager
-        if method_name in dir(AbstractManager):
-            continue
-
-        command = method_name.replace('_', '-')
-
-        # Get the method signature
-        signature = inspect.signature(method)
-
-        # Parameters
-        parameters = list(signature.parameters.keys())
-
-        # Check if parameters are optional
-        params_are_optional = True
-
-        for param_name, param in signature.parameters.items():
-            if not param.default:
-                params_are_optional = False
-
-        # Print method name and its parameters
-        command = f"--{command}"
-        params = ""
-
-        if signature.parameters:
-            if not params_are_optional:
-                params += '['
-
-            params += ':'
-
-            params += ','.join(parameters)
-
-            if not params_are_optional:
-                params += ']'
-
-        docs = method.__doc__ or ''
-
-        table.add_row(f"{command}{params}", docs.strip())
+    for command, description in get_class_commands(BaseManager, exclude_from=AbstractManager):
+        table.add_row(command, description)
 
     console.print(table)
+
+    # Extension commands
+    extensions = [
+        ('Django', Django),
+        ('Nginx', Nginx),
+        ('Postgres', Postgres),
+    ]
+
+    for ext_name, ext_class in extensions:
+        ext_commands = get_class_commands(ext_class)
+        if ext_commands:
+            print(f'\n{ext_name} extension:')
+            ext_table = Table(show_header=True, header_style="bold")
+            ext_table.add_column("Command", style="yellow")
+            ext_table.add_column("Description")
+
+            for command, description in ext_commands:
+                ext_table.add_row(command, description)
+
+            console.print(ext_table)

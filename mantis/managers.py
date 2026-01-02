@@ -191,6 +191,10 @@ class AbstractManager(object):
             return
 
         if not self.environment_id:
+            self.env = Environment(
+                environment_id=None,
+                folder=self.environment_path,
+            )
             self.connection = None
             return
 
