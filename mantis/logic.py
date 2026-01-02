@@ -2,7 +2,9 @@ import os
 import json
 from json.decoder import JSONDecodeError
 from os.path import dirname, normpath, abspath
-from prettytable import PrettyTable
+
+from rich.console import Console
+from rich.table import Table
 
 from mantis.helpers import CLI, import_string
 
@@ -37,8 +39,11 @@ def find_config(environment_id=None):
     # Multiple mantis files found
     CLI.info(f'Found {total_mantis_files} mantis.json files:')
 
-    table = PrettyTable(align='l')
-    table.field_names = ["#", "Path", "Connections"]
+    console = Console()
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("#", style="cyan")
+    table.add_column("Path")
+    table.add_column("Connections")
 
     for index, path in enumerate(paths):
         config = load_config(path)
@@ -48,7 +53,7 @@ def find_config(environment_id=None):
 
         if single_connection:
             # Single connection mode - display the connection string
-            colorful_connections = [CLI.success('(single)', end='', return_value=True)]
+            connections_display = '[green](single)[/green]'
         else:
             # Multi-environment mode - display connection keys
             connections = config.get('connections', {}).keys()
@@ -57,12 +62,13 @@ def find_config(environment_id=None):
 
             colorful_connections = []
             for connection in connections:
-                color = 'success' if connection == environment_id else 'warning'
-                colorful_connections.append(getattr(CLI, color)(connection, end='', return_value=True))
+                color = 'green' if connection == environment_id else 'yellow'
+                colorful_connections.append(f'[{color}]{connection}[/{color}]')
+            connections_display = ', '.join(colorful_connections)
 
-        table.add_row([index + 1, normpath(dirname(path)), ', '.join(colorful_connections)])
+        table.add_row(str(index + 1), normpath(dirname(path)), connections_display)
 
-    print(table)
+    console.print(table)
     CLI.danger(f'[0] Exit now and define $MANTIS_CONFIG environment variable')
 
     path_index = None

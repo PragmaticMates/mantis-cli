@@ -2,7 +2,9 @@
 import os
 import sys
 import inspect
-import prettytable
+
+from rich.console import Console
+from rich.table import Table
 
 from mantis import VERSION
 from mantis.helpers import Colors, CLI, nested_set
@@ -131,9 +133,10 @@ def help(manager):
 
     print(f'\nCommands:')
 
-    table = prettytable.PrettyTable(align='l')
-    table.set_style(prettytable.SINGLE_BORDER)
-    table.field_names = ["Command", "Description"]
+    console = Console()
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Command", style="cyan")
+    table.add_column("Description")
 
     # Get all methods of the class
     methods = inspect.getmembers(manager, predicate=inspect.ismethod)
@@ -176,6 +179,6 @@ def help(manager):
 
         docs = method.__doc__ or ''
 
-        table.add_row([f"{command}{params}", docs.strip()])
+        table.add_row(f"{command}{params}", docs.strip())
 
-    print(table)
+    console.print(table)
