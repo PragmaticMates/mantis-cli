@@ -6,7 +6,7 @@ from os.path import dirname, normpath, abspath
 from rich.console import Console
 from rich.table import Table
 
-from mantis.helpers import CLI, import_string
+from mantis.helpers import CLI
 
 
 def find_config(environment_id=None):
@@ -143,45 +143,3 @@ def check_config(config):
             f"Config file validation failed. Unknown config keys: {config_keys_only}. Check {template_link} for available attributes.")
 
     CLI.success(f"Config passed validation.")
-
-def get_extension_classes(extensions):
-    extension_classes = []
-
-    # extensions
-    for extension in extensions:
-        extension_class_name = extension if '.' in extension else f"mantis.extensions.{extension.lower()}.{extension}"
-        extension_class = import_string(extension_class_name)
-        extension_classes.append(extension_class)
-
-    return extension_classes
-
-
-def get_manager(environment_id, mode):
-    # config file
-    config_file = find_config(environment_id)
-    config = load_config(config_file)
-
-    # class name of the manager
-    manager_class_name = config.get('manager_class', 'mantis.managers.BaseManager')
-
-    # get manager class
-    manager_class = import_string(manager_class_name)
-
-    # setup extensions
-    extensions = config.get('extensions', {})
-    extension_classes = get_extension_classes(extensions.keys())
-
-    CLI.info(f"Extensions: {', '.join(extensions.keys())}")
-
-    # create dynamic manager class
-    class MantisManager(*[manager_class] + extension_classes):
-        pass
-
-    manager = MantisManager(config_file=config_file, environment_id=environment_id, mode=mode)
-
-    # set extensions data
-    for extension, extension_params in extensions.items():
-        if 'service' in extension_params:
-            setattr(manager, f'{extension}_service'.lower(), extension_params['service'])
-
-    return manager

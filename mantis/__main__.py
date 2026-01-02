@@ -1,4 +1,4 @@
-from mantis.logic import main
+from mantis.app import main
 
 if __name__ == "__main__":
     main()

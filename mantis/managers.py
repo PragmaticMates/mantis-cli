@@ -13,8 +13,8 @@ from rich.table import Table
 
 from mantis.crypto import Crypto
 from mantis.environment import Environment
-from mantis.helpers import CLI, merge_json
-from mantis.logic import find_config, load_config, check_config, load_template_config
+from mantis.helpers import CLI, import_string, merge_json
+from mantis.config import find_config, load_config, check_config, load_template_config
 
 
 class AbstractManager(object):
@@ -1390,3 +1390,46 @@ class BaseManager(AbstractManager):
         tar -xzvf /backup/{file}'
 
         self.docker(command)
+
+
+def get_extension_classes(extensions):
+    extension_classes = []
+
+    # extensions
+    for extension in extensions:
+        extension_class_name = extension if '.' in extension else f"mantis.extensions.{extension.lower()}.{extension}"
+        extension_class = import_string(extension_class_name)
+        extension_classes.append(extension_class)
+
+    return extension_classes
+
+
+def get_manager(environment_id, mode):
+    # config file
+    config_file = find_config(environment_id)
+    config = load_config(config_file)
+
+    # class name of the manager
+    manager_class_name = config.get('manager_class', 'mantis.managers.BaseManager')
+
+    # get manager class
+    manager_class = import_string(manager_class_name)
+
+    # setup extensions
+    extensions = config.get('extensions', {})
+    extension_classes = get_extension_classes(extensions.keys())
+
+    CLI.info(f"Extensions: {', '.join(extensions.keys())}")
+
+    # create dynamic manager class
+    class MantisManager(*[manager_class] + extension_classes):
+        pass
+
+    manager = MantisManager(config_file=config_file, environment_id=environment_id, mode=mode)
+
+    # set extensions data
+    for extension, extension_params in extensions.items():
+        if 'service' in extension_params:
+            setattr(manager, f'{extension}_service'.lower(), extension_params['service'])
+
+    return manager
