@@ -143,7 +143,6 @@ def check_config(config):
             f"Config file validation failed. Unknown config keys: {config_keys_only}. Check {template_link} for available attributes.")
 
     CLI.success(f"Config passed validation.")
-    exit()
 
 def get_extension_classes(extensions):
     extension_classes = []

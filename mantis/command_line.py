@@ -120,17 +120,24 @@ class State:
 state = State()
 
 
+def add_shortcut(name: str, shortcut: str, func, panel: str = "Shortcuts"):
+    """Register a command shortcut."""
+    app.command(shortcut, rich_help_panel=panel, help=f"Alias for '{name}'")(func)
+
+
+def version_callback(value: bool):
+    if value:
+        typer.echo(f"Mantis v{VERSION}")
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     environment: Optional[str] = typer.Option(None, "--env", "-e", help="Environment ID"),
     mode: str = typer.Option("remote", "--mode", "-m", help="Execution mode: remote, ssh, host"),
-    version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
+    version: bool = typer.Option(False, "--version", "-v", callback=version_callback, is_eager=True, help="Show version and exit"),
 ):
     """Mantis CLI - Docker deployment tool."""
-    if version:
-        typer.echo(f"Mantis v{VERSION}")
-        raise typer.Exit()
-
     state._mode = mode
     state._manager = get_manager(environment, mode)
 
@@ -544,6 +551,22 @@ def pg_restore_data(
 def reload_webserver():
     """Reloads nginx webserver"""
     state.reload_webserver()
+
+
+# =============================================================================
+# Command Shortcuts (hidden from help)
+# =============================================================================
+
+add_shortcut("status", "s", status)
+add_shortcut("deploy", "d", deploy)
+add_shortcut("build", "b", build)
+add_shortcut("pull", "pl", pull)
+add_shortcut("push", "p", push)
+add_shortcut("upload", "u", upload)
+add_shortcut("clean", "c", clean)
+add_shortcut("logs", "l", logs)
+add_shortcut("networks", "n", networks)
+add_shortcut("healthcheck", "hc", healthcheck)
 
 
 def run():
