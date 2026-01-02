@@ -1,6 +1,7 @@
 import datetime
 
 from mantis.helpers import CLI
+from mantis.commands import command
 
 
 class Postgres():
@@ -76,3 +77,74 @@ class Postgres():
         """
         filename, table = params.split(',')
         self.pg_restore(filename=filename, table=table)
+
+
+# Register extension commands
+@command()
+def psql(manager):
+    """Starts psql console"""
+    manager.psql()
+
+
+@command(name='pg-dump')
+def pg_dump_cmd(manager, *args):
+    """Backups PostgreSQL database"""
+    data_only = '--data-only' in args or '-d' in args
+    table = None
+    for i, arg in enumerate(args):
+        if arg in ('--table', '-t') and i + 1 < len(args):
+            table = args[i + 1]
+        elif arg.startswith('--table='):
+            table = arg.split('=')[1]
+    manager.pg_dump(data_only=data_only, table=table)
+
+
+@command(name='pg-dump-data')
+def pg_dump_data_cmd(manager, *args):
+    """Backups PostgreSQL database [data only]"""
+    table = None
+    for i, arg in enumerate(args):
+        if arg in ('--table', '-t') and i + 1 < len(args):
+            table = args[i + 1]
+        elif arg.startswith('--table='):
+            table = arg.split('=')[1]
+        elif not arg.startswith('-'):
+            table = arg
+    manager.pg_dump_data(table=table)
+
+
+@command(name='pg-restore')
+def pg_restore_cmd(manager, *args):
+    """Restores database from backup"""
+    if not args:
+        CLI.error("pg-restore requires a filename argument")
+    filename = None
+    table = None
+    positional_args = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ('--table', '-t') and i + 1 < len(args):
+            table = args[i + 1]
+            i += 2
+        elif arg.startswith('--table='):
+            table = arg.split('=')[1]
+            i += 1
+        elif not arg.startswith('-'):
+            positional_args.append(arg)
+            i += 1
+        else:
+            i += 1
+    if positional_args:
+        filename = positional_args[0]
+    if not filename:
+        CLI.error("pg-restore requires a filename argument")
+    manager.pg_restore(filename=filename, table=table)
+
+
+@command(name='pg-restore-data')
+def pg_restore_data_cmd(manager, filename: str, table: str):
+    """Restores database from backup [data only]"""
+    if not filename or not table:
+        CLI.error("pg-restore-data requires filename and table arguments")
+    manager.pg_restore(filename=filename, table=table)

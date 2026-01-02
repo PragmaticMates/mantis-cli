@@ -184,39 +184,3 @@ def get_manager(environment_id, mode):
             setattr(manager, f'{extension}_service'.lower(), extension_params['service'])
 
     return manager
-
-
-def execute(manager, command, params):
-    shortcuts = {
-        '-hc': 'healthcheck',
-        '-b': 'build',
-        '-p': 'pull',
-        '-u': 'upload',
-        '-d': 'deploy',
-        '-c': 'clean',
-        '-s': 'status',
-        '-n': 'networks',
-        '-l': 'logs',
-    }
-
-    manager_method = shortcuts.get(command, None)
-
-    if manager_method is None:
-        manager_method = command.lstrip('-').replace('-', '_')
-
-    if manager_method is None or not hasattr(manager, manager_method):
-        CLI.error(f'Invalid command "{command}". Check mantis --help for more information.')
-    else:
-        methods_without_environment = ['contexts', 'create_context', 'check_config', 'generate_key', 'read_key']
-
-        # In single connection mode, environment_id is not required
-        if manager.environment_id is None and not manager.single_connection_mode and manager_method not in methods_without_environment:
-            CLI.error('Missing environment')
-        elif manager.environment_id is not None and manager_method in methods_without_environment:
-            CLI.error('Redundant environment')
-
-        # Execute manager method
-        returned_value = getattr(manager, manager_method)(*params)
-
-        if returned_value:
-            print(returned_value)
