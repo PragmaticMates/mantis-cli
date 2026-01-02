@@ -5,6 +5,7 @@ import inspect
 
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from mantis import VERSION
 from mantis.helpers import CLI, nested_set
@@ -82,24 +83,14 @@ def run():
 
     console = Console()
 
-    if manager.environment_id:
-        environment_intro = f'Environment ID = [bold]{manager.environment_id}[/bold], '
-    elif manager.single_connection_mode:
-        environment_intro = '[bold](single connection mode)[/bold], '
-    else:
-        environment_intro = ''
-
-    if manager.connection and manager.host:
-        host_intro = f'[red]{manager.host}[/red], '
-    else:
-        host_intro = ''
-
-    heading = f'{version_info}, '\
-              f'{environment_intro}'\
-              f'{host_intro}'\
-              f'mode: [green]{manager.mode}[/green], '\
-              f'hostname: [blue]{hostname}[/blue]'
-
+    heading = Text.assemble(
+        version_info, ", ",
+        ("Environment ID = ", "") if manager.environment_id else ("(single connection mode), ", "bold") if manager.single_connection_mode else ("", ""),
+        (str(manager.environment_id) + ", ", "bold") if manager.environment_id else ("", ""),
+        (str(manager.host) + ", ", "red") if manager.connection and manager.host else ("", ""),
+        "mode: ", (str(manager.mode), "green"),
+        ", hostname: ", (hostname, "blue")
+    )
     console.print(heading)
 
     if mode == 'ssh':
