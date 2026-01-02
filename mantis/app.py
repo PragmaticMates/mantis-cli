@@ -1,7 +1,7 @@
 """Mantis CLI app setup and shared state."""
-import inspect
-import os
-from typing import Optional
+import socket
+from functools import wraps
+from typing import Optional, List, Callable
 
 import typer
 from rich.console import Console
@@ -45,33 +45,41 @@ app = typer.Typer(
     context_settings={"max_content_width": 120},
 )
 
-# Commands that don't require environment
-NO_ENV_COMMANDS = {'generate-key', 'check-config', 'contexts', 'create-context', 'read-key'}
+# Commands that don't require environment (populated by @no_env_required decorator)
+NO_ENV_COMMANDS: set[str] = set()
+
+# Cache hostname
+_hostname = socket.gethostname()
+
+
+def join_args(args: Optional[List[str]], separator: str = ' ') -> str:
+    """Join optional list of arguments into a string."""
+    return separator.join(args) if args else ''
 
 
 class State:
     """Shared state across commands."""
+
     def __init__(self):
         self._manager = None
         self._mode = 'remote'
         self._heading_printed = False
+        self._current_command = None
 
-    def _ensure_ready(self, command_name: str):
+    def _ensure_ready(self):
         """Print heading and validate environment."""
         if not self._heading_printed:
             print_heading(self._manager, self._mode)
             self._heading_printed = True
 
-        if command_name not in NO_ENV_COMMANDS:
+        command_name = self._current_command
+        if command_name and command_name not in NO_ENV_COMMANDS:
             if not self._manager.single_connection_mode and self._manager.environment_id is None:
                 CLI.error(f'Command "{command_name}" requires environment. Use: mantis -e <environment> {command_name}')
 
     def __getattr__(self, name):
         """Delegate method calls to manager, handling heading and validation."""
-        # Get the caller function name (the command)
-        caller = inspect.stack()[1].function
-        command_name = caller.replace('_', '-')
-        self._ensure_ready(command_name)
+        self._ensure_ready()
         return getattr(self._manager, name)
 
 
@@ -81,7 +89,6 @@ state = State()
 def print_heading(manager, mode: str):
     """Print the heading with environment and connection info."""
     console = Console()
-    hostname = os.popen('hostname').read().rstrip("\n")
 
     heading = Text()
     heading.append(f'Mantis v{VERSION}')
@@ -102,14 +109,57 @@ def print_heading(manager, mode: str):
     heading.append("mode: ")
     heading.append(str(mode), style="green")
     heading.append(", hostname: ")
-    heading.append(hostname, style="blue")
+    heading.append(_hostname, style="blue")
 
     console.print(heading)
 
 
-def add_shortcut(name: str, shortcut: str, func, panel: str = "Shortcuts"):
-    """Register a command shortcut."""
-    app.command(shortcut, rich_help_panel=panel, help=f"Alias for '{name}'")(func)
+# =============================================================================
+# Decorators
+# =============================================================================
+
+def command(
+    name: str = None,
+    shortcut: str = None,
+    panel: str = None,
+    no_env: bool = False,
+):
+    """
+    Enhanced command decorator with shortcut and no_env support.
+
+    Args:
+        name: Command name (defaults to function name with underscores replaced by dashes)
+        shortcut: Short alias for the command
+        panel: Rich help panel name
+        no_env: If True, command doesn't require environment
+    """
+    def decorator(func: Callable) -> Callable:
+        cmd_name = name or func.__name__.replace('_', '-')
+
+        # Mark as no-env command
+        if no_env:
+            NO_ENV_COMMANDS.add(cmd_name)
+            if shortcut:
+                NO_ENV_COMMANDS.add(shortcut)
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            state._current_command = cmd_name
+            return func(*args, **kwargs)
+
+        # Register main command
+        kwargs = {}
+        if panel:
+            kwargs['rich_help_panel'] = panel
+        registered = app.command(cmd_name, **kwargs)(wrapper)
+
+        # Register shortcut
+        if shortcut:
+            app.command(shortcut, rich_help_panel="Shortcuts", help=f"Alias for '{cmd_name}'")(wrapper)
+
+        return registered
+
+    return decorator
 
 
 def version_callback(value: bool):
