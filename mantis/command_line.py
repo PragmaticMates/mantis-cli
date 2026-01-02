@@ -3,48 +3,40 @@
 Mantis CLI - Docker deployment tool
 
 Usage:
-    mantis [OPTIONS] [ENVIRONMENT] COMMAND [ARGS]...
+    mantis [OPTIONS] COMMAND [ARGS]... [COMMAND [ARGS]...]
 
 Examples:
-    mantis production status
-    mantis production deploy --dirty
-    mantis production build push deploy
-    mantis prod logs web
+    mantis -e production status
+    mantis -e production deploy --dirty
+    mantis -e production build push deploy
+    mantis status                          (single connection mode)
     mantis manage migrate
 """
+import inspect
 import os
-import sys
-from typing import List, Optional
+from typing import Optional, List
 
 import typer
 from rich.console import Console
 from rich.text import Text
 
 from mantis import VERSION
-from mantis.commands import COMMANDS, NO_ENV_COMMANDS, get_command, list_commands
 from mantis.helpers import CLI
 from mantis.logic import get_manager
 
-app = typer.Typer(
-    add_completion=False,
-    invoke_without_command=True,
-    no_args_is_help=False,
-)
+app = typer.Typer(chain=True, rich_markup_mode="rich")
 
-
-def print_version():
-    """Print version information."""
-    print(f"Mantis v{VERSION}")
+# Commands that don't require environment
+NO_ENV_COMMANDS = {'generate-key', 'check-config', 'contexts', 'create-context', 'read-key'}
 
 
 def print_heading(manager, mode: str):
     """Print the heading with environment and connection info."""
     console = Console()
     hostname = os.popen('hostname').read().rstrip("\n")
-    version_info = f'Mantis v{VERSION}'
 
     heading = Text()
-    heading.append(version_info)
+    heading.append(f'Mantis v{VERSION}')
     heading.append(", ")
 
     if manager.environment_id:
@@ -67,196 +59,459 @@ def print_heading(manager, mode: str):
     console.print(heading)
 
 
-def parse_command_args(args: List[str]) -> tuple:
-    """
-    Parse command line arguments to extract environment, commands, and their args.
+class State:
+    """Shared state across commands."""
+    def __init__(self):
+        self._manager = None
+        self._mode = 'remote'
+        self._heading_printed = False
 
-    Returns: (environment_id, command_groups)
-    where command_groups is a list of (command_name, args) tuples
-    """
-    if not args:
-        return None, []
+    def _ensure_ready(self, command_name: str):
+        """Print heading and validate environment."""
+        if not self._heading_printed:
+            print_heading(self._manager, self._mode)
+            self._heading_printed = True
 
-    # Check if first arg is an environment (doesn't look like a command or option)
-    first_arg = args[0]
-    environment_id = None
-    start_idx = 0
+        if command_name not in NO_ENV_COMMANDS:
+            if not self._manager.single_connection_mode and self._manager.environment_id is None:
+                CLI.error(f'Command "{command_name}" requires environment. Use: mantis -e <environment> {command_name}')
 
-    # If first arg doesn't start with '-' and isn't a known command, treat as environment
-    if not first_arg.startswith('-') and first_arg not in COMMANDS:
-        environment_id = first_arg
-        start_idx = 1
-
-    # Parse remaining args into command groups
-    command_groups = []
-    current_command = None
-    current_args = []
-
-    for arg in args[start_idx:]:
-        if arg.startswith('--'):
-            # Long option for current command
-            current_args.append(arg)
-        elif arg.startswith('-') and len(arg) == 2:
-            # Could be a shortcut or a short option
-            if arg.lstrip('-') in COMMANDS or arg in COMMANDS:
-                # It's a command shortcut
-                if current_command:
-                    command_groups.append((current_command, current_args))
-                current_command = arg.lstrip('-')
-                current_args = []
-            else:
-                # Short option for current command
-                current_args.append(arg)
-        elif arg in COMMANDS:
-            # New command
-            if current_command:
-                command_groups.append((current_command, current_args))
-            current_command = arg
-            current_args = []
-        else:
-            # Argument for current command, or first command
-            if current_command is None:
-                # First positional arg is a command
-                if arg in COMMANDS:
-                    current_command = arg
-                else:
-                    # Unknown - could be command or arg
-                    current_command = arg
-            else:
-                current_args.append(arg)
-
-    # Don't forget the last command
-    if current_command:
-        command_groups.append((current_command, current_args))
-
-    return environment_id, command_groups
+    def __getattr__(self, name):
+        """Delegate method calls to manager, handling heading and validation."""
+        # Get the caller function name (the command)
+        caller = inspect.stack()[1].function
+        command_name = caller.replace('_', '-')
+        self._ensure_ready(command_name)
+        return getattr(self._manager, name)
 
 
-def execute_commands(manager, command_groups: List[tuple], mode: str, environment_id: str, raw_args: List[str]):
-    """Execute a list of commands."""
-    # Handle SSH mode specially - forward all commands to remote
-    if mode == 'ssh':
-        env_part = f'{environment_id} ' if environment_id else ''
-        # Reconstruct command string from groups
-        cmd_parts = []
-        for cmd_name, cmd_args in command_groups:
-            cmd_parts.append(cmd_name)
-            cmd_parts.extend(cmd_args)
-
-        remote_cmd = f'mantis --mode=host {env_part}{" ".join(cmd_parts)}'
-        ssh_cmd = f"ssh -t {manager.user}@{manager.host} -p {manager.port} 'cd {manager.project_path}; {remote_cmd}'"
-        os.system(ssh_cmd)
-        return
-
-    # Execute each command locally
-    for cmd_name, cmd_args in command_groups:
-        cmd = get_command(cmd_name)
-
-        if cmd is None:
-            CLI.error(f'Unknown command: {cmd_name}. Run "mantis commands" to see available commands.')
-
-        # Check if command requires environment
-        if cmd.name not in NO_ENV_COMMANDS:
-            if not manager.single_connection_mode and manager.environment_id is None:
-                CLI.error(f'Command "{cmd.name}" requires an environment. Usage: mantis <environment> {cmd.name}')
-
-        # Execute the command
-        try:
-            cmd.execute(manager, cmd_args)
-        except TypeError as e:
-            CLI.error(f'Error executing {cmd.name}: {e}')
+state = State()
 
 
-@app.callback(invoke_without_command=True)
+@app.callback()
 def main(
-    ctx: typer.Context,
-    args: Optional[List[str]] = typer.Argument(None, help="Environment and commands"),
+    environment: Optional[str] = typer.Option(None, "--env", "-e", help="Environment ID"),
     mode: str = typer.Option("remote", "--mode", "-m", help="Execution mode: remote, ssh, host"),
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
-    help_flag: bool = typer.Option(False, "--help", "-h", help="Show help and exit"),
 ):
-    """
-    Mantis CLI - Docker deployment tool.
-
-    Usage: mantis [OPTIONS] [ENVIRONMENT] COMMAND [ARGS]...
-
-    Examples:
-        mantis production status
-        mantis production deploy --dirty
-        mantis stage build push deploy
-        mantis manage migrate
-    """
-    # Handle --version
+    """Mantis CLI - Docker deployment tool."""
     if version:
-        print_version()
+        typer.echo(f"Mantis v{VERSION}")
         raise typer.Exit()
 
-    # Handle --help or no arguments
-    if help_flag or not args:
-        print_help()
-        raise typer.Exit()
-
-    # Validate mode
-    if mode not in ['remote', 'ssh', 'host']:
-        CLI.error(f'Invalid mode: {mode}. Must be one of: remote, ssh, host')
-
-    # Parse arguments
-    environment_id, command_groups = parse_command_args(args)
-
-    if not command_groups:
-        CLI.error('No commands specified. Run "mantis commands" to see available commands.')
-
-    # Check if any command doesn't require environment
-    first_cmd = command_groups[0][0] if command_groups else None
-    first_cmd_obj = get_command(first_cmd) if first_cmd else None
-
-    # Get manager (may prompt for config selection)
-    try:
-        manager = get_manager(environment_id, mode)
-    except SystemExit:
-        raise typer.Exit(1)
-
-    # Print heading
-    print_heading(manager, mode)
-
-    # Execute commands
-    execute_commands(manager, command_groups, mode, environment_id, args)
+    state._mode = mode
+    state._manager = get_manager(environment, mode)
 
 
-def print_help():
-    """Print help message."""
-    console = Console()
+# =============================================================================
+# Core Commands
+# =============================================================================
 
-    print(f"""
-Mantis v{VERSION} - Docker deployment tool
+@app.command()
+def status():
+    """Prints images and containers"""
+    state.status()
 
-Usage:
-    mantis [OPTIONS] [ENVIRONMENT] COMMAND [ARGS]...
 
-Options:
-    --mode, -m     Execution mode: remote (default), ssh, host
-    --version, -v  Show version and exit
-    --help, -h     Show this help message
+@app.command()
+def deploy(
+    dirty: bool = typer.Option(False, "--dirty", help="Skip clean step"),
+):
+    """Runs deployment process"""
+    state.deploy(dirty=dirty)
 
-Modes:
-    remote    Runs commands remotely using DOCKER_HOST or DOCKER_CONTEXT (default)
-    ssh       Connects via SSH and runs mantis on remote machine
-    host      Runs mantis directly on host (used as proxy for ssh mode)
 
-Environment:
-    Optional environment ID (e.g., production, staging, local)
-    Required for multi-environment configs, optional for single connection mode
+@app.command()
+def build(
+    services: Optional[List[str]] = typer.Argument(None, help="Services to build"),
+):
+    """Builds all services with Dockerfiles"""
+    state.build(' '.join(services) if services else '')
 
-Examples:
-    mantis production status          # Check container status
-    mantis production deploy          # Full deployment
-    mantis production deploy --dirty  # Deploy without cleanup
-    mantis stage build push deploy    # Build, push, and deploy
-    mantis production logs web        # View logs for 'web' container
-    mantis manage migrate             # Run Django migration (single connection mode)
 
-Run 'mantis commands' to see all available commands.
-""")
+@app.command()
+def pull(
+    services: Optional[List[str]] = typer.Argument(None, help="Services to pull"),
+):
+    """Pulls required images for services"""
+    state.pull(' '.join(services) if services else '')
+
+
+@app.command()
+def push(
+    services: Optional[List[str]] = typer.Argument(None, help="Services to push"),
+):
+    """Push built images to repository"""
+    state.push(' '.join(services) if services else '')
+
+
+@app.command()
+def upload():
+    """Uploads config, compose and environment files to server"""
+    state.upload()
+
+
+@app.command()
+def clean(
+    params: Optional[List[str]] = typer.Argument(None, help="Clean parameters"),
+):
+    """Clean images, containers, networks"""
+    state.clean(' '.join(params) if params else '')
+
+
+@app.command()
+def logs(
+    container: Optional[str] = typer.Argument(None, help="Container name"),
+):
+    """Prints logs of containers"""
+    state.logs(container)
+
+
+@app.command()
+def networks():
+    """Prints docker networks"""
+    state.networks()
+
+
+@app.command()
+def healthcheck(
+    container: Optional[str] = typer.Argument(None, help="Container name"),
+):
+    """Execute health-check of container"""
+    state.healthcheck(container)
+
+
+@app.command()
+def up(
+    params: Optional[List[str]] = typer.Argument(None, help="Compose up parameters"),
+):
+    """Calls compose up"""
+    state.up(' '.join(params) if params else '')
+
+
+@app.command()
+def down(
+    params: Optional[List[str]] = typer.Argument(None, help="Compose down parameters"),
+):
+    """Calls compose down"""
+    state.down(' '.join(params) if params else '')
+
+
+@app.command()
+def restart(
+    service: Optional[str] = typer.Argument(None, help="Service to restart"),
+):
+    """Restarts containers"""
+    state.restart(service)
+
+
+@app.command()
+def stop(
+    containers: Optional[List[str]] = typer.Argument(None, help="Containers to stop"),
+):
+    """Stops containers"""
+    state.stop(' '.join(containers) if containers else None)
+
+
+@app.command()
+def start(
+    containers: Optional[List[str]] = typer.Argument(None, help="Containers to start"),
+):
+    """Starts containers"""
+    state.start(' '.join(containers) if containers else '')
+
+
+@app.command()
+def kill(
+    containers: Optional[List[str]] = typer.Argument(None, help="Containers to kill"),
+):
+    """Kills containers"""
+    state.kill(' '.join(containers) if containers else None)
+
+
+@app.command()
+def remove(
+    containers: Optional[List[str]] = typer.Argument(None, help="Containers to remove"),
+):
+    """Removes containers"""
+    state.remove(' '.join(containers) if containers else '')
+
+
+@app.command("run")
+def run_cmd(
+    params: List[str] = typer.Argument(..., help="Compose run parameters"),
+):
+    """Calls compose run with params"""
+    state.run(' '.join(params))
+
+
+@app.command()
+def bash(
+    container: str = typer.Argument(..., help="Container name"),
+):
+    """Runs bash in container"""
+    state.bash(container)
+
+
+@app.command()
+def sh(
+    container: str = typer.Argument(..., help="Container name"),
+):
+    """Runs sh in container"""
+    state.sh(container)
+
+
+@app.command("ssh")
+def ssh_cmd():
+    """Connects to remote host via SSH"""
+    state.ssh()
+
+
+@app.command("exec")
+def exec_cmd(
+    container: str = typer.Argument(..., help="Container name"),
+    command: List[str] = typer.Argument(..., help="Command to execute"),
+):
+    """Executes command in container"""
+    state.exec(f"{container} {' '.join(command)}")
+
+
+@app.command("exec-it")
+def exec_it(
+    container: str = typer.Argument(..., help="Container name"),
+    command: List[str] = typer.Argument(..., help="Command to execute"),
+):
+    """Executes command in container (interactive)"""
+    state.exec_it(f"{container} {' '.join(command)}")
+
+
+@app.command()
+def scale(
+    service: str = typer.Argument(..., help="Service name"),
+    num: int = typer.Argument(..., help="Number of instances"),
+):
+    """Scales service to given number"""
+    state.scale(service, num)
+
+
+@app.command("zero-downtime")
+def zero_downtime(
+    service: Optional[str] = typer.Argument(None, help="Service name"),
+):
+    """Runs zero-downtime deployment"""
+    state.zero_downtime(service)
+
+
+@app.command("restart-service")
+def restart_service(
+    service: str = typer.Argument(..., help="Service name"),
+):
+    """Restarts a specific service"""
+    state.restart_service(service)
+
+
+@app.command("remove-suffixes")
+def remove_suffixes(
+    prefix: str = typer.Argument("", help="Prefix to match"),
+):
+    """Removes numerical suffixes from container names"""
+    state.remove_suffixes(prefix)
+
+
+# =============================================================================
+# Encryption Commands
+# =============================================================================
+
+@app.command("encrypt-env")
+def encrypt_env(
+    force: bool = typer.Option(False, "--force", help="Skip confirmation"),
+):
+    """Encrypts environment files"""
+    state.encrypt_env(params='force' if force else '')
+
+
+@app.command("decrypt-env")
+def decrypt_env(
+    force: bool = typer.Option(False, "--force", help="Skip confirmation"),
+):
+    """Decrypts environment files"""
+    state.decrypt_env(params='force' if force else '')
+
+
+@app.command("check-env")
+def check_env():
+    """Compares encrypted and decrypted env files"""
+    state.check_env()
+
+
+@app.command("generate-key")
+def generate_key():
+    """Creates new encryption key"""
+    state.generate_key()
+
+
+@app.command("read-key")
+def read_key():
+    """Returns encryption key value"""
+    print(state.read_key())
+
+
+# =============================================================================
+# Config Commands
+# =============================================================================
+
+@app.command("check-config")
+def check_config():
+    """Validates config file"""
+    state.check_config()
+
+
+@app.command()
+def contexts():
+    """Prints all docker contexts"""
+    state.contexts()
+
+
+@app.command("create-context")
+def create_context():
+    """Creates docker context"""
+    state.create_context()
+
+
+# =============================================================================
+# Service Info Commands
+# =============================================================================
+
+@app.command()
+def services():
+    """Lists all defined services"""
+    for service in state.services():
+        print(service)
+
+
+@app.command("services-to-build")
+def services_to_build():
+    """Lists services that will be built"""
+    for service, info in state.services_to_build().items():
+        print(f"{service}: {info}")
+
+
+@app.command("get-container-name")
+def get_container_name(
+    service: str = typer.Argument(..., help="Service name"),
+):
+    """Gets container name for service"""
+    print(state.get_container_name(service))
+
+
+@app.command("get-image-name")
+def get_image_name(
+    service: str = typer.Argument(..., help="Service name"),
+):
+    """Gets image name for service"""
+    print(state.get_image_name(service))
+
+
+# =============================================================================
+# Volume Commands
+# =============================================================================
+
+@app.command("backup-volume")
+def backup_volume(
+    volume: str = typer.Argument(..., help="Volume name"),
+):
+    """Backups volume to a file"""
+    state.backup_volume(volume)
+
+
+@app.command("restore-volume")
+def restore_volume(
+    volume: str = typer.Argument(..., help="Volume name"),
+    file: str = typer.Argument(..., help="Backup file"),
+):
+    """Restores volume from a file"""
+    state.restore_volume(volume, file)
+
+
+# =============================================================================
+# Django Extension Commands
+# =============================================================================
+
+@app.command()
+def shell():
+    """Runs Django shell"""
+    state.shell()
+
+
+@app.command()
+def manage(
+    command: str = typer.Argument(..., help="Django management command"),
+    args: Optional[List[str]] = typer.Argument(None, help="Command arguments"),
+):
+    """Runs Django manage command"""
+    full_cmd = command + (' ' + ' '.join(args) if args else '')
+    state.manage(full_cmd)
+
+
+@app.command("send-test-email")
+def send_test_email():
+    """Sends test email to admins"""
+    state.send_test_email()
+
+
+# =============================================================================
+# PostgreSQL Extension Commands
+# =============================================================================
+
+@app.command()
+def psql():
+    """Starts psql console"""
+    state.psql()
+
+
+@app.command("pg-dump")
+def pg_dump(
+    data_only: bool = typer.Option(False, "--data-only", "-d", help="Dump data only"),
+    table: Optional[str] = typer.Option(None, "--table", "-t", help="Specific table"),
+):
+    """Backups PostgreSQL database"""
+    state.pg_dump(data_only=data_only, table=table)
+
+
+@app.command("pg-dump-data")
+def pg_dump_data(
+    table: Optional[str] = typer.Option(None, "--table", "-t", help="Specific table"),
+):
+    """Backups PostgreSQL database (data only)"""
+    state.pg_dump_data(table=table)
+
+
+@app.command("pg-restore")
+def pg_restore(
+    filename: str = typer.Argument(..., help="Backup filename"),
+    table: Optional[str] = typer.Option(None, "--table", "-t", help="Specific table"),
+):
+    """Restores database from backup"""
+    state.pg_restore(filename=filename, table=table)
+
+
+@app.command("pg-restore-data")
+def pg_restore_data(
+    filename: str = typer.Argument(..., help="Backup filename"),
+    table: str = typer.Argument(..., help="Table name"),
+):
+    """Restores database data from backup"""
+    state.pg_restore(filename=filename, table=table)
+
+
+# =============================================================================
+# Nginx Extension Commands
+# =============================================================================
+
+@app.command("reload-webserver")
+def reload_webserver():
+    """Reloads nginx webserver"""
+    state.reload_webserver()
 
 
 def run():

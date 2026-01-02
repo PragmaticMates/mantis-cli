@@ -1,5 +1,4 @@
 from mantis.helpers import CLI
-from mantis.commands import command
 
 
 class Django():
@@ -19,44 +18,16 @@ class Django():
         CLI.error(f"Container {container_name} not found")
 
     def shell(self):
-        """
-        Runs and connects to Django shell
-        """
+        """Runs and connects to Django shell"""
         CLI.info('Connecting to Django shell...')
         self.docker(f'exec -i {self.django_container} python manage.py shell')
 
     def manage(self, params):
-        """
-        Runs Django manage command
-        """
+        """Runs Django manage command"""
         CLI.info('Django manage...')
         self.docker(f'exec -ti {self.django_container} python manage.py {params}')
 
     def send_test_email(self):
-        """
-        Sends test email to admins using Django 'sendtestemail' command
-        """
+        """Sends test email to admins"""
         CLI.info('Sending test email...')
         self.docker(f'exec -i {self.django_container} python manage.py sendtestemail --admins')
-
-
-# Register extension commands
-@command()
-def shell(manager):
-    """Runs and connects to Django shell"""
-    manager.shell()
-
-
-@command()
-def manage(manager, *args):
-    """Runs Django manage command"""
-    if not args:
-        CLI.error("manage requires a command argument (e.g., 'mantis production manage migrate')")
-    params = ' '.join(args)
-    manager.manage(params)
-
-
-@command(name='send-test-email')
-def send_test_email(manager):
-    """Sends test email to admins using Django 'sendtestemail' command"""
-    manager.send_test_email()
