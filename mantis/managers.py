@@ -1404,10 +1404,47 @@ def get_extension_classes(extensions):
     return extension_classes
 
 
+def resolve_environment(environment_id, config):
+    """
+    Resolves environment prefix to full environment ID.
+
+    If the prefix matches exactly one environment, returns that environment ID.
+    If multiple environments match, raises an error with the ambiguous options.
+    If no environments match, raises an error with available options.
+    """
+    if not environment_id:
+        return None
+
+    # Single connection mode - no environment resolution needed
+    if config.get('connection'):
+        return environment_id
+
+    connections = config.get('connections', {})
+    available_envs = list(connections.keys())
+
+    # Check for exact match first
+    if environment_id in available_envs:
+        return environment_id
+
+    # Find all environments that start with the prefix
+    matches = [env for env in available_envs if env.startswith(environment_id)]
+
+    if len(matches) == 1:
+        CLI.info(f'Environment "{environment_id}" resolved to "{matches[0]}"')
+        return matches[0]
+    elif len(matches) > 1:
+        CLI.error(f'Ambiguous environment prefix "{environment_id}". Matches: {", ".join(sorted(matches))}')
+    else:
+        CLI.error(f'Environment "{environment_id}" not found. Available: {", ".join(sorted(available_envs))}')
+
+
 def get_manager(environment_id, mode):
     # config file
     config_file = find_config(environment_id)
     config = load_config(config_file)
+
+    # Resolve environment prefix to full ID
+    environment_id = resolve_environment(environment_id, config)
 
     # class name of the manager
     manager_class_name = config.get('manager_class', 'mantis.managers.BaseManager')
