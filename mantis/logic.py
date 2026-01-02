@@ -92,8 +92,11 @@ def find_keys_only_in_config(config, template, parent_key=""):
 
 def load_config(config_file):
     if not os.path.exists(config_file):
-        CLI.warning(f'File {config_file} does not exist. Returning empty config')
-        return {}
+        CLI.warning(f'File {config_file} does not exist.')
+        CLI.danger(f'Mantis config not found. Double check your current working directory.')
+        exit()
+        # CLI.warning(f'File {config_file} does not exist. Returning empty config')
+        # return {}
 
     with open(config_file, "r") as config:
         try:
