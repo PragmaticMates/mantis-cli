@@ -55,18 +55,20 @@ def find_config(environment_id=None):
 
         # Check for single connection mode
         single_connection = config.get('connection')
+        has_match = False
 
         if single_connection:
             # Single connection mode - display the connection string
             connections_display = '[green](single)[/green]'
             single_connection_configs.append((index, path))
+            # Single connection matches when no environment is specified
+            has_match = not environment_id
         else:
             # Multi-environment mode - display connection keys
             connections = list(config.get('connections', {}).keys())
             all_environments.update(connections)
 
             # Check if any connection matches the environment prefix
-            has_match = False
             colorful_connections = []
             for connection in connections:
                 # Highlight in green if exact match or prefix match
@@ -80,7 +82,9 @@ def find_config(environment_id=None):
             if has_match:
                 matching_configs.append((index, path))
 
-        table.add_row(str(index + 1), normpath(dirname(path)), connections_display)
+        # Dim path if no environment match
+        path_display = normpath(dirname(path)) if has_match else f'[dim]{normpath(dirname(path))}[/dim]'
+        table.add_row(str(index + 1), path_display, connections_display)
 
     # Always print the table when multiple configs found
     console.print(table)
