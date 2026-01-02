@@ -4,11 +4,14 @@ from mantis.helpers import CLI, Colors
 
 
 class Environment(object):
-    def __init__(self, environment_id, folder):
+    def __init__(self, environment_id, folder, single_mode=False):
         self.id = environment_id
         self.folder = folder
+        self.single_mode = single_mode
 
-        if self.id:
+        if self.single_mode:
+            self.setup_single_mode()
+        elif self.id:
             self.setup()
 
     def setup(self):
@@ -29,6 +32,31 @@ class Environment(object):
             encrypted_environment_filenames = list(filter(lambda f: f.endswith('.env.encrypted'), files))
             self.files = list(map(lambda x: os.path.join(dirpath, x), environment_filenames))
             self.encrypted_files = list(map(lambda x: os.path.join(dirpath, x), encrypted_environment_filenames))
+
+    def setup_single_mode(self):
+        """
+        Setup for single connection mode: look for env files directly in the folder
+        instead of environment subfolders
+        """
+        self.path = self.folder
+
+        if not os.path.exists(self.path):
+            CLI.warning(f"Environment path '{self.path}' does not exist")
+            self.files = []
+            self.encrypted_files = []
+            return
+
+        if not os.path.isdir(self.path):
+            CLI.error(f"Environment path '{self.path}' is not directory")
+
+        CLI.info(f"Found environment path (single mode): '{self.path}'")
+
+        # Look for env files directly in the folder (not in subdirectories)
+        files = os.listdir(self.path)
+        environment_filenames = list(filter(lambda f: f.endswith('.env') and not f.endswith('.encrypted'), files))
+        encrypted_environment_filenames = list(filter(lambda f: f.endswith('.env.encrypted'), files))
+        self.files = list(map(lambda x: os.path.join(self.path, x), environment_filenames))
+        self.encrypted_files = list(map(lambda x: os.path.join(self.path, x), encrypted_environment_filenames))
 
     def _get_path(self, id):
         possible_folder_names = [f'.{id}', id]

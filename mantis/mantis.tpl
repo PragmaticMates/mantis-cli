@@ -31,6 +31,7 @@
   },
   "zero_downtime": [],
   "project_path": "~",
+  "connection": null,
   "connections": {
   }
 }

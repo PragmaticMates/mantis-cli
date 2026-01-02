@@ -42,14 +42,23 @@ def find_config(environment_id=None):
 
     for index, path in enumerate(paths):
         config = load_config(path)
-        connections = config.get('connections', {}).keys()
 
-        # TODO: get project names from compose files
+        # Check for single connection mode
+        single_connection = config.get('connection')
 
-        colorful_connections = []
-        for connection in connections:
-            color = 'success' if connection == environment_id else 'warning'
-            colorful_connections.append(getattr(CLI, color)(connection, end='', return_value=True))
+        if single_connection:
+            # Single connection mode - display the connection string
+            colorful_connections = [CLI.success('(single)', end='', return_value=True)]
+        else:
+            # Multi-environment mode - display connection keys
+            connections = config.get('connections', {}).keys()
+
+            # TODO: get project names from compose files
+
+            colorful_connections = []
+            for connection in connections:
+                color = 'success' if connection == environment_id else 'warning'
+                colorful_connections.append(getattr(CLI, color)(connection, end='', return_value=True))
 
         table.add_row([index + 1, normpath(dirname(path)), ', '.join(colorful_connections)])
 
@@ -194,7 +203,8 @@ def execute(manager, command, params):
     else:
         methods_without_environment = ['contexts', 'create_context', 'check_config', 'generate_key', 'read_key']
 
-        if manager.environment_id is None and manager_method not in methods_without_environment:
+        # In single connection mode, environment_id is not required
+        if manager.environment_id is None and not manager.single_connection_mode and manager_method not in methods_without_environment:
             CLI.error('Missing environment')
         elif manager.environment_id is not None and manager_method in methods_without_environment:
             CLI.error('Redundant environment')

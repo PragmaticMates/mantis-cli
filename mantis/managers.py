@@ -62,7 +62,8 @@ class AbstractManager(object):
 
     @property
     def connection_details(self):
-        if self.env.id is None:
+        # In single connection mode, env.id is None but we still have a connection
+        if not self.single_connection_mode and self.env.id is None:
             return None
 
         property_name = '_connection_details'
@@ -75,7 +76,7 @@ class AbstractManager(object):
         if hasattr(self, property_name):
             return getattr(self, property_name)
 
-        if 'local' in self.env.id:
+        if self.env.id and 'local' in self.env.id:
             details = {
                 'host': 'localhost',
                 'user': None,
@@ -109,12 +110,14 @@ class AbstractManager(object):
 
     @property
     def docker_connection(self):
-        if self.env.id is None or 'local' in self.env.id:
+        # In single connection mode or when env.id contains 'local', no extra connection needed
+        if not self.single_connection_mode and (self.env.id is None or 'local' in self.env.id):
             return ''
 
         if self.mode == 'remote':
             if self.connection is None:
-                CLI.error(f'Connection for environment {self.env.id} not defined!')
+                env_info = f' for environment {self.env.id}' if self.env.id else ''
+                CLI.error(f'Connection{env_info} not defined!')
             if self.connection.startswith('ssh://'):
                 return f'DOCKER_HOST="{self.connection}"'
             elif self.connection.startswith('context://'):
@@ -139,13 +142,51 @@ class AbstractManager(object):
         # Save merged config to variable
         self.config = defaults.copy()
 
+        # Detect single connection mode (connection string instead of connections dict)
+        has_single_connection = self.config.get('connection') is not None
+        has_multiple_connections = bool(self.config.get('connections', {}))
+
+        # Validate: only one of connection or connections should be defined
+        if has_single_connection and has_multiple_connections:
+            CLI.error('Config error: Cannot define both "connection" and "connections". Use either single connection mode or named environments, not both.')
+
+        self.single_connection_mode = has_single_connection
+
+        # Validate: environment_id should not be provided in single connection mode
+        if self.single_connection_mode and self.environment_id:
+            CLI.error(f'Config error: Environment "{self.environment_id}" was provided, but config uses single connection mode. Remove the environment argument or switch to named environments using "connections".')
+
         self.key_file = normalize(path.join(self.config['encryption']['folder'], 'mantis.key'))
         self.environment_path = normalize(self.config['environment']['folder'])
 
-        if self.environment_id:
+        if self.single_connection_mode:
+            # In single connection mode, compose files are directly in compose folder
+            self.compose_path = normalize(self.config['compose']['folder'])
+        elif self.environment_id:
             self.compose_path = normalize(path.join(self.config['compose']['folder'], self.environment_id))
 
     def init_environment(self):
+        if self.single_connection_mode:
+            # Single connection mode: no environment_id required
+            self.env = Environment(
+                environment_id=None,
+                folder=self.environment_path,
+                single_mode=True,
+            )
+
+            # connection from single 'connection' key
+            self.connection = self.config.get('connection')
+
+            # compose files directly in compose folder
+            compose_file_paths = os.popen(f'find {self.compose_path} -maxdepth 1 -name "*.yml" -o -name "*.yaml"').read().strip().split('\n')
+
+            # Remove empty strings
+            self.compose_files = list(filter(None, compose_file_paths))
+
+            # Read compose files
+            self.compose_config = self.read_compose_configs()
+            return
+
         if not self.environment_id:
             self.connection = None
             return

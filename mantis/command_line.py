@@ -75,7 +75,12 @@ def run():
                 value=value
             )
 
-    environment_intro = f'Environment ID = {Colors.BOLD}{manager.environment_id}{Colors.ENDC}, ' if manager.environment_id else ''
+    if manager.environment_id:
+        environment_intro = f'Environment ID = {Colors.BOLD}{manager.environment_id}{Colors.ENDC}, '
+    elif manager.single_connection_mode:
+        environment_intro = f'{Colors.BOLD}(single connection mode){Colors.ENDC}, '
+    else:
+        environment_intro = ''
 
     if manager.connection and manager.host:
         host_intro = f'{Colors.RED}{manager.host}{Colors.ENDC}, '
@@ -91,9 +96,11 @@ def run():
     print(heading)
 
     if mode == 'ssh':
+        # Build mantis command - environment_id is optional in single connection mode
+        env_part = f'{environment_id} ' if environment_id else ''
         cmds = [
             f'cd {manager.project_path}',
-            f'mantis {environment_id} --mode=host {" ".join(commands)}'
+            f'mantis {env_part}--mode=host {" ".join(commands)}'
         ]
         cmd = ';'.join(cmds)
         exec = f"ssh -t {manager.user}@{manager.host} -p {manager.port} '{cmd}'"
@@ -115,11 +122,12 @@ def help(manager):
 
     print('\nModes:\n\
     remote \truns commands remotely from local machine using DOCKER_HOST or DOCKER_CONTEXT (default)\n\
-    ssh \tconnects to host via ssh and run all mantis commands on remote machine directly (nantis-cli needs to be installed on server)\n\
+    ssh \tconnects to host via ssh and run all mantis commands on remote machine directly (mantis-cli needs to be installed on server)\n\
     host \truns mantis on host machine directly without invoking connection (used as proxy for ssh mode)')
 
     print(f'\nEnvironment:\n\
-    Either "local" or any custom environment identifier defined as connection in your config file.')
+    Either "local" or any custom environment identifier defined as connection in your config file.\n\
+    Optional when using single connection mode (config has "connection" instead of "connections").')
 
     print(f'\nCommands:')
 
