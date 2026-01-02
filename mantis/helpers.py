@@ -1,92 +1,59 @@
-class Colors:
-    # https://stackoverflow.com/questions/5947742/how-to-change-the-output-color-of-echo-in-linux
-    BLACK = "\033[0;30m"
-    BLUE = '\033[94m'
-    # BLUE = "\033[0;34m"
-    GREEN = '\033[92m'
-    # GREEN = "\033[0;32m"
-    YELLOW = '\033[93m'
-    # YELLOW = "\033[1;33m"
-    RED = '\033[91m'
-    # RED = "\033[0;31m"
-    PINK = '\033[95m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    BROWN = "\033[0;33m"
-    PURPLE = "\033[0;35m"
-    CYAN = "\033[0;36m"
-    LIGHT_GRAY = "\033[0;37m"
-    DARK_GRAY = "\033[1;30m"
-    LIGHT_RED = "\033[1;31m"
-    LIGHT_GREEN = "\033[1;32m"
-    LIGHT_BLUE = "\033[1;34m"
-    LIGHT_PURPLE = "\033[1;35m"
-    LIGHT_CYAN = "\033[1;36m"
-    LIGHT_WHITE = "\033[1;37m"
-    FAINT = "\033[2m"
-    ITALIC = "\033[3m"
-    BLINK_SLOW = "\033[5m"
-    BLINK_FAST = "\033[6m"
-    NEGATIVE = "\033[7m"
-    CROSSED = "\033[9m"
-    RESET = "\033[0m"
-    ENDC = '\033[0m'
+from rich.console import Console
+from rich.text import Text
+
+# Shared console instance
+_console = Console()
 
 
 class CLI(object):
     @staticmethod
-    def print_or_return(text, color, end='\n', return_value=False):
-        s = f'{color}{text}{Colors.ENDC}'
-        if return_value:
-            return f'{s}{end}'
-        print(s, end=end)
+    def _print(text, style, end='\n'):
+        styled_text = Text(str(text), style=style)
+        _console.print(styled_text, end=end)
 
     @staticmethod
     def error(text):
-        exit(f'{Colors.RED}{text}{Colors.ENDC}')
+        styled_text = Text(str(text), style='red')
+        _console.print(styled_text)
+        exit(1)
 
     @staticmethod
-    def bold(text, end='\n', return_value=False):
-        return CLI.print_or_return(text=text, color=Colors.BOLD, end=end, return_value=return_value)
+    def bold(text, end='\n'):
+        return CLI._print(text=text, style='bold', end=end)
 
     @staticmethod
-    def info(text, end='\n', return_value=False):
-        return CLI.print_or_return(text=text, color=Colors.BLUE, end=end, return_value=return_value)
+    def info(text, end='\n'):
+        return CLI._print(text=text, style='blue', end=end)
 
     @staticmethod
-    def pink(text, end='\n', return_value=False):
-        return CLI.print_or_return(text=text, color=Colors.PINK, end=end, return_value=return_value)
+    def pink(text, end='\n'):
+        return CLI._print(text=text, style='magenta', end=end)
 
     @staticmethod
-    def success(text, end='\n', return_value=False):
-        return CLI.print_or_return(text=text, color=Colors.GREEN, end=end, return_value=return_value)
+    def success(text, end='\n'):
+        return CLI._print(text=text, style='green', end=end)
 
     @staticmethod
-    def warning(text, end='\n', return_value=False):
-        return CLI.print_or_return(text=text, color=Colors.YELLOW, end=end, return_value=return_value)
+    def warning(text, end='\n'):
+        return CLI._print(text=text, style='yellow', end=end)
 
     @staticmethod
-    def danger(text, end='\n', return_value=False):
-        return CLI.print_or_return(text=text, color=Colors.RED, end=end, return_value=return_value)
+    def danger(text, end='\n'):
+        return CLI._print(text=text, style='red', end=end)
 
     @staticmethod
-    def underline(text, end='\n', return_value=False):
-        return CLI.print_or_return(text=text, color=Colors.UNDERLINE, end=end, return_value=return_value)
+    def underline(text, end='\n'):
+        return CLI._print(text=text, style='underline', end=end)
 
     @staticmethod
-    def step(index, total, text, end='\n', return_value=False):
-        return CLI.print_or_return(text=f'[{index}/{total}] {text}', color=Colors.YELLOW, end=end, return_value=return_value)
+    def step(index, total, text, end='\n'):
+        return CLI._print(text=f'[{index}/{total}] {text}', style='yellow', end=end)
 
     @staticmethod
     def link(uri, label=None):
-        if label is None: 
+        if label is None:
             label = uri
-        parameters = ''
-
-        # OSC 8 ; params ; URI ST <name> OSC 8 ;; ST 
-        escape_mask = '\033]8;{};{}\033\\{}\033]8;;\033\\'
-
-        return escape_mask.format(parameters, uri, label)
+        return f'[link={uri}]{label}[/link]'
 
 
 def nested_set(dic, keys, value):

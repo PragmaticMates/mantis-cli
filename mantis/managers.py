@@ -13,7 +13,7 @@ from rich.table import Table
 
 from mantis.crypto import Crypto
 from mantis.environment import Environment
-from mantis.helpers import CLI, Colors, merge_json
+from mantis.helpers import CLI, merge_json
 from mantis.logic import find_config, load_config, check_config, load_template_config
 
 
@@ -215,6 +215,30 @@ class AbstractManager(object):
         # Read compose files
         self.compose_config = self.read_compose_configs()
 
+    def are_env_files_in_sync(self, env_file):
+        """
+        Checks if .env and .env.encrypted files are in sync.
+        Returns True if they match, False otherwise.
+        """
+        env_file_encrypted = f'{env_file}.encrypted'
+
+        # Check if both files exist
+        if not os.path.exists(env_file):
+            return False
+        if not os.path.exists(env_file_encrypted):
+            return False
+
+        try:
+            decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)
+            loaded_environment = self.env.load(env_file)
+
+            if decrypted_environment is None or loaded_environment is None:
+                return False
+
+            return loaded_environment == decrypted_environment
+        except Exception:
+            return False
+
     def check_environment_encryption(self, env_file):
         decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)  # .env.encrypted
         loaded_environment = self.env.load(env_file)  # .env
@@ -393,8 +417,14 @@ class BaseManager(AbstractManager):
 
             return values if return_value else None
 
-        CLI.info(f'Encrypting environment file {env_file}...')
         env_file_encrypted = f'{env_file}.encrypted'
+
+        # Skip if files are already in sync (unless return_value is True, which is used for internal checks)
+        if not return_value and self.are_env_files_in_sync(env_file):
+            CLI.success(f'Skipping {env_file} - already in sync with {env_file_encrypted}')
+            return None
+
+        CLI.info(f'Encrypting environment file {env_file}...')
 
         if not self.KEY:
             CLI.error('Missing mantis key! (%s)' % self.key_file)
@@ -455,6 +485,11 @@ class BaseManager(AbstractManager):
             return values if return_value else None
 
         env_file_encrypted = f'{env_file}.encrypted'
+
+        # Skip if files are already in sync (unless return_value is True, which is used for internal checks)
+        if not return_value and self.are_env_files_in_sync(env_file):
+            CLI.success(f'Skipping {env_file_encrypted} - already in sync with {env_file}')
+            return None
 
         if not return_value:
             CLI.info(f'Decrypting environment file {env_file_encrypted}...')
@@ -662,7 +697,8 @@ class BaseManager(AbstractManager):
         if container not in self.get_containers():
             CLI.error(f"Container {container} not found")
 
-        CLI.info(f'Health-checking {Colors.YELLOW}{container}{Colors.ENDC}...')
+        console = Console()
+        console.print(f'[blue]Health-checking [yellow]{container}[/yellow]...[/blue]')
 
         if self.has_healthcheck(container):
             healthcheck_config = self.get_healthcheck_config(container)
@@ -672,8 +708,8 @@ class BaseManager(AbstractManager):
             interval = healthcheck_interval / coeficient
             retries = healthcheck_retries * coeficient
 
-            CLI.info(f'Interval: {Colors.FAINT}{healthcheck_interval}{Colors.ENDC} s -> {Colors.YELLOW}{interval} s')
-            CLI.info(f'Retries: {Colors.FAINT}{healthcheck_retries}{Colors.ENDC} -> {Colors.YELLOW}{retries}')
+            console.print(f'[blue]Interval: [dim]{healthcheck_interval}[/dim] s -> [yellow]{interval} s[/yellow][/blue]')
+            console.print(f'[blue]Retries: [dim]{healthcheck_retries}[/dim] -> [yellow]{retries}[/yellow][/blue]')
 
             start = time.time()
 
@@ -681,13 +717,13 @@ class BaseManager(AbstractManager):
                 is_healthy, status = self.check_health(container)
 
                 if is_healthy:
-                    print(f"#{retry + 1}/{retries}: Status of '{container}' is {Colors.GREEN}{status}{Colors.ENDC}.")
+                    console.print(f"#{retry + 1}/{retries}: Status of '{container}' is [green]{status}[/green].")
                     end = time.time()
                     loading_time = end - start
-                    print(f'Container {Colors.YELLOW}{container}{Colors.ENDC} took {Colors.BLUE}{Colors.UNDERLINE}{loading_time} s{Colors.ENDC} to become healthy')
+                    console.print(f'Container [yellow]{container}[/yellow] took [blue underline]{loading_time} s[/blue underline] to become healthy')
                     return True
                 else:
-                    print(f"#{retry + 1}/{retries}: Status of '{container}' is {Colors.RED}{status}{Colors.ENDC}.")
+                    console.print(f"#{retry + 1}/{retries}: Status of '{container}' is [red]{status}[/red].")
 
                 if retries > 1:
                     sleep(interval)

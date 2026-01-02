@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.table import Table
 
 from mantis import VERSION
-from mantis.helpers import Colors, CLI, nested_set
+from mantis.helpers import CLI, nested_set
 from mantis.logic import get_manager, execute
 from mantis.managers import AbstractManager, BaseManager
 from mantis.extensions.django import Django
@@ -80,25 +80,27 @@ def run():
                 value=value
             )
 
+    console = Console()
+
     if manager.environment_id:
-        environment_intro = f'Environment ID = {Colors.BOLD}{manager.environment_id}{Colors.ENDC}, '
+        environment_intro = f'Environment ID = [bold]{manager.environment_id}[/bold], '
     elif manager.single_connection_mode:
-        environment_intro = f'{Colors.BOLD}(single connection mode){Colors.ENDC}, '
+        environment_intro = '[bold](single connection mode)[/bold], '
     else:
         environment_intro = ''
 
     if manager.connection and manager.host:
-        host_intro = f'{Colors.RED}{manager.host}{Colors.ENDC}, '
+        host_intro = f'[red]{manager.host}[/red], '
     else:
         host_intro = ''
 
     heading = f'{version_info}, '\
               f'{environment_intro}'\
               f'{host_intro}'\
-              f'mode: {Colors.GREEN}{manager.mode}{Colors.ENDC}, '\
-              f'hostname: {Colors.BLUE}{hostname}{Colors.ENDC}'
+              f'mode: [green]{manager.mode}[/green], '\
+              f'hostname: [blue]{hostname}[/blue]'
 
-    print(heading)
+    console.print(heading)
 
     if mode == 'ssh':
         # Build mantis command - environment_id is optional in single connection mode

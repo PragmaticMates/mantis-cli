@@ -1,6 +1,6 @@
 import os
 
-from mantis.helpers import CLI, Colors
+from mantis.helpers import CLI
 
 
 class Environment(object):
