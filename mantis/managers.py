@@ -8,6 +8,8 @@ from os import path
 from os.path import normpath
 from time import sleep
 
+from prettytable import PrettyTable
+
 from mantis.crypto import Crypto
 from mantis.environment import Environment
 from mantis.helpers import CLI, Colors, merge_json
@@ -1134,10 +1136,73 @@ class BaseManager(AbstractManager):
         steps = 2
 
         CLI.step(1, steps, 'List of Docker images')
-        self.docker(f'image ls')
+        images_output = self.docker('image ls --format "{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}\t{{.Size}}"', return_output=True)
+
+        if images_output.strip():
+            images_table = PrettyTable()
+            images_table.field_names = ['REPOSITORY', 'TAG', 'IMAGE ID', 'CREATED', 'SIZE']
+            images_table.align = 'l'
+
+            for line in images_output.strip().split('\n'):
+                parts = line.split('\t')
+                if len(parts) >= 5:
+                    repo, tag, image_id, created, size = parts[0], parts[1], parts[2], parts[3], parts[4]
+                    images_table.add_row([
+                        f'{Colors.CYAN}{repo}{Colors.ENDC}',
+                        f'{Colors.YELLOW}{tag}{Colors.ENDC}',
+                        f'{Colors.LIGHT_BLUE}{image_id}{Colors.ENDC}',
+                        f'{Colors.LIGHT_PURPLE}{created}{Colors.ENDC}',
+                        f'{Colors.GREEN}{size}{Colors.ENDC}'
+                    ])
+
+            print(images_table)
 
         CLI.step(2, steps, 'Docker containers')
-        self.docker(f'container ls -a --size')
+        containers_output = self.docker('container ls -a --format "{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}\t{{.Size}}"', return_output=True)
+
+        if containers_output.strip():
+            containers_table = PrettyTable()
+            containers_table.field_names = ['NAME', 'STATUS', 'IMAGE', 'PORTS', 'SIZE']
+            containers_table.align = 'l'
+
+            for line in containers_output.strip().split('\n'):
+                parts = line.split('\t')
+                if len(parts) >= 5:
+                    name, status, image, ports, size = parts[0], parts[1], parts[2], parts[3], parts[4]
+
+                    # Colorize status based on state
+                    if 'Up' in status:
+                        status_colored = f'{Colors.GREEN}{status}{Colors.ENDC}'
+                    elif 'Exited' in status:
+                        status_colored = f'{Colors.RED}{status}{Colors.ENDC}'
+                    elif 'Created' in status:
+                        status_colored = f'{Colors.YELLOW}{status}{Colors.ENDC}'
+                    elif 'Paused' in status:
+                        status_colored = f'{Colors.YELLOW}{status}{Colors.ENDC}'
+                    else:
+                        status_colored = status
+
+                    # Split ports into multiple lines with different colors for IPv4/IPv6
+                    ports_list = ports.split(', ') if ports else ['']
+                    colored_ports = []
+                    for port in ports_list:
+                        if '::' in port or '[' in port:
+                            # IPv6 port
+                            colored_ports.append(f'{Colors.LIGHT_WHITE}{port}{Colors.ENDC}')
+                        else:
+                            # IPv4 port
+                            colored_ports.append(f'{Colors.LIGHT_CYAN}{port}{Colors.ENDC}')
+                    ports_formatted = '\n'.join(colored_ports)
+
+                    containers_table.add_row([
+                        f'{Colors.BLUE}{name}{Colors.ENDC}',
+                        status_colored,
+                        f'{Colors.PURPLE}{image}{Colors.ENDC}',
+                        ports_formatted,
+                        f'{Colors.BROWN}{size}{Colors.ENDC}'
+                    ])
+
+            print(containers_table)
 
     def networks(self):
         """
