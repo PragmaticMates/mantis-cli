@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 from mantis import VERSION
 
 setup(
-    name='mantis-cli',
+    name='mantis_cli',
     version=VERSION,
     description='Management command to build and deploy webapps, especially based on Django',
     long_description=open('README.md').read(),

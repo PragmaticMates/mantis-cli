@@ -45,6 +45,7 @@ You can use ``<MANTIS>`` variable in your paths if needed as a relative referenc
 | environment.file_prefix  | string | file prefix of environment files                             |
 | zero_downtime            | array  | list of services to deploy with zero downtime                |
 | project_path             | string | path to folder with project files on remote server           |
+| connection               | string | single connection string (use instead of connections)        |
 | connections              | dict   | definition of your connections for each environment          |
 
 TODO:
@@ -54,9 +55,11 @@ See [template file](https://github.com/PragmaticMates/mantis-cli/blob/master/man
 
 ### Connections
 
-Connection for each environment except localhost can be defined either as an SSH or Docker context:
+Mantis supports two connection modes: **multi-environment** and **single connection**.
 
-For example:
+#### Multi-environment mode
+
+Use `connections` (dict) when you have multiple environments like stage, production, etc.:
 
 ```json
 "connections": {
@@ -64,6 +67,32 @@ For example:
     "production": "ssh://<user>@<host>:<port>"
 }
 ```
+
+In this mode, you must specify the environment in every command:
+
+```bash
+mantis production --status
+mantis stage --deploy
+```
+
+#### Single connection mode
+
+Use `connection` (string) when you only have one environment. This simplifies the CLI usage by making the environment parameter optional:
+
+```json
+"connection": "ssh://<user>@<host>:<port>"
+```
+
+In this mode, you can run commands without specifying an environment:
+
+```bash
+mantis --status
+mantis --deploy
+```
+
+Environment files are looked up directly in the `environment.folder` instead of environment-specific subfolders.
+
+**Note:** You cannot define both `connection` and `connections` in the same config file.
 
 ### Encryption
 
