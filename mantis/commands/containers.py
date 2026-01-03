@@ -3,7 +3,7 @@ from typing import Optional, List
 
 import typer
 
-from mantis.app import command, state, join_args
+from mantis.app import command, state
 
 
 @command(shortcut="l", panel="Containers")
@@ -83,7 +83,7 @@ def exec_cmd(
     cmd: List[str] = typer.Argument(..., help="Command to execute"),
 ):
     """Executes command in container"""
-    state.exec(f"{container} {join_args(cmd)}")
+    state.exec(container=container, cmd=cmd)
 
 
 @command(name="exec-it", panel="Containers")
@@ -92,7 +92,7 @@ def exec_it(
     cmd: List[str] = typer.Argument(..., help="Command to execute"),
 ):
     """Executes command in container (interactive)"""
-    state.exec_it(f"{container} {join_args(cmd)}")
+    state.exec_it(container=container, cmd=cmd)
 
 
 @command(name="get-container-name", panel="Containers")

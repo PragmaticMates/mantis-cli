@@ -1365,19 +1365,19 @@ class BaseManager(AbstractManager):
         CLI.info(f'Executing SSH connection: {self.connection}')
         subprocess.run(['ssh', f'{self.user}@{self.host}', '-p', str(self.port or 22)])
 
-    def exec(self, params):
+    def exec(self, container: str, cmd: list):
         """
         Executes command in container
         """
-        container, command = params.split(' ', maxsplit=1)
+        command = ' '.join(cmd)
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec {container} {command}')
 
-    def exec_it(self, params):
+    def exec_it(self, container: str, cmd: list):
         """
         Executes command in container using interactive pseudo-TTY
         """
-        container, command = params.split(' ', maxsplit=1)
+        command = ' '.join(cmd)
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')
 
