@@ -43,6 +43,7 @@ app = typer.Typer(
     rich_markup_mode="rich",
     epilog=EPILOG,
     context_settings={"max_content_width": 120},
+    add_completion=True,
 )
 
 # Commands that don't require environment (populated by @no_env_required decorator)
@@ -63,6 +64,7 @@ class State:
     def __init__(self):
         self._manager = None
         self._mode = 'remote'
+        self._dry_run = False
         self._heading_printed = False
         self._current_command = None
 
@@ -110,6 +112,10 @@ def print_heading(manager, mode: str):
     heading.append(str(mode), style="green")
     heading.append(", hostname: ")
     heading.append(_hostname, style="blue")
+
+    if manager.dry_run:
+        heading.append(" ")
+        heading.append("[DRY-RUN]", style="bold yellow")
 
     console.print(heading)
 
@@ -172,8 +178,10 @@ def version_callback(value: bool):
 def main(
     environment: Optional[str] = typer.Option(None, "--env", "-e", help="Environment ID"),
     mode: str = typer.Option("remote", "--mode", "-m", help="Execution mode: remote, ssh, host"),
+    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show commands without executing"),
     version: bool = typer.Option(False, "--version", "-v", callback=version_callback, is_eager=True, help="Show version and exit"),
 ):
     """Mantis CLI - Docker deployment tool."""
     state._mode = mode
-    state._manager = get_manager(environment, mode)
+    state._dry_run = dry_run
+    state._manager = get_manager(environment, mode, dry_run=dry_run)

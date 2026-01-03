@@ -1,6 +1,8 @@
 import sys
+from contextlib import contextmanager
 
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.text import Text
 
 # Shared console instance
@@ -18,6 +20,26 @@ class CLI(object):
         styled_text = Text(str(text), style='red')
         _console.print(styled_text)
         sys.exit(1)
+
+    @staticmethod
+    @contextmanager
+    def status(message: str):
+        """Context manager that shows a spinner while executing."""
+        with _console.status(f"[bold blue]{message}..."):
+            yield
+
+    @staticmethod
+    @contextmanager
+    def progress():
+        """Context manager for progress bar operations."""
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=_console,
+        ) as progress:
+            yield progress
 
     @staticmethod
     def bold(text, end='\n'):

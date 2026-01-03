@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import subprocess
@@ -5,6 +6,7 @@ import sys
 import time
 import yaml
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from time import sleep
@@ -24,9 +26,10 @@ class AbstractManager(object):
     """
     environment_id = None
 
-    def __init__(self, config_file=None, environment_id=None, mode='remote'):
+    def __init__(self, config_file=None, environment_id=None, mode='remote', dry_run=False):
         self.environment_id = environment_id
         self.mode = mode
+        self.dry_run = dry_run
 
         # config file
         self.config_file = config_file
@@ -290,6 +293,10 @@ class AbstractManager(object):
     def cmd(self, command):
         command = command.strip()
 
+        if self.dry_run:
+            CLI.warning(f'[DRY-RUN] {command}')
+            return
+
         error_message = "Error during running command '%s'" % command
 
         try:
@@ -306,6 +313,9 @@ class AbstractManager(object):
         cmd = f'{docker_connection} {command}'
 
         if return_output:
+            if self.dry_run:
+                CLI.warning(f'[DRY-RUN] {cmd}')
+                return ''
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             return result.stdout
 
@@ -328,6 +338,43 @@ class AbstractManager(object):
             return_output=return_output,
             use_connection=use_connection
         )
+
+    def run_parallel(self, commands: list, description: str = "Running"):
+        """
+        Execute multiple shell commands in parallel using thread pool.
+
+        Args:
+            commands: List of shell command strings to execute
+            description: Description for progress display
+        """
+        if not commands:
+            return []
+
+        if self.dry_run:
+            for cmd in commands:
+                CLI.warning(f'[DRY-RUN] {cmd}')
+            return []
+
+        def run_cmd(cmd):
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            return result
+
+        with CLI.progress() as progress:
+            task = progress.add_task(description, total=len(commands))
+            results = []
+
+            with ThreadPoolExecutor(max_workers=min(len(commands), 4)) as executor:
+                futures = {executor.submit(run_cmd, cmd): cmd for cmd in commands}
+
+                for future in futures:
+                    try:
+                        result = future.result()
+                        results.append(result)
+                    except Exception as e:
+                        CLI.warning(f"Command failed: {e}")
+                    progress.advance(task)
+
+        return results
 
     def get_container_project(self, container):
         """
@@ -767,6 +814,10 @@ class BaseManager(AbstractManager):
             # Build all services using docker compose
             self.docker_compose(f'build {build_args} {params} --pull', use_connection=False)
         elif build_tool == 'docker':
+            # Build commands for parallel execution
+            docker_connection = ''  # use_connection=False
+            build_commands = []
+
             for service, info in self.services_to_build().items():
                 platform = f"--platform={info['platform']}" if info['platform'] != '' else ''
                 cache_from = ' '.join([f"--cache-from {cache}" for cache in info['cache_from']]) if info['cache_from'] != [] else ''
@@ -777,9 +828,13 @@ class BaseManager(AbstractManager):
                 context = str(Path(self.compose_path) / info['context'])
                 dockerfile = str(Path(context) / info['dockerfile'])
 
-                # Build service using docker
-                self.docker(f"build {context} {build_args} {args} {platform} {cache_from} -t {image} -f {dockerfile} {params}",
-                            use_connection=False)
+                cmd = f"{docker_connection} docker build {context} {build_args} {args} {platform} {cache_from} -t {image} -f {dockerfile} {params}"
+                build_commands.append(cmd.strip())
+
+            # Run builds in parallel
+            if build_commands:
+                CLI.info(f'Building {len(build_commands)} services in parallel...')
+                self.run_parallel(build_commands, "Building services")
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
@@ -927,7 +982,7 @@ class BaseManager(AbstractManager):
         CLI.info('Deploying...')
 
         if dirty:
-            CLI.warning('...but dirty (no zero-downtime, without cleaning)') 
+            CLI.warning('...but dirty (no zero-downtime, without cleaning)')
 
         self.upload()
         self.pull()
@@ -957,6 +1012,8 @@ class BaseManager(AbstractManager):
 
         if not dirty:
             self.clean()
+
+        CLI.success('Deployment complete!')
 
     def zero_downtime(self, service=None):
         """
@@ -1437,7 +1494,7 @@ def resolve_environment(environment_id, config):
         CLI.error(f'Environment "{environment_id}" not found. Available: {", ".join(sorted(available_envs))}')
 
 
-def get_manager(environment_id, mode):
+def get_manager(environment_id, mode, dry_run=False):
     # config file
     config_file = find_config(environment_id)
     config = load_config(config_file)
@@ -1461,7 +1518,7 @@ def get_manager(environment_id, mode):
     class MantisManager(*[manager_class] + extension_classes):
         pass
 
-    manager = MantisManager(config_file=config_file, environment_id=environment_id, mode=mode)
+    manager = MantisManager(config_file=config_file, environment_id=environment_id, mode=mode, dry_run=dry_run)
 
     # set extensions data
     for extension, extension_params in extensions.items():

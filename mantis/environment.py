@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from mantis.helpers import CLI
@@ -29,11 +30,11 @@ class Environment(object):
         if not env_path.is_dir():
             CLI.error(f"Environment path '{self.path}' is not directory")
 
-        for dirpath, directories, files in env_path.walk():
+        for dirpath, directories, files in os.walk(self.path):
             environment_filenames = [f for f in files if f.endswith('.env')]
             encrypted_environment_filenames = [f for f in files if f.endswith('.env.encrypted')]
-            self.files = [str(dirpath / f) for f in environment_filenames]
-            self.encrypted_files = [str(dirpath / f) for f in encrypted_environment_filenames]
+            self.files = [os.path.join(dirpath, f) for f in environment_filenames]
+            self.encrypted_files = [os.path.join(dirpath, f) for f in encrypted_environment_filenames]
 
     def setup_single_mode(self):
         """

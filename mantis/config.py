@@ -167,19 +167,26 @@ def load_template_config() -> dict:
 
 
 def check_config(config):
-    # Load config template file
-    template = load_template_config()
+    """Validate config using Pydantic schema."""
+    from pydantic import ValidationError
+    from mantis.schema import validate_config
 
-    # validate config file
-    config_keys_only = find_keys_only_in_config(config, template)
+    try:
+        validate_config(config)
+        CLI.success("Config passed validation.")
+    except ValidationError as e:
+        errors = []
+        for error in e.errors():
+            loc = '.'.join(str(l) for l in error['loc'])
+            msg = error['msg']
+            errors.append(f"  - {loc}: {msg}")
 
-    # remove custom connections
-    config_keys_only = list(filter(lambda x: not x.startswith('connections.'), config_keys_only))
-
-    if config_keys_only:
-        template_link = CLI.link('https://github.com/PragmaticMates/mantis-cli/blob/master/mantis/mantis.tpl',
-                                 'template')
+        template_link = CLI.link(
+            'https://github.com/PragmaticMates/mantis-cli/blob/master/mantis/mantis.tpl',
+            'template'
+        )
         CLI.error(
-            f"Config file validation failed. Unknown config keys: {config_keys_only}. Check {template_link} for available attributes.")
-
-    CLI.success(f"Config passed validation.")
+            f"Config validation failed:\n" +
+            '\n'.join(errors) +
+            f"\n\nCheck {template_link} for available attributes."
+        )
