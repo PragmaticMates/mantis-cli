@@ -1132,13 +1132,14 @@ class BaseManager(AbstractManager):
         except AttributeError:
             CLI.warning('Tried to reload webserver, but no suitable extension found!')
 
-    def stop(self, params=None):
+    def stop(self, containers=None):
         """
-        Stops all or given project container
+        Stops all or given project containers
         """
         CLI.info('Stopping containers...')
 
-        containers = self.get_containers() if not params else params.split(' ')
+        if not containers:
+            containers = self.get_containers()
 
         steps = len(containers)
 
@@ -1146,13 +1147,14 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Stopping {container}')
             self.docker(f'container stop {container}')
 
-    def kill(self, params=None):
+    def kill(self, containers=None):
         """
-        Kills all or given project container
+        Kills all or given project containers
         """
         CLI.info('Killing containers...')
 
-        containers = self.get_containers() if not params else params.split(' ')
+        if not containers:
+            containers = self.get_containers()
 
         steps = len(containers)
 
@@ -1160,13 +1162,14 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Killing {container}')
             self.docker(f'container kill {container}')
 
-    def start(self, params=''):
+    def start(self, containers=None):
         """
-        Starts all or given project container
+        Starts all or given project containers
         """
         CLI.info('Starting containers...')
 
-        containers = self.get_containers() if not params else params.split(' ')
+        if not containers:
+            containers = self.get_containers()
 
         steps = len(containers)
 
@@ -1201,19 +1204,21 @@ class BaseManager(AbstractManager):
         """
         self.up(f'--no-deps --no-recreate --scale {service}={scale}')
 
-    def remove(self, params=''):
+    def remove(self, containers=None, force=False):
         """
-        Removes all or given project container
+        Removes all or given project containers
         """
         CLI.info('Removing containers...')
 
-        containers = self.get_containers() if params == '' else params.split(' ')
+        if not containers:
+            containers = self.get_containers()
 
         steps = len(containers)
+        force_flag = '-f ' if force else ''
 
         for index, container in enumerate(containers):
             CLI.step(index + 1, steps, f'Removing {container}')
-            self.docker(f'container rm {container}')
+            self.docker(f'container rm {force_flag}{container}')
 
     def clean(self, params=''):  # todo clean on all nodes
         """

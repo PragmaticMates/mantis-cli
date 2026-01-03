@@ -33,7 +33,7 @@ def stop(
     containers: Optional[List[str]] = typer.Argument(None, help="Containers to stop"),
 ):
     """Stops containers"""
-    state.stop(join_args(containers) or None)
+    state.stop(containers=containers)
 
 
 @command(panel="Containers")
@@ -41,7 +41,7 @@ def start(
     containers: Optional[List[str]] = typer.Argument(None, help="Containers to start"),
 ):
     """Starts containers"""
-    state.start(join_args(containers))
+    state.start(containers=containers)
 
 
 @command(panel="Containers")
@@ -49,15 +49,16 @@ def kill(
     containers: Optional[List[str]] = typer.Argument(None, help="Containers to kill"),
 ):
     """Kills containers"""
-    state.kill(join_args(containers) or None)
+    state.kill(containers=containers)
 
 
 @command(panel="Containers")
 def remove(
     containers: Optional[List[str]] = typer.Argument(None, help="Containers to remove"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force removal of running containers"),
 ):
     """Removes containers"""
-    state.remove(join_args(containers))
+    state.remove(containers=containers, force=force)
 
 
 @command(panel="Containers")
