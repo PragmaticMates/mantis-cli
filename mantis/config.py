@@ -1,12 +1,18 @@
 import os
+import sys
 import json
 from json.decoder import JSONDecodeError
-from os.path import dirname, normpath, abspath
+from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
 
 from mantis.helpers import CLI
+
+
+def get_config_dir(config_path: str) -> str:
+    """Get normalized directory path for a config file."""
+    return str(Path(config_path).parent)
 
 
 def find_config(environment_id=None):
@@ -17,10 +23,10 @@ def find_config(environment_id=None):
         return env_path
 
     CLI.info('Environment variable $MANTIS_CONFIG not found. Looking for file mantis.json...')
-    paths = os.popen('find . -name mantis.json').read().strip().split('\n')
+    paths = [str(p) for p in Path('.').rglob('mantis.json')]
 
-    # Remove empty strings
-    paths = list(filter(None, paths))
+    # Sort for consistent ordering
+    paths.sort()
 
     # Count found mantis files
     total_mantis_files = len(paths)
@@ -83,7 +89,8 @@ def find_config(environment_id=None):
                 matching_configs.append((index, path))
 
         # Dim path if no environment match
-        path_display = normpath(dirname(path)) if has_match else f'[dim]{normpath(dirname(path))}[/dim]'
+        config_dir = get_config_dir(path)
+        path_display = config_dir if has_match else f'[dim]{config_dir}[/dim]'
         table.add_row(str(index + 1), path_display, connections_display)
 
     # Always print the table when multiple configs found
@@ -96,13 +103,13 @@ def find_config(environment_id=None):
     # If exactly one config has matching environment, auto-select it
     if environment_id and len(matching_configs) == 1:
         selected_path = matching_configs[0][1]
-        CLI.info(f'Auto-selected config: {normpath(dirname(selected_path))}')
+        CLI.info(f'Auto-selected config: {get_config_dir(selected_path)}')
         return selected_path
 
     # If no environment provided and only one single connection config exists, auto-select it
     if not environment_id and len(single_connection_configs) == 1:
         selected_path = single_connection_configs[0][1]
-        CLI.info(f'Auto-selected single connection config: {normpath(dirname(selected_path))}')
+        CLI.info(f'Auto-selected single connection config: {get_config_dir(selected_path)}')
         return selected_path
 
     CLI.danger(f'[0] Exit now and define $MANTIS_CONFIG environment variable')
@@ -116,7 +123,7 @@ def find_config(environment_id=None):
             path_index = int(path_index)
 
     if path_index == 0:
-        exit()
+        sys.exit(0)
 
     return paths[path_index - 1]
 
@@ -141,13 +148,11 @@ def find_keys_only_in_config(config, template, parent_key=""):
     return differences
 
 
-def load_config(config_file):
-    if not os.path.exists(config_file):
+def load_config(config_file: str) -> dict:
+    if not Path(config_file).exists():
         CLI.warning(f'File {config_file} does not exist.')
         CLI.danger(f'Mantis config not found. Double check your current working directory.')
-        exit()
-        # CLI.warning(f'File {config_file} does not exist. Returning empty config')
-        # return {}
+        sys.exit(1)
 
     with open(config_file, "r") as config:
         try:
@@ -156,10 +161,9 @@ def load_config(config_file):
             CLI.error(f"Failed to load config from file {config_file}: {e}")
 
 
-def load_template_config():
-    current_directory = dirname(abspath(__file__))
-    template_path = normpath(f'{current_directory}/mantis.tpl')
-    return load_config(template_path)
+def load_template_config() -> dict:
+    template_path = Path(__file__).parent / 'mantis.tpl'
+    return load_config(str(template_path))
 
 
 def check_config(config):

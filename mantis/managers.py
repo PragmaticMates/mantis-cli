@@ -1,11 +1,12 @@
 import json
 import os
+import subprocess
+import sys
 import time
 import yaml
 from collections import defaultdict
 from datetime import datetime
-from os import path
-from os.path import normpath
+from pathlib import Path
 from time import sleep
 
 from rich.console import Console
@@ -92,13 +93,15 @@ class AbstractManager(object):
             elif self.connection.startswith('context://'):
                 context_name = self.connection.replace('context://', '')
 
-                # TODO: move to own method
-                context_details = json.loads(os.popen(f'docker context inspect {context_name}').read())
-
+                result = subprocess.run(
+                    ['docker', 'context', 'inspect', context_name],
+                    capture_output=True, text=True
+                )
                 try:
+                    context_details = json.loads(result.stdout)
                     ssh_host = context_details[0]["Endpoints"]["docker"]["Host"]
                     details = self.parse_ssh_connection(ssh_host)
-                except IndexError:
+                except (json.JSONDecodeError, IndexError, KeyError):
                     pass
             else:
                 raise CLI.error(f'Invalid connection protocol {self.connection}')
@@ -131,10 +134,10 @@ class AbstractManager(object):
 
     def init_config(self, config):
         check_config(config)
-        config_file_path = path.normpath(path.join(self.config_file, os.pardir))
+        config_file_path = str(Path(self.config_file).parent)
 
-        def normalize(path):
-            return os.path.normpath(path.replace('<MANTIS>', config_file_path))
+        def normalize(p):
+            return str(Path(p.replace('<MANTIS>', config_file_path)).resolve())
 
         # Load config template file
         defaults = load_template_config()
@@ -159,14 +162,14 @@ class AbstractManager(object):
         if self.single_connection_mode and self.environment_id:
             CLI.error(f'Config error: Environment "{self.environment_id}" was provided, but config uses single connection mode. Remove the environment argument or switch to named environments using "connections".')
 
-        self.key_file = normalize(path.join(self.config['encryption']['folder'], 'mantis.key'))
+        self.key_file = normalize(str(Path(self.config['encryption']['folder']) / 'mantis.key'))
         self.environment_path = normalize(self.config['environment']['folder'])
 
         if self.single_connection_mode:
             # In single connection mode, compose files are directly in compose folder
             self.compose_path = normalize(self.config['compose']['folder'])
         elif self.environment_id:
-            self.compose_path = normalize(path.join(self.config['compose']['folder'], self.environment_id))
+            self.compose_path = normalize(str(Path(self.config['compose']['folder']) / self.environment_id))
 
     def init_environment(self):
         if self.single_connection_mode:
@@ -180,11 +183,10 @@ class AbstractManager(object):
             # connection from single 'connection' key
             self.connection = self.config.get('connection')
 
-            # compose files directly in compose folder
-            compose_file_paths = os.popen(f'find {self.compose_path} -maxdepth 1 -name "*.yml" -o -name "*.yaml"').read().strip().split('\n')
-
-            # Remove empty strings
-            self.compose_files = list(filter(None, compose_file_paths))
+            # compose files directly in compose folder (non-recursive)
+            compose_dir = Path(self.compose_path)
+            self.compose_files = [str(p) for p in compose_dir.glob('*.yml')] + \
+                                 [str(p) for p in compose_dir.glob('*.yaml')]
 
             # Read compose files
             self.compose_config = self.read_compose_configs()
@@ -206,11 +208,10 @@ class AbstractManager(object):
         # connection
         self.connection = self.config['connections'].get(self.env.id, None)
 
-        # compose files
-        compose_file_paths = os.popen(f'find {self.compose_path} -name "*.yml" -o -name "*.yaml"').read().strip().split('\n')
-
-        # Remove empty strings
-        self.compose_files = list(filter(None, compose_file_paths))
+        # compose files (recursive)
+        compose_dir = Path(self.compose_path)
+        self.compose_files = [str(p) for p in compose_dir.rglob('*.yml')] + \
+                             [str(p) for p in compose_dir.rglob('*.yaml')]
 
         # Read compose files
         self.compose_config = self.read_compose_configs()
@@ -293,12 +294,11 @@ class AbstractManager(object):
 
         try:
             print(command)
-            if os.system(command) != 0:
+            result = subprocess.run(command, shell=True)
+            if result.returncode != 0:
                 CLI.error(error_message)
-                # raise Exception(error_message)
-        except:
-            CLI.error(error_message)
-            # raise Exception(error_message)
+        except OSError as e:
+            CLI.error(f"{error_message}: {e}")
 
     def docker_command(self, command, return_output=False, use_connection=True):
         docker_connection = self.docker_connection if use_connection else ''
@@ -306,7 +306,8 @@ class AbstractManager(object):
         cmd = f'{docker_connection} {command}'
 
         if return_output:
-            return os.popen(cmd).read()
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            return result.stdout
 
         self.cmd(cmd)
 
@@ -590,7 +591,6 @@ class BaseManager(AbstractManager):
             host = f'{protocol}://{username}@{host_address}:{port}'
         else:
             CLI.error('Invalid protocol')
-            exit()
 
         endpoint = f'host={host}'
 
@@ -608,7 +608,6 @@ class BaseManager(AbstractManager):
 
         if input("Confirm? (Y)es/(N)o: ").lower() != 'y':
             CLI.error('Canceled')
-            exit()
 
         # create context
         self.cmd(command)
@@ -736,7 +735,7 @@ class BaseManager(AbstractManager):
                 CLI.warning(f'Stopping and removing container {container}')
                 self.docker(f'container stop {container}')
                 self.docker(f'container rm {container}')
-                exit()
+                sys.exit(1)
 
             # If container doesn't have healthcheck command, sleep for N seconds
             CLI.info(f'Sleeping for {start_period} seconds...')
@@ -775,8 +774,8 @@ class BaseManager(AbstractManager):
                 image = info['image'] if info['image'] != '' else f"{info['project_name']}-{service}".lstrip('-')
 
                 # build paths for docker build command (paths in compose are relative to compose file, but paths for docker command are relative to $PWD)
-                context = normpath(path.join(self.compose_path, info['context']))
-                dockerfile = normpath(path.join(context, info['dockerfile']))
+                context = str(Path(self.compose_path) / info['context'])
+                dockerfile = str(Path(context) / info['dockerfile'])
 
                 # Build service using docker
                 self.docker(f"build {context} {build_args} {args} {platform} {cache_from} -t {image} -f {dockerfile} {params}",
@@ -1302,7 +1301,7 @@ class BaseManager(AbstractManager):
             CLI.error('Unknown host')
 
         CLI.info(f'Executing SSH connection: {self.connection}')
-        os.system(f'ssh {self.user}@{self.host} -p {self.port or 22}')
+        subprocess.run(['ssh', f'{self.user}@{self.host}', '-p', str(self.port or 22)])
 
     def exec(self, params):
         """

@@ -1,3 +1,5 @@
+import sys
+
 from rich.console import Console
 from rich.text import Text
 
@@ -15,7 +17,7 @@ class CLI(object):
     def error(text):
         styled_text = Text(str(text), style='red')
         _console.print(styled_text)
-        exit(1)
+        sys.exit(1)
 
     @staticmethod
     def bold(text, end='\n'):
