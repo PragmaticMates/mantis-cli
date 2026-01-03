@@ -1,3 +1,4 @@
+import select
 import sys
 from contextlib import contextmanager
 
@@ -78,6 +79,29 @@ class CLI(object):
         if label is None:
             label = uri
         return f'[link={uri}]{label}[/link]'
+
+    @staticmethod
+    def timed_confirm(prompt: str, timeout: int = 10, default: bool = False) -> bool:
+        """
+        Ask user for confirmation with a timeout.
+        Returns default value if user doesn't respond within timeout.
+        """
+        default_str = "Y/n" if default else "y/N"
+        _console.print(f"[yellow]{prompt} ({default_str}) [dim][{timeout}s timeout][/dim][/yellow]", end=" ")
+        sys.stdout.flush()
+
+        try:
+            ready, _, _ = select.select([sys.stdin], [], [], timeout)
+            if ready:
+                response = sys.stdin.readline().strip().lower()
+                if response == '':
+                    return default
+                return response in ('y', 'yes')
+            else:
+                _console.print(f"\n[dim]Timeout reached, using default: {'yes' if default else 'no'}[/dim]")
+                return default
+        except Exception:
+            return default
 
 
 def nested_set(dic, keys, value):

@@ -776,6 +776,10 @@ class BaseManager(AbstractManager):
 
                 if retries > 1:
                     sleep(interval)
+
+            # All retries exhausted, container is unhealthy
+            console.print(f'[red bold]Container {container} failed to become healthy after {retries} retries[/red bold]')
+            return False
         else:
             CLI.warning(f"Container '{container}' doesn't have healthcheck command defined. Looking for start period value...")
             start_period = self.get_healthcheck_start_period(container)
@@ -996,7 +1000,9 @@ class BaseManager(AbstractManager):
         is_running = len(self.get_containers(only_running=True)) != 0
 
         if is_running and not dirty:
-            self.zero_downtime()
+            if not self.zero_downtime():
+                CLI.danger('Deployment aborted.')
+                return
 
         # Preserve number of scaled containers
         scale_param: List[str] = []
@@ -1021,16 +1027,18 @@ class BaseManager(AbstractManager):
 
         CLI.success('Deployment complete!')
 
-    def zero_downtime(self, service: Optional[str] = None) -> None:
+    def zero_downtime(self, service: Optional[str] = None) -> bool:
         """
-        Runs zero-downtime deployment of services (or given service)
+        Runs zero-downtime deployment of services (or given service).
+        Returns True if zero downtime was successful, False otherwise (rollback performed).
         """
         if not service:
             zero_downtime_services = self.config['zero_downtime']
             for index, service in enumerate(zero_downtime_services):
                 CLI.step(index + 1, len(zero_downtime_services), f'Zero downtime services: {zero_downtime_services}')
-                self.zero_downtime(service)
-            return
+                if not self.zero_downtime(service):
+                    return False  # Rollback happened, stop processing
+            return True
 
         container_prefix = self.get_container_name(service)
 
@@ -1039,7 +1047,7 @@ class BaseManager(AbstractManager):
 
         if num_containers == 0:
             CLI.danger(f'Old container for service {service} not found. Skipping zero-downtime deployment...')
-            return
+            return True
 
         # run new containers
         scale = num_containers * 2
@@ -1047,9 +1055,46 @@ class BaseManager(AbstractManager):
 
         # healthcheck
         new_containers = self.get_containers(prefix=container_prefix, exclude=old_containers, only_running=True)
+        unhealthy_containers = []
 
         for new_container in new_containers:
-            self.healthcheck(container=new_container)
+            is_healthy = self.healthcheck(container=new_container)
+            if is_healthy is False:
+                unhealthy_containers.append(new_container)
+
+        # Handle unhealthy containers
+        if unhealthy_containers:
+            console = Console()
+            console.print(f'\n[red bold]⚠ Unhealthy containers detected: {", ".join(unhealthy_containers)}[/red bold]\n')
+
+            # Show logs of unhealthy containers
+            for container in unhealthy_containers:
+                console.print(f'[yellow]Logs for {container}:[/yellow]')
+                self.docker(f'logs {container} --tail 50')
+                console.print('')
+
+            # Ask user if they want to rollback
+            rollback = CLI.timed_confirm(
+                "Rollback deployment? (stop new containers and keep old ones)",
+                timeout=10,
+                default=False
+            )
+
+            if rollback:
+                console.print(f'\n[yellow]Rolling back deployment for service {service}...[/yellow]')
+
+                # Stop and remove unhealthy new containers
+                for new_container in new_containers:
+                    if new_container in self.get_containers():
+                        CLI.info(f'Stopping new container [{new_container}]...')
+                        self.docker(f'container stop {new_container}')
+                        CLI.info(f'Removing new container [{new_container}]...')
+                        self.docker(f'container rm {new_container}')
+
+                CLI.success(f'Rollback complete. Old containers preserved: {old_containers}')
+                return False  # Not successful zero-downtime. Rollback performed
+            else:
+                console.print(f'\n[yellow]Continuing deployment with potentially unhealthy containers...[/yellow]')
 
         # reload webserver
         self.try_to_reload_webserver()
@@ -1076,6 +1121,8 @@ class BaseManager(AbstractManager):
 
         # reload webserver
         self.try_to_reload_webserver()
+
+        return True  # Successful zero-downtime. No rollback
 
     def remove_suffixes(self, prefix: str = '') -> None:
         """
