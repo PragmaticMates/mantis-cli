@@ -3,7 +3,7 @@ from typing import Optional, List
 
 import typer
 
-from mantis.app import command, state, join_args
+from mantis.app import command, state
 
 
 @command(shortcut="b", panel="Images")
@@ -11,7 +11,7 @@ def build(
     services: Optional[List[str]] = typer.Argument(None, help="Services to build"),
 ):
     """Builds all services with Dockerfiles"""
-    state.build(join_args(services))
+    state.build(services=services)
 
 
 @command(shortcut="pl", panel="Images")
@@ -19,7 +19,7 @@ def pull(
     services: Optional[List[str]] = typer.Argument(None, help="Services to pull"),
 ):
     """Pulls required images for services"""
-    state.pull(join_args(services))
+    state.pull(services=services)
 
 
 @command(shortcut="p", panel="Images")
@@ -27,7 +27,7 @@ def push(
     services: Optional[List[str]] = typer.Argument(None, help="Services to push"),
 ):
     """Push built images to repository"""
-    state.push(join_args(services))
+    state.push(services=services)
 
 
 @command(name="get-image-name", panel="Images")

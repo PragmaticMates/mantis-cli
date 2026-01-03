@@ -22,10 +22,12 @@ class Django():
         CLI.info('Connecting to Django shell...')
         self.docker(f'exec -i {self.django_container} python manage.py shell')
 
-    def manage(self, params):
+    def manage(self, cmd: str, args: list = None):
         """Runs Django manage command"""
         CLI.info('Django manage...')
-        self.docker(f'exec -ti {self.django_container} python manage.py {params}')
+        args_str = ' '.join(args) if args else ''
+        full_cmd = f'{cmd} {args_str}'.strip()
+        self.docker(f'exec -ti {self.django_container} python manage.py {full_cmd}')
 
     def send_test_email(self):
         """Sends test email to admins"""

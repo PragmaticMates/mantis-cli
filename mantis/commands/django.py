@@ -3,7 +3,7 @@ from typing import Optional, List
 
 import typer
 
-from mantis.app import command, state, join_args
+from mantis.app import command, state
 
 
 @command(panel="Django")
@@ -18,8 +18,7 @@ def manage(
     args: Optional[List[str]] = typer.Argument(None, help="Command arguments"),
 ):
     """Runs Django manage command"""
-    full_cmd = cmd + (' ' + join_args(args) if args else '')
-    state.manage(full_cmd)
+    state.manage(cmd=cmd, args=args)
 
 
 @command(name="send-test-email", panel="Django")

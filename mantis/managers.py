@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from time import sleep
+from typing import Optional, List, Dict, Any, Tuple
 
 from rich.console import Console
 from rich.table import Table
@@ -26,7 +27,7 @@ class AbstractManager(object):
     """
     environment_id = None
 
-    def __init__(self, config_file=None, environment_id=None, mode='remote', dry_run=False):
+    def __init__(self, config_file: str = None, environment_id: str = None, mode: str = 'remote', dry_run: bool = False):
         self.environment_id = environment_id
         self.mode = mode
         self.dry_run = dry_run
@@ -49,18 +50,18 @@ class AbstractManager(object):
         self.encrypt_deterministically = self.config['encryption']['deterministic']
 
     @property
-    def host(self):
+    def host(self) -> Optional[str]:
         return self.connection_details['host'] if self.connection_details else None
 
     @property
-    def user(self):
+    def user(self) -> Optional[str]:
         return self.connection_details['user'] if self.connection_details else None
 
     @property
-    def port(self):
+    def port(self) -> Optional[str]:
         return self.connection_details['port'] if self.connection_details else None
 
-    def parse_ssh_connection(self, connection):
+    def parse_ssh_connection(self, connection: str) -> Dict[str, str]:
         return {
             'host': connection.split("@")[1].split(':')[0],
             'user': connection.split("@")[0].split('://')[1],
@@ -68,7 +69,7 @@ class AbstractManager(object):
         }
 
     @property
-    def connection_details(self):
+    def connection_details(self) -> Optional[Dict[str, Optional[str]]]:
         # In single connection mode, env.id is None but we still have a connection
         if not self.single_connection_mode and self.env.id is None:
             return None
@@ -118,7 +119,7 @@ class AbstractManager(object):
         return details
 
     @property
-    def docker_connection(self):
+    def docker_connection(self) -> str:
         # In single connection mode or when env.id contains 'local', no extra connection needed
         if not self.single_connection_mode and (self.env.id is None or 'local' in self.env.id):
             return ''
@@ -135,7 +136,7 @@ class AbstractManager(object):
 
         return ''
 
-    def init_config(self, config):
+    def init_config(self, config: Dict[str, Any]) -> None:
         check_config(config)
         config_file_path = str(Path(self.config_file).parent)
 
@@ -174,7 +175,7 @@ class AbstractManager(object):
         elif self.environment_id:
             self.compose_path = normalize(str(Path(self.config['compose']['folder']) / self.environment_id))
 
-    def init_environment(self):
+    def init_environment(self) -> None:
         if self.single_connection_mode:
             # Single connection mode: no environment_id required
             self.env = Environment(
@@ -219,7 +220,7 @@ class AbstractManager(object):
         # Read compose files
         self.compose_config = self.read_compose_configs()
 
-    def are_env_files_in_sync(self, env_file):
+    def are_env_files_in_sync(self, env_file: str) -> bool:
         """
         Checks if .env and .env.encrypted files are in sync.
         Returns True if they match, False otherwise.
@@ -243,7 +244,7 @@ class AbstractManager(object):
         except Exception:
             return False
 
-    def check_environment_encryption(self, env_file):
+    def check_environment_encryption(self, env_file: str) -> None:
         decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)  # .env.encrypted
         loaded_environment = self.env.load(env_file)  # .env
 
@@ -290,7 +291,7 @@ class AbstractManager(object):
         else:
             CLI.success(f'Encrypted and decrypted environments DO match [{env_file}]...')
 
-    def cmd(self, command):
+    def cmd(self, command: str) -> None:
         command = command.strip()
 
         if self.dry_run:
@@ -307,7 +308,7 @@ class AbstractManager(object):
         except OSError as e:
             CLI.error(f"{error_message}: {e}")
 
-    def docker_command(self, command, return_output=False, use_connection=True):
+    def docker_command(self, command: str, return_output: bool = False, use_connection: bool = True) -> Optional[str]:
         docker_connection = self.docker_connection if use_connection else ''
 
         cmd = f'{docker_connection} {command}'
@@ -321,14 +322,14 @@ class AbstractManager(object):
 
         self.cmd(cmd)
 
-    def docker(self, command, return_output=False, use_connection=True):
+    def docker(self, command: str, return_output: bool = False, use_connection: bool = True) -> Optional[str]:
         return self.docker_command(
             command=f'docker {command}',
             return_output=return_output,
             use_connection=use_connection
         )
 
-    def docker_compose(self, command, return_output=False, use_connection=True):
+    def docker_compose(self, command: str, return_output: bool = False, use_connection: bool = True) -> Optional[str]:
         compose_command = self.config['compose']['command']
 
         compose_files = ' '.join([f'-f {compose_file}' for compose_file in self.compose_files])
@@ -339,7 +340,7 @@ class AbstractManager(object):
             use_connection=use_connection
         )
 
-    def run_parallel(self, commands: list, description: str = "Running"):
+    def run_parallel(self, commands: List[str], description: str = "Running") -> List[Any]:
         """
         Execute multiple shell commands in parallel using thread pool.
 
@@ -376,7 +377,7 @@ class AbstractManager(object):
 
         return results
 
-    def get_container_project(self, container):
+    def get_container_project(self, container: str) -> Optional[str]:
         """
         Prints project name of given container
         :param container: container name
@@ -390,13 +391,15 @@ class AbstractManager(object):
 
         return None
 
-    def get_containers(self, prefix='', exclude=[], only_running=False):
+    def get_containers(self, prefix: str = '', exclude: List[str] = None, only_running: bool = False) -> List[str]:
         """
         Prints all project containers
         :param prefix: container prefix
         :param exclude: exclude containers
         :return: list of container names
         """
+        if exclude is None:
+            exclude = []
         containers = self.docker(f'container ls {"" if only_running else "-a"} --format \'{{{{.Names}}}}\'', return_output=True) \
             .strip('\n').strip().split('\n')
 
@@ -420,13 +423,13 @@ class BaseManager(AbstractManager):
     Base manager contains methods which should be available to call using CLI
     """
 
-    def check_config(self):
+    def check_config(self) -> None:
         """
         Validates config file according to template
         """
         check_config(self.config)
 
-    def read_key(self):
+    def read_key(self) -> Optional[str]:
         """
         Returns value of mantis encryption key
         """
@@ -437,7 +440,7 @@ class BaseManager(AbstractManager):
         with open(self.key_file, "r") as f:
             return f.read().strip()
 
-    def generate_key(self):
+    def generate_key(self) -> None:
         """
         Creates new encryption key
         """
@@ -449,7 +452,7 @@ class BaseManager(AbstractManager):
         CLI.pink(key)
         CLI.danger(f'Save it to {self.key_file} and keep safe !!!')
 
-    def encrypt_env(self, params='', env_file=None, return_value=False):
+    def encrypt_env(self, params: str = '', env_file: Optional[str] = None, return_value: bool = False) -> Optional[Dict[str, str]]:
         """
         Encrypts all environment files (force param skips user confirmation)
         """
@@ -515,7 +518,7 @@ class BaseManager(AbstractManager):
             else:
                 CLI.warning(f'Save it to {env_file_encrypted} manually.')
 
-    def decrypt_env(self, params='', env_file=None, return_value=False):
+    def decrypt_env(self, params: str = '', env_file: Optional[str] = None, return_value: bool = False) -> Optional[Dict[str, str]]:
         """
         Decrypts all environment files (force param skips user confirmation)
         """
@@ -586,7 +589,7 @@ class BaseManager(AbstractManager):
             else:
                 CLI.warning(f'Save it to {env_file} manually.')
 
-    def check_env(self):
+    def check_env(self) -> None:
         """
         Compares encrypted and decrypted env files
         """
@@ -613,13 +616,13 @@ class BaseManager(AbstractManager):
             # check encryption values
             self.check_environment_encryption(env_file)
 
-    def contexts(self):
+    def contexts(self) -> None:
         """
         Prints all docker contexts
         """
         self.cmd('docker context ls')
 
-    def create_context(self):
+    def create_context(self) -> None:
         """
         Creates docker context using user inputs
         """
@@ -660,14 +663,14 @@ class BaseManager(AbstractManager):
         self.cmd(command)
         self.contexts()
 
-    def get_container_suffix(self, service):
+    def get_container_suffix(self, service: str) -> str:
         """
         Returns the suffix used for containers for given service
         """
         delimiter = '-'
         return f'{delimiter}{service}'
 
-    def get_container_name(self, service):
+    def get_container_name(self, service: str) -> str:
         """
         Constructs container name with project prefix for given service
         """
@@ -675,27 +678,27 @@ class BaseManager(AbstractManager):
         prefix = self.get_project_by_service(service)
         return f'{prefix}{suffix}'.replace('_', '-')
 
-    def get_service_containers(self, service):
+    def get_service_containers(self, service: str) -> List[str]:
         """
         Prints container names of given service
         """
         containers = self.docker_compose("ps --format '{{.Names}}' %s" % service, return_output=True)
         return containers.strip().split('\n')
 
-    def get_number_of_containers(self, service):
+    def get_number_of_containers(self, service: str) -> int:
         """
         Prints number of containers for given service
         """
         return len(self.get_service_containers(service))
 
-    def get_image_suffix(self, service):
+    def get_image_suffix(self, service: str) -> str:
         """
         Returns the suffix used for image for given service
         """
         delimiter = '_'
         return f'{delimiter}{service}'
 
-    def get_image_name(self, service):
+    def get_image_name(self, service: str) -> str:
         """
         Constructs image name for given service
         """
@@ -703,7 +706,7 @@ class BaseManager(AbstractManager):
         prefix = self.get_project_by_service(service)
         return f'{prefix}{suffix}'.replace('-', '_')
 
-    def has_healthcheck(self, container):
+    def has_healthcheck(self, container: str) -> bool:
         """
         Checks if given container has defined healthcheck
         """
@@ -711,7 +714,7 @@ class BaseManager(AbstractManager):
 
         return healthcheck_config and healthcheck_config.get('Test') != ['NONE']
 
-    def get_healthcheck_start_period(self, container):
+    def get_healthcheck_start_period(self, container: str) -> Optional[float]:
         """
         Returns healthcheck start period for given container (if any)
         """
@@ -723,7 +726,7 @@ class BaseManager(AbstractManager):
             # TODO: return default value as fallback?
             return None
 
-    def check_health(self, container):
+    def check_health(self, container: str) -> Optional[Tuple[bool, str]]:
         """
         Checks current health of given container
         """
@@ -736,7 +739,7 @@ class BaseManager(AbstractManager):
             else:
                 return False, status
 
-    def healthcheck(self, container=None):
+    def healthcheck(self, container: str) -> Optional[bool]:
         """
         Execute health-check of given project container
         """
@@ -789,12 +792,13 @@ class BaseManager(AbstractManager):
             sleep(start_period)
             return None
 
-    def build(self, params=''):
+    def build(self, services: Optional[List[str]] = None) -> None:
         """
         Builds all services with Dockerfiles
         """
         CLI.info(f'Building...')
-        CLI.info(f'Params = {params}')
+        params = ' '.join(services) if services else ''
+        CLI.info(f'Services = {params}')
 
         # Construct build args from config
         build_args = self.config['build']['args']
@@ -838,7 +842,7 @@ class BaseManager(AbstractManager):
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
-    def project_services(self):
+    def project_services(self) -> Dict[str, List[str]]:
         """
         Returns project names by compose files
         """
@@ -853,7 +857,7 @@ class BaseManager(AbstractManager):
 
         return projects
 
-    def get_project_by_service(self, service):
+    def get_project_by_service(self, service: str) -> Optional[str]:
         project_services = self.project_services()
 
         for project, services in project_services.items():
@@ -862,7 +866,7 @@ class BaseManager(AbstractManager):
 
         return None
 
-    def services(self, compose_file=None):
+    def services(self, compose_file: Optional[str] = None) -> List[str]:
         """
         Returns all defined services
         """
@@ -879,7 +883,7 @@ class BaseManager(AbstractManager):
 
         return services
 
-    def services_to_build(self, compose_file=None):
+    def services_to_build(self, compose_file: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         """
         Prints all services which will be build
         """
@@ -908,27 +912,29 @@ class BaseManager(AbstractManager):
 
         return data
 
-    def push(self, params=''):
+    def push(self, services: Optional[List[str]] = None) -> None:
         """
         Push built images to repository
         """
         CLI.info(f'Pushing...')
-        CLI.info(f'Params = {params}')
+        params = ' '.join(services) if services else ''
+        CLI.info(f'Services = {params}')
 
         # Push using docker compose
         self.docker_compose(f'push {params}', use_connection=False)
 
-    def pull(self, params=''):
+    def pull(self, services: Optional[List[str]] = None) -> None:
         """
         Pulls required images for services
         """
         CLI.info('Pulling...')
-        CLI.info(f'Params = {params}')
+        params = ' '.join(services) if services else ''
+        CLI.info(f'Services = {params}')
 
         # Pull using docker compose
         self.docker_compose(f'pull {params}')
 
-    def upload(self):
+    def upload(self) -> None:
         """
         Uploads mantis config, compose file <br/>and environment files to server
         """
@@ -950,7 +956,7 @@ class BaseManager(AbstractManager):
                 else:
                     CLI.info(f'{self.config_file} does not exists. Skipping...')
 
-    def restart(self, service=None):
+    def restart(self, service: Optional[str] = None) -> None:
         """
         Restarts all containers by calling compose down and up
         """
@@ -975,7 +981,7 @@ class BaseManager(AbstractManager):
         CLI.step(3, 3, 'Prune Docker images')
         self.clean()
 
-    def deploy(self, dirty=False):
+    def deploy(self, dirty: bool = False) -> None:
         """
         Runs deployment process: uploads files, pulls images, runs zero-downtime deployment, removes suffixes, reloads webserver, clean
         """
@@ -993,7 +999,7 @@ class BaseManager(AbstractManager):
             self.zero_downtime()
 
         # Preserve number of scaled containers
-        scale_param = ''
+        scale_param: List[str] = []
         if is_running:
             scales = {}
             for service in self.services():
@@ -1004,9 +1010,9 @@ class BaseManager(AbstractManager):
                 if number_of_containers > replicas:
                     scales[service] = number_of_containers
 
-            scale_param = ' '.join([f'--scale {service}={scale}' for service, scale in scales.items()])
+            scale_param = [f'--scale {service}={scale}' for service, scale in scales.items()]
 
-        self.up(scale_param)
+        self.up(scale_param if scale_param else None)
         self.remove_suffixes()
         self.try_to_reload_webserver()
 
@@ -1015,7 +1021,7 @@ class BaseManager(AbstractManager):
 
         CLI.success('Deployment complete!')
 
-    def zero_downtime(self, service=None):
+    def zero_downtime(self, service: Optional[str] = None) -> None:
         """
         Runs zero-downtime deployment of services (or given service)
         """
@@ -1071,7 +1077,7 @@ class BaseManager(AbstractManager):
         # reload webserver
         self.try_to_reload_webserver()
 
-    def remove_suffixes(self, prefix=''):
+    def remove_suffixes(self, prefix: str = '') -> None:
         """
         Removes numerical suffixes from container names (if scale == 1)
         """
@@ -1100,7 +1106,7 @@ class BaseManager(AbstractManager):
                 CLI.info(f'Removing suffix of container {container}')
                 self.docker(f'container rename {container} {new_container}')
 
-    def restart_service(self, service):
+    def restart_service(self, service: str) -> None:
         """
         Stops, removes and recreates container for given service
         """
@@ -1120,10 +1126,10 @@ class BaseManager(AbstractManager):
                 CLI.info(f'{app_container} was not running')
 
         CLI.info(f'Creating new container [{container}]...')
-        self.up(f'--no-deps --no-recreate {service}')
+        self.up(['--no-deps', '--no-recreate', service])
         self.remove_suffixes(prefix=container)
 
-    def try_to_reload_webserver(self):
+    def try_to_reload_webserver(self) -> None:
         """
         Tries to reload webserver (if suitable extension is available)
         """
@@ -1132,7 +1138,7 @@ class BaseManager(AbstractManager):
         except AttributeError:
             CLI.warning('Tried to reload webserver, but no suitable extension found!')
 
-    def stop(self, containers=None):
+    def stop(self, containers: Optional[List[str]] = None) -> None:
         """
         Stops all or given project containers
         """
@@ -1147,7 +1153,7 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Stopping {container}')
             self.docker(f'container stop {container}')
 
-    def kill(self, containers=None):
+    def kill(self, containers: Optional[List[str]] = None) -> None:
         """
         Kills all or given project containers
         """
@@ -1162,7 +1168,7 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Killing {container}')
             self.docker(f'container kill {container}')
 
-    def start(self, containers=None):
+    def start(self, containers: Optional[List[str]] = None) -> None:
         """
         Starts all or given project containers
         """
@@ -1177,34 +1183,37 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Starting {container}')
             self.docker(f'container start {container}')
 
-    def run(self, params):
+    def run(self, params: List[str]) -> None:
         """
         Calls compose run with params
         """
-        CLI.info(f'Running {params}...')
-        self.docker_compose(f'run {params}')
+        params_str = ' '.join(params) if params else ''
+        CLI.info(f'Running {params_str}...')
+        self.docker_compose(f'run {params_str}')
 
-    def up(self, params=''):
+    def up(self, params: Optional[List[str]] = None) -> None:
         """
         Calls compose up (with optional params)
         """
-        CLI.info(f'Starting up {params}...')
-        self.docker_compose(f'up {params} -d')
+        params_str = ' '.join(params) if params else ''
+        CLI.info(f'Starting up {params_str}...')
+        self.docker_compose(f'up {params_str} -d')
 
-    def down(self, params=''):
+    def down(self, params: Optional[List[str]] = None) -> None:
         """
         Calls compose down (with optional params)
         """
-        CLI.info(f'Running down {params}...')
-        self.docker_compose(f'down {params}')
+        params_str = ' '.join(params) if params else ''
+        CLI.info(f'Running down {params_str}...')
+        self.docker_compose(f'down {params_str}')
 
-    def scale(self, service, scale):
+    def scale(self, service: str, scale: int) -> None:
         """
         Scales service to given scale
         """
-        self.up(f'--no-deps --no-recreate --scale {service}={scale}')
+        self.up([f'--no-deps', '--no-recreate', '--scale', f'{service}={scale}'])
 
-    def remove(self, containers=None, force=False):
+    def remove(self, containers: Optional[List[str]] = None, force: bool = False) -> None:
         """
         Removes all or given project containers
         """
@@ -1220,17 +1229,18 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Removing {container}')
             self.docker(f'container rm {force_flag}{container}')
 
-    def clean(self, params=''):  # todo clean on all nodes
+    def clean(self, params: Optional[List[str]] = None) -> None:  # todo clean on all nodes
         """
         Clean images, containers, networks
         """
         CLI.info('Cleaning...')
+        params_str = ' '.join(params) if params else ''
         # self.docker(f'builder prune')
-        self.docker(f'system prune {params} -a --force')
+        self.docker(f'system prune {params_str} -a --force')
         # self.docker(f'container prune')
         # self.docker(f'container prune --force')
 
-    def status(self):
+    def status(self) -> None:
         """
         Prints images and containers
         """
@@ -1302,7 +1312,7 @@ class BaseManager(AbstractManager):
 
             console.print(containers_table)
 
-    def networks(self):
+    def networks(self) -> None:
         """
         Prints docker networks
         """
@@ -1326,7 +1336,7 @@ class BaseManager(AbstractManager):
                 containers = ', '.join(containers.split())
                 print(f'{network}\t{containers}'.strip())
 
-    def logs(self, params=None):
+    def logs(self, params: Optional[str] = None) -> None:
         """
         Prints logs of all or given project container
         """
@@ -1340,7 +1350,7 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'{container} logs')
             self.docker(f'logs {container} {lines}')
 
-    def bash(self, params):
+    def bash(self, params: str) -> None:
         """
         Runs bash in container
         """
@@ -1348,14 +1358,14 @@ class BaseManager(AbstractManager):
         self.docker(f'exec -it --user root {params} /bin/bash')
         # self.docker_compose(f'run --entrypoint /bin/bash {container}')
 
-    def sh(self, params):
+    def sh(self, params: str) -> None:
         """
         Runs sh in container
         """
         CLI.info('Logging to container...')
         self.docker(f'exec -it --user root {params} /bin/sh')
 
-    def ssh(self):
+    def ssh(self) -> None:
         if not self.connection:
             CLI.error('Missing connection details')
 
@@ -1381,7 +1391,7 @@ class BaseManager(AbstractManager):
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')
 
-    def get_healthcheck_config(self, container):
+    def get_healthcheck_config(self, container: str) -> Optional[Dict[str, Any]]:
         """
         Prints health-check config (if any) of given container
         """
@@ -1393,7 +1403,7 @@ class BaseManager(AbstractManager):
 
         return None
 
-    def read_compose_configs(self):
+    def read_compose_configs(self) -> Dict[str, Any]:
         """
         Returns merged compose configs
         """
@@ -1406,7 +1416,7 @@ class BaseManager(AbstractManager):
 
         return config
 
-    def get_deploy_replicas(self, service):
+    def get_deploy_replicas(self, service: str) -> int:
         """
         Returns default number of deploy replicas of given services
         """
@@ -1423,7 +1433,7 @@ class BaseManager(AbstractManager):
 
         return replicas
 
-    def backup_volume(self, volume):
+    def backup_volume(self, volume: str) -> None:
         # backups folder
         backup_path = str(Path.cwd() / 'backups')
 
@@ -1440,7 +1450,7 @@ class BaseManager(AbstractManager):
 
         self.docker(command)
 
-    def restore_volume(self, volume, file):
+    def restore_volume(self, volume: str, file: str) -> None:
         # backups folder
         backup_path = str(Path.cwd() / 'backups')
 
@@ -1453,8 +1463,8 @@ class BaseManager(AbstractManager):
         self.docker(command)
 
 
-def get_extension_classes(extensions):
-    extension_classes = []
+def get_extension_classes(extensions: List[str]) -> List[type]:
+    extension_classes: List[type] = []
 
     # extensions
     for extension in extensions:
@@ -1465,7 +1475,7 @@ def get_extension_classes(extensions):
     return extension_classes
 
 
-def resolve_environment(environment_id, config):
+def resolve_environment(environment_id: Optional[str], config: Dict[str, Any]) -> Optional[str]:
     """
     Resolves environment prefix to full environment ID.
 
@@ -1499,7 +1509,7 @@ def resolve_environment(environment_id, config):
         CLI.error(f'Environment "{environment_id}" not found. Available: {", ".join(sorted(available_envs))}')
 
 
-def get_manager(environment_id, mode, dry_run=False):
+def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False) -> BaseManager:
     # config file
     config_file = find_config(environment_id)
     config = load_config(config_file)

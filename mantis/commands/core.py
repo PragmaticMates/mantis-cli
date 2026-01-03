@@ -3,7 +3,7 @@ from typing import Optional, List
 
 import typer
 
-from mantis.app import command, state, join_args
+from mantis.app import command, state
 
 
 @command(shortcut="s")
@@ -25,7 +25,7 @@ def clean(
     params: Optional[List[str]] = typer.Argument(None, help="Clean parameters"),
 ):
     """Clean images, containers, networks"""
-    state.clean(join_args(params))
+    state.clean(params=params)
 
 
 @command(shortcut="u", panel="Files")
