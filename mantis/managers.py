@@ -224,9 +224,9 @@ class AbstractManager(object):
         env_file_encrypted = f'{env_file}.encrypted'
 
         # Check if both files exist
-        if not os.path.exists(env_file):
+        if not Path(env_file).exists():
             return False
-        if not os.path.exists(env_file_encrypted):
+        if not Path(env_file_encrypted).exists():
             return False
 
         try:
@@ -383,7 +383,7 @@ class BaseManager(AbstractManager):
         """
         Returns value of mantis encryption key
         """
-        if not os.path.exists(self.key_file):
+        if not Path(self.key_file).exists():
             CLI.warning(f'File {self.key_file} does not exist. Reading key from $MANTIS_KEY...')
             return os.environ.get('MANTIS_KEY', None)
 
@@ -549,7 +549,7 @@ class BaseManager(AbstractManager):
         # check if pair file exists
         for encrypted_env_file in self.env.encrypted_files:
             env_file = encrypted_env_file.rstrip('.encrypted')
-            if not os.path.exists(env_file):
+            if not Path(env_file).exists():
                 CLI.warning(f'Environment file {env_file} does not exist')
 
         if not hasattr(self.env, 'files'):
@@ -559,7 +559,7 @@ class BaseManager(AbstractManager):
             env_file_encrypted = f'{env_file}.encrypted'
 
             # check if pair file exists
-            if not os.path.exists(env_file_encrypted):
+            if not Path(env_file_encrypted).exists():
                 CLI.warning(f'Environment file {env_file_encrypted} does not exist')
                 continue
 
@@ -890,7 +890,7 @@ class BaseManager(AbstractManager):
 
             # mantis config file
             for file in files_to_upload:
-                if os.path.exists(file):
+                if Path(file).exists():
                     self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {file} {self.user}@{self.host}:{self.project_path}/{file}')
                 else:
                     CLI.info(f'{self.config_file} does not exists. Skipping...')
@@ -1363,7 +1363,7 @@ class BaseManager(AbstractManager):
 
     def backup_volume(self, volume):
         # backups folder
-        backup_path = os.getcwd() + '/backups/'
+        backup_path = str(Path.cwd() / 'backups')
 
         # Get current date, time and timezone name
         current_datetime = datetime.now()
@@ -1380,7 +1380,7 @@ class BaseManager(AbstractManager):
 
     def restore_volume(self, volume, file):
         # backups folder
-        backup_path = os.getcwd() + '/backups/'
+        backup_path = str(Path.cwd() / 'backups')
 
         command = f'run --rm \
         -v {volume}:/{volume} \
