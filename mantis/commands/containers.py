@@ -62,6 +62,15 @@ def remove(
 
 
 @command(panel="Containers")
+def rename(
+    container: str = typer.Argument(..., help="Container to rename"),
+    new_name: str = typer.Argument(..., help="New container name"),
+):
+    """Rename container"""
+    state.rename(container=container, new_name=new_name)
+
+
+@command(panel="Containers")
 def bash(
     container: str = typer.Argument(..., help="Container name"),
 ):

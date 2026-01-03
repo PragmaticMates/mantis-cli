@@ -1276,6 +1276,13 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Removing {container}')
             self.docker(f'container rm {force_flag}{container}')
 
+    def rename(self, container: str, new_name: str) -> None:
+        """
+        Renames container to a new name
+        """
+        CLI.info(f'Renaming container {container} to {new_name}')
+        self.docker(f'container rename {container} {new_name}')
+
     def clean(self, params: Optional[List[str]] = None) -> None:  # todo clean on all nodes
         """
         Clean images, containers, networks
