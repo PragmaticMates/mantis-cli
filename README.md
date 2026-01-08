@@ -71,8 +71,8 @@ Use `connections` (dict) when you have multiple environments like stage, product
 In this mode, you must specify the environment in every command:
 
 ```bash
-mantis production --status
-mantis stage --deploy
+mantis -e production status
+mantis -e stage deploy
 ```
 
 #### Single connection mode
@@ -86,8 +86,8 @@ Use `connection` (string) when you only have one environment. This simplifies th
 In this mode, you can run commands without specifying an environment:
 
 ```bash
-mantis --status
-mantis --deploy
+mantis status
+mantis deploy
 ```
 
 Environment files are looked up directly in the `environment.folder` instead of environment-specific subfolders.
@@ -101,7 +101,7 @@ If you plan to use encryption and decryption of your environment files, you need
 Generation of new key:
 
 ```bash
-mantis --generate-key
+mantis generate-key
 ```
 
 Save key to **mantis.key** file:
@@ -110,24 +110,24 @@ Save key to **mantis.key** file:
 echo <MANTIS_KEY> > /path/to/encryption/folder/mantis.key
 ```
 
-Then you can encrypt your environment files using symmetric encryption. 
+Then you can encrypt your environment files using symmetric encryption.
 Every environment variable is encrypted separately instead of encrypting the whole file for better tracking of changes in VCS.
 
 ```bash
-mantis <ENVIRONMENT> --encrypt-env
+mantis -e <ENVIRONMENT> encrypt-env
 ```
 
 Decryption is easy like this:
 
 ```bash
-mantis <ENVIRONMENT> --decrypt-env
+mantis -e <ENVIRONMENT> decrypt-env
 ```
 
-When decrypting, mantis prompts user for confirmation. 
+When decrypting, mantis prompts user for confirmation.
 You can bypass that by forcing decryption which can be useful in CI/CD pipeline:
 
 ```bash
-mantis <ENVIRONMENT> --decrypt-env:force
+mantis -e <ENVIRONMENT> decrypt-env --force
 ```
 
 ## Usage
@@ -135,27 +135,40 @@ mantis <ENVIRONMENT> --decrypt-env:force
 General usage of mantis-cli has this format:
 
 ```bash
-mantis [--mode=remote|ssh|host] [environment] --command[:params]
+mantis [OPTIONS] COMMAND [ARGS]... [+ COMMAND [ARGS]...]
 ```
+
+Use `+` to chain multiple commands:
+
+```bash
+mantis -e production build + push + deploy
+```
+
+### Options
+
+| Option          | Description                                       |
+|-----------------|---------------------------------------------------|
+| --env, -e       | Environment ID (e.g., stage, production)          |
+| --mode, -m      | Execution mode: remote (default), ssh, host       |
+| --dry-run, -n   | Show commands without executing                   |
+| --version, -v   | Show version and exit                             |
+| --help, -h      | Show help message                                 |
 
 ### Modes
 
-Mantis can operate in 3 different modes depending on a way it connects to remote machhine
+Mantis can operate in 3 different modes depending on how it connects to remote machine:
 
-
-#### Remote mode ```--mode=remote``` 
+#### Remote mode `--mode=remote`
 
 Runs commands remotely from local machine using DOCKER_HOST or DOCKER_CONTEXT (default)
 
-#### SSH mode ```--mode=ssh```
+#### SSH mode `--mode=ssh`
 
-Connects to host via ssh and run all mantis commands on remote machine directly (nantis-cli needs to be installed on server)
+Connects to host via SSH and runs all mantis commands on remote machine directly (mantis-cli needs to be installed on server)
 
-
-#### Host mode ```--mode=host```
+#### Host mode `--mode=host`
 
 Runs mantis on host machine directly without invoking connection (used as proxy for ssh mode)
-
 
 ### Environments
 
@@ -164,79 +177,89 @@ The environment is also used as an identifier for remote connection.
 
 ### Commands
 
-| Command / Shortcut                           | Description                                                                                                                     |
-|----------------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------|
-| --bash:params                                | Runs bash in container                                                                                                          |
-| --build[:params] / -b                        | Builds all services with Dockerfiles                                                                                            |
-| --check-config                               | Validates config file according to template                                                                                     |
-| --check-env                                  | Compares encrypted and decrypted env files                                                                                      |
-| --check-health:container                     | Checks current health of given container                                                                                        |
-| --clean[:params] / -c                        | Clean images, containers, networks                                                                                              |
-| --contexts                                   | Prints all docker contexts                                                                                                      |
-| --create-context                             | Creates docker context using user inputs                                                                                        |
-| --decrypt-env[:params,env_file,return_value] | Decrypts all environment files (force param skips user confirmation)                                                            |
-| --deploy[:dirty] / -d                        | Runs deployment process: uploads files, pulls images, runs zero-downtime deployment, removes suffixes, reloads webserver, clean |
-| --down[:params]                              | Calls compose down (with optional params)                                                                                       |
-| --encrypt-env[:params,env_file,return_value] | Encrypts all environment files (force param skips user confirmation)                                                            |
-| --exec:params                                | Executes command in container                                                                                                   |
-| --generate-key                               | Creates new encryption key                                                                                                      |
-| --get-container-name:service                 | Constructs container name with project prefix for given service                                                                 |
-| --get-container-suffix:service               | Returns the suffix used for containers for given service                                                                        |
-| --get-deploy-replicas:service                | Returns default number of deploy replicas of given services                                                                     |
-| --get-healthcheck-config:container           | Prints health-check config (if any) of given container                                                                          |
-| --get-healthcheck-start-period:container     | Returns healthcheck start period for given container (if any)                                                                   |
-| --get-image-name:service                     | Constructs image name for given service                                                                                         |
-| --get-image-suffix:service                   | Returns the suffix used for image for given service                                                                             |
-| --get-number-of-containers:service           | Prints number of containers for given service                                                                                   |
-| --get-service-containers:service             | Prints container names of given service                                                                                         |
-| --has-healthcheck:container                  | Checks if given container has defined healthcheck                                                                               |
-| --healthcheck[:container] / -hc              | Execute health-check of given project container                                                                                 |
-| --kill[:params]                              | Kills all or given project container                                                                                            |
-| --logs[:params] / -l                         | Prints logs of all or given project container                                                                                   |
-| --manage:params                              | Runs Django manage command                                                                                                      |
-| --networks / -n                              | Prints docker networks                                                                                                          |
-| --pg-dump[:data_only,table]                  | Backups PostgreSQL database [data and structure]                                                                                |
-| --pg-dump-data[:table]                       | Backups PostgreSQL database [data only]                                                                                         |
-| --pg-restore[:filename,table]                | Restores database from backup [data and structure]                                                                              |
-| --pg-restore-data:params                     | Restores database from backup [data only]                                                                                       |
-| --psql                                       | Starts psql console                                                                                                             |
-| --pull[:params] / -p                         | Pulls required images for services                                                                                              |
-| --push[:params]                              | Push built images to repository                                                                                                 |
-| --read-key                                   | Returns value of mantis encryption key                                                                                          |
-| --remove[:params]                            | Removes all or given project container                                                                                          |
-| --remove-suffixes[:prefix]                   | Removes numerical suffixes from container names (if scale == 1)                                                                 |
-| --restart[:service]                          | Restarts all containers by calling compose down and up                                                                          |
-| --restart-service:service                    | Stops, removes and recreates container for given service                                                                        |
-| --run:params                                 | Calls compose run with params                                                                                                   |
-| --scale:service,scale                        | Scales service to given scale                                                                                                   |
-| --send-test-email                            | Sends test email to admins using Django 'sendtestemail' command                                                                 |
-| --services                                   | Prints all defined services                                                                                                     |
-| --services-to-build                          | Prints all services which will be build                                                                                         |
-| --sh:params                                  | Runs sh in container                                                                                                            |
-| --shell                                      | Runs and connects to Django shell                                                                                               |
-| --start[:params]                             | Starts all or given project container                                                                                           |
-| --status / -s                                | Prints images and containers                                                                                                    |
-| --stop[:params]                              | Stops all or given project container                                                                                            |
-| --try-to-reload-webserver                    | Tries to reload webserver (if suitable extension is available)                                                                  |
-| --up[:params]                                | Calls compose up (with optional params)                                                                                         |
-| --upload / -u                                | Uploads mantis config, compose file <br/>and environment files to server                                                        |
-| --zero-downtime[:service]                    | Runs zero-downtime deployment of services (or given service)                                                                    |
-| --backup-volume:volume                       | Backups volume to a file                                                                                                        |
-| --restore-volume:volume,file                 | Restores volume from a file                                                                                                     |
+Run `mantis commands` to see all available commands with their descriptions.
 
-Few examples:
+| Command / Shortcut            | Description                                                       |
+|-------------------------------|-------------------------------------------------------------------|
+| status / s                    | Prints images and containers                                      |
+| deploy [--dirty] / d          | Runs deployment process                                           |
+| build [services...] / b       | Builds all services with Dockerfiles                              |
+| pull [services...] / p        | Pulls required images for services                                |
+| push [services...] / u        | Push built images to repository                                   |
+| upload                        | Uploads config, compose and env files to server                   |
+| clean / c                     | Clean images, containers, networks                                |
+| logs [container] / l          | Prints logs of containers                                         |
+| networks / n                  | Prints docker networks                                            |
+| healthcheck [container] / hc  | Execute health-check of container                                 |
+| up [params...]                | Calls compose up                                                  |
+| down [params...]              | Calls compose down                                                |
+| restart [service]             | Restarts all containers                                           |
+| stop [containers...]          | Stops containers                                                  |
+| start [containers...]         | Starts containers                                                 |
+| kill [containers...]          | Kills containers                                                  |
+| remove [containers...]        | Removes containers                                                |
+| bash <container>              | Runs bash in container                                            |
+| sh <container>                | Runs sh in container                                              |
+| exec <container> <command>    | Executes command in container                                     |
+| ssh                           | Connects to remote host via SSH                                   |
+| scale <service> <num>         | Scales service to given number                                    |
+| zero-downtime [service]       | Runs zero-downtime deployment                                     |
+| encrypt-env [--force]         | Encrypts environment files                                        |
+| decrypt-env [--force]         | Decrypts environment files                                        |
+| check-env                     | Compares encrypted and decrypted env files                        |
+| generate-key                  | Creates new encryption key                                        |
+| read-key                      | Returns encryption key value                                      |
+| check-config                  | Validates config file                                             |
+| contexts                      | Prints all docker contexts                                        |
+| create-context                | Creates docker context                                            |
+| services                      | Lists all defined services                                        |
+| commands                      | Lists all available commands                                      |
+
+**Django extension:**
+
+| Command                       | Description                                                       |
+|-------------------------------|-------------------------------------------------------------------|
+| shell                         | Runs Django shell                                                 |
+| manage <command> [args...]    | Runs Django manage command                                        |
+| send-test-email               | Sends test email to admins                                        |
+
+**PostgreSQL extension:**
+
+| Command                       | Description                                                       |
+|-------------------------------|-------------------------------------------------------------------|
+| psql                          | Starts psql console                                               |
+| pg-dump [--data-only] [--table TABLE] | Backups database                                          |
+| pg-restore <filename> [--table TABLE] | Restores database from backup                             |
+
+**Nginx extension:**
+
+| Command                       | Description                                                       |
+|-------------------------------|-------------------------------------------------------------------|
+| reload-webserver              | Reloads nginx                                                     |
+
+### Examples
 
 ```bash
 mantis --version
-mantis local --encrypt-env
-mantis stage --build
-mantis production --logs:container-name
+mantis -e local encrypt-env
+mantis -e stage build
+mantis -e production logs web
 
-# you can also run multiple commands at once
-mantis stage --build --push --deploy -s -l
+# Run multiple commands using + separator
+mantis -e stage build + push + deploy
+mantis -e stage build web api + push + deploy + status
+
+# Commands with arguments
+mantis -e production deploy --dirty
+mantis -e production manage migrate
+mantis -e production pg-dump --data-only --table users
+
+# Single connection mode (no environment needed)
+mantis status
+mantis deploy
 ```
 
-Check ``mantis --help`` for more details.
+Check `mantis --help` for more details, or `mantis COMMAND --help` for command-specific help.
 
 ## Flow
 
@@ -245,10 +268,10 @@ Check ``mantis --help`` for more details.
 Once you define mantis config for your project and optionally create encryption key, you can build your docker images:
 
 ```bash
-mantis <ENVIRONMENT> --build
+mantis -e <ENVIRONMENT> build
 ```
 
-Mantis either uses ```docker-compose --build``` or ```docker build``` command depending on build tool defined in your config.
+Mantis either uses `docker-compose --build` or `docker build` command depending on build tool defined in your config.
 Build image names use '_' as word separator.
 
 ### 2. Push
@@ -256,7 +279,7 @@ Build image names use '_' as word separator.
 Built images needs to be pushed to your repository defined in compose file (you need to authenticate)
 
 ```bash
-mantis <ENVIRONMENT> --push
+mantis -e <ENVIRONMENT> push
 ```
 
 ### 3. Deployment
@@ -264,7 +287,13 @@ mantis <ENVIRONMENT> --push
 Deployment to your remote server is being executed by calling simple command:
 
 ```bash
-mantis <ENVIRONMENT> --deploy
+mantis -e <ENVIRONMENT> deploy
+```
+
+Or chain all steps together:
+
+```bash
+mantis -e <ENVIRONMENT> build + push + deploy
 ```
 
 The deployment process consists of multiple steps:
@@ -284,25 +313,25 @@ Docker container names use '-' as word separator (docker compose v2 convention).
 Once deployed, you can verify the container status:
 
 ```bash
-mantis <ENVIRONMENT> --status
+mantis -e <ENVIRONMENT> status
 ```
 
 list all docker networks:
 
 ```bash
-mantis <ENVIRONMENT> --networks
+mantis -e <ENVIRONMENT> networks
 ```
 
 and also check all container logs:
 
 ```bash
-mantis <ENVIRONMENT> --logs
+mantis -e <ENVIRONMENT> logs
 ```
 
 If you need to follow logs of a specific container, you can do it by passing container name to command:
 
 ```bash
-mantis <ENVIRONMENT> --logs:<container-name>
+mantis -e <ENVIRONMENT> logs <container-name>
 ```
 
 ### 5. Another useful commands
@@ -310,21 +339,21 @@ mantis <ENVIRONMENT> --logs:<container-name>
 Sometimes, instead of calling whole deployment process, you just need to call compose commands directly:
 
 ```bash
-mantis <ENVIRONMENT> --up
-mantis <ENVIRONMENT> --down
-mantis <ENVIRONMENT> --restart
-mantis <ENVIRONMENT> --stop
-mantis <ENVIRONMENT> --kill
-mantis <ENVIRONMENT> --start
-mantis <ENVIRONMENT> --clean
+mantis -e <ENVIRONMENT> up
+mantis -e <ENVIRONMENT> down
+mantis -e <ENVIRONMENT> restart
+mantis -e <ENVIRONMENT> stop
+mantis -e <ENVIRONMENT> kill
+mantis -e <ENVIRONMENT> start
+mantis -e <ENVIRONMENT> clean
 ```
 
 Commands over a single container:
 
 ```bash
-mantis <ENVIRONMENT> --bash:container-name
-mantis <ENVIRONMENT> --sh:container-name
-mantis <ENVIRONMENT> --run:params
+mantis -e <ENVIRONMENT> bash <container-name>
+mantis -e <ENVIRONMENT> sh <container-name>
+mantis -e <ENVIRONMENT> run <params>
 ```
 
 ## Zero-downtime deployment

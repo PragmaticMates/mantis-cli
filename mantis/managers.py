@@ -1,20 +1,24 @@
+import asyncio
 import json
 import os
+import subprocess
+import sys
 import time
 import yaml
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from os import path
-from os.path import normpath
+from pathlib import Path
 from time import sleep
+from typing import Optional, List, Dict, Any, Tuple
 
 from rich.console import Console
 from rich.table import Table
 
 from mantis.crypto import Crypto
 from mantis.environment import Environment
-from mantis.helpers import CLI, merge_json
-from mantis.logic import find_config, load_config, check_config, load_template_config
+from mantis.helpers import CLI, import_string, merge_json
+from mantis.config import find_config, load_config, check_config, load_template_config
 
 
 class AbstractManager(object):
@@ -23,9 +27,10 @@ class AbstractManager(object):
     """
     environment_id = None
 
-    def __init__(self, config_file=None, environment_id=None, mode='remote'):
+    def __init__(self, config_file: str = None, environment_id: str = None, mode: str = 'remote', dry_run: bool = False):
         self.environment_id = environment_id
         self.mode = mode
+        self.dry_run = dry_run
 
         # config file
         self.config_file = config_file
@@ -45,18 +50,18 @@ class AbstractManager(object):
         self.encrypt_deterministically = self.config['encryption']['deterministic']
 
     @property
-    def host(self):
+    def host(self) -> Optional[str]:
         return self.connection_details['host'] if self.connection_details else None
 
     @property
-    def user(self):
+    def user(self) -> Optional[str]:
         return self.connection_details['user'] if self.connection_details else None
 
     @property
-    def port(self):
+    def port(self) -> Optional[str]:
         return self.connection_details['port'] if self.connection_details else None
 
-    def parse_ssh_connection(self, connection):
+    def parse_ssh_connection(self, connection: str) -> Dict[str, str]:
         return {
             'host': connection.split("@")[1].split(':')[0],
             'user': connection.split("@")[0].split('://')[1],
@@ -64,7 +69,7 @@ class AbstractManager(object):
         }
 
     @property
-    def connection_details(self):
+    def connection_details(self) -> Optional[Dict[str, Optional[str]]]:
         # In single connection mode, env.id is None but we still have a connection
         if not self.single_connection_mode and self.env.id is None:
             return None
@@ -92,13 +97,15 @@ class AbstractManager(object):
             elif self.connection.startswith('context://'):
                 context_name = self.connection.replace('context://', '')
 
-                # TODO: move to own method
-                context_details = json.loads(os.popen(f'docker context inspect {context_name}').read())
-
+                result = subprocess.run(
+                    ['docker', 'context', 'inspect', context_name],
+                    capture_output=True, text=True
+                )
                 try:
+                    context_details = json.loads(result.stdout)
                     ssh_host = context_details[0]["Endpoints"]["docker"]["Host"]
                     details = self.parse_ssh_connection(ssh_host)
-                except IndexError:
+                except (json.JSONDecodeError, IndexError, KeyError):
                     pass
             else:
                 raise CLI.error(f'Invalid connection protocol {self.connection}')
@@ -112,7 +119,7 @@ class AbstractManager(object):
         return details
 
     @property
-    def docker_connection(self):
+    def docker_connection(self) -> str:
         # In single connection mode or when env.id contains 'local', no extra connection needed
         if not self.single_connection_mode and (self.env.id is None or 'local' in self.env.id):
             return ''
@@ -129,12 +136,12 @@ class AbstractManager(object):
 
         return ''
 
-    def init_config(self, config):
+    def init_config(self, config: Dict[str, Any]) -> None:
         check_config(config)
-        config_file_path = path.normpath(path.join(self.config_file, os.pardir))
+        config_file_path = str(Path(self.config_file).parent)
 
-        def normalize(path):
-            return os.path.normpath(path.replace('<MANTIS>', config_file_path))
+        def normalize(p):
+            return str(Path(p.replace('<MANTIS>', config_file_path)).resolve())
 
         # Load config template file
         defaults = load_template_config()
@@ -159,16 +166,16 @@ class AbstractManager(object):
         if self.single_connection_mode and self.environment_id:
             CLI.error(f'Config error: Environment "{self.environment_id}" was provided, but config uses single connection mode. Remove the environment argument or switch to named environments using "connections".')
 
-        self.key_file = normalize(path.join(self.config['encryption']['folder'], 'mantis.key'))
+        self.key_file = normalize(str(Path(self.config['encryption']['folder']) / 'mantis.key'))
         self.environment_path = normalize(self.config['environment']['folder'])
 
         if self.single_connection_mode:
             # In single connection mode, compose files are directly in compose folder
             self.compose_path = normalize(self.config['compose']['folder'])
         elif self.environment_id:
-            self.compose_path = normalize(path.join(self.config['compose']['folder'], self.environment_id))
+            self.compose_path = normalize(str(Path(self.config['compose']['folder']) / self.environment_id))
 
-    def init_environment(self):
+    def init_environment(self) -> None:
         if self.single_connection_mode:
             # Single connection mode: no environment_id required
             self.env = Environment(
@@ -180,11 +187,10 @@ class AbstractManager(object):
             # connection from single 'connection' key
             self.connection = self.config.get('connection')
 
-            # compose files directly in compose folder
-            compose_file_paths = os.popen(f'find {self.compose_path} -maxdepth 1 -name "*.yml" -o -name "*.yaml"').read().strip().split('\n')
-
-            # Remove empty strings
-            self.compose_files = list(filter(None, compose_file_paths))
+            # compose files directly in compose folder (non-recursive)
+            compose_dir = Path(self.compose_path)
+            self.compose_files = [str(p) for p in compose_dir.glob('*.yml')] + \
+                                 [str(p) for p in compose_dir.glob('*.yaml')]
 
             # Read compose files
             self.compose_config = self.read_compose_configs()
@@ -206,16 +212,15 @@ class AbstractManager(object):
         # connection
         self.connection = self.config['connections'].get(self.env.id, None)
 
-        # compose files
-        compose_file_paths = os.popen(f'find {self.compose_path} -name "*.yml" -o -name "*.yaml"').read().strip().split('\n')
-
-        # Remove empty strings
-        self.compose_files = list(filter(None, compose_file_paths))
+        # compose files (recursive)
+        compose_dir = Path(self.compose_path)
+        self.compose_files = [str(p) for p in compose_dir.rglob('*.yml')] + \
+                             [str(p) for p in compose_dir.rglob('*.yaml')]
 
         # Read compose files
         self.compose_config = self.read_compose_configs()
 
-    def are_env_files_in_sync(self, env_file):
+    def are_env_files_in_sync(self, env_file: str) -> bool:
         """
         Checks if .env and .env.encrypted files are in sync.
         Returns True if they match, False otherwise.
@@ -223,9 +228,9 @@ class AbstractManager(object):
         env_file_encrypted = f'{env_file}.encrypted'
 
         # Check if both files exist
-        if not os.path.exists(env_file):
+        if not Path(env_file).exists():
             return False
-        if not os.path.exists(env_file_encrypted):
+        if not Path(env_file_encrypted).exists():
             return False
 
         try:
@@ -239,7 +244,7 @@ class AbstractManager(object):
         except Exception:
             return False
 
-    def check_environment_encryption(self, env_file):
+    def check_environment_encryption(self, env_file: str) -> None:
         decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)  # .env.encrypted
         loaded_environment = self.env.load(env_file)  # .env
 
@@ -286,38 +291,45 @@ class AbstractManager(object):
         else:
             CLI.success(f'Encrypted and decrypted environments DO match [{env_file}]...')
 
-    def cmd(self, command):
+    def cmd(self, command: str) -> None:
         command = command.strip()
+
+        if self.dry_run:
+            CLI.warning(f'[DRY-RUN] {command}')
+            return
 
         error_message = "Error during running command '%s'" % command
 
         try:
             print(command)
-            if os.system(command) != 0:
+            result = subprocess.run(command, shell=True)
+            if result.returncode != 0:
                 CLI.error(error_message)
-                # raise Exception(error_message)
-        except:
-            CLI.error(error_message)
-            # raise Exception(error_message)
+        except OSError as e:
+            CLI.error(f"{error_message}: {e}")
 
-    def docker_command(self, command, return_output=False, use_connection=True):
+    def docker_command(self, command: str, return_output: bool = False, use_connection: bool = True) -> Optional[str]:
         docker_connection = self.docker_connection if use_connection else ''
 
         cmd = f'{docker_connection} {command}'
 
         if return_output:
-            return os.popen(cmd).read()
+            if self.dry_run:
+                CLI.warning(f'[DRY-RUN] {cmd}')
+                return ''
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            return result.stdout
 
         self.cmd(cmd)
 
-    def docker(self, command, return_output=False, use_connection=True):
+    def docker(self, command: str, return_output: bool = False, use_connection: bool = True) -> Optional[str]:
         return self.docker_command(
             command=f'docker {command}',
             return_output=return_output,
             use_connection=use_connection
         )
 
-    def docker_compose(self, command, return_output=False, use_connection=True):
+    def docker_compose(self, command: str, return_output: bool = False, use_connection: bool = True) -> Optional[str]:
         compose_command = self.config['compose']['command']
 
         compose_files = ' '.join([f'-f {compose_file}' for compose_file in self.compose_files])
@@ -328,7 +340,44 @@ class AbstractManager(object):
             use_connection=use_connection
         )
 
-    def get_container_project(self, container):
+    def run_parallel(self, commands: List[str], description: str = "Running") -> List[Any]:
+        """
+        Execute multiple shell commands in parallel using thread pool.
+
+        Args:
+            commands: List of shell command strings to execute
+            description: Description for progress display
+        """
+        if not commands:
+            return []
+
+        if self.dry_run:
+            for cmd in commands:
+                CLI.warning(f'[DRY-RUN] {cmd}')
+            return []
+
+        def run_cmd(cmd):
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            return result
+
+        with CLI.progress() as progress:
+            task = progress.add_task(description, total=len(commands))
+            results = []
+
+            with ThreadPoolExecutor(max_workers=min(len(commands), 4)) as executor:
+                futures = {executor.submit(run_cmd, cmd): cmd for cmd in commands}
+
+                for future in futures:
+                    try:
+                        result = future.result()
+                        results.append(result)
+                    except Exception as e:
+                        CLI.warning(f"Command failed: {e}")
+                    progress.advance(task)
+
+        return results
+
+    def get_container_project(self, container: str) -> Optional[str]:
         """
         Prints project name of given container
         :param container: container name
@@ -342,13 +391,15 @@ class AbstractManager(object):
 
         return None
 
-    def get_containers(self, prefix='', exclude=[], only_running=False):
+    def get_containers(self, prefix: str = '', exclude: List[str] = None, only_running: bool = False) -> List[str]:
         """
         Prints all project containers
         :param prefix: container prefix
         :param exclude: exclude containers
         :return: list of container names
         """
+        if exclude is None:
+            exclude = []
         containers = self.docker(f'container ls {"" if only_running else "-a"} --format \'{{{{.Names}}}}\'', return_output=True) \
             .strip('\n').strip().split('\n')
 
@@ -372,24 +423,24 @@ class BaseManager(AbstractManager):
     Base manager contains methods which should be available to call using CLI
     """
 
-    def check_config(self):
+    def check_config(self) -> None:
         """
         Validates config file according to template
         """
         check_config(self.config)
 
-    def read_key(self):
+    def read_key(self) -> Optional[str]:
         """
         Returns value of mantis encryption key
         """
-        if not os.path.exists(self.key_file):
+        if not Path(self.key_file).exists():
             CLI.warning(f'File {self.key_file} does not exist. Reading key from $MANTIS_KEY...')
             return os.environ.get('MANTIS_KEY', None)
 
         with open(self.key_file, "r") as f:
             return f.read().strip()
 
-    def generate_key(self):
+    def generate_key(self) -> None:
         """
         Creates new encryption key
         """
@@ -401,7 +452,7 @@ class BaseManager(AbstractManager):
         CLI.pink(key)
         CLI.danger(f'Save it to {self.key_file} and keep safe !!!')
 
-    def encrypt_env(self, params='', env_file=None, return_value=False):
+    def encrypt_env(self, params: str = '', env_file: Optional[str] = None, return_value: bool = False) -> Optional[Dict[str, str]]:
         """
         Encrypts all environment files (force param skips user confirmation)
         """
@@ -467,7 +518,7 @@ class BaseManager(AbstractManager):
             else:
                 CLI.warning(f'Save it to {env_file_encrypted} manually.')
 
-    def decrypt_env(self, params='', env_file=None, return_value=False):
+    def decrypt_env(self, params: str = '', env_file: Optional[str] = None, return_value: bool = False) -> Optional[Dict[str, str]]:
         """
         Decrypts all environment files (force param skips user confirmation)
         """
@@ -538,7 +589,7 @@ class BaseManager(AbstractManager):
             else:
                 CLI.warning(f'Save it to {env_file} manually.')
 
-    def check_env(self):
+    def check_env(self) -> None:
         """
         Compares encrypted and decrypted env files
         """
@@ -548,7 +599,7 @@ class BaseManager(AbstractManager):
         # check if pair file exists
         for encrypted_env_file in self.env.encrypted_files:
             env_file = encrypted_env_file.rstrip('.encrypted')
-            if not os.path.exists(env_file):
+            if not Path(env_file).exists():
                 CLI.warning(f'Environment file {env_file} does not exist')
 
         if not hasattr(self.env, 'files'):
@@ -558,20 +609,20 @@ class BaseManager(AbstractManager):
             env_file_encrypted = f'{env_file}.encrypted'
 
             # check if pair file exists
-            if not os.path.exists(env_file_encrypted):
+            if not Path(env_file_encrypted).exists():
                 CLI.warning(f'Environment file {env_file_encrypted} does not exist')
                 continue
 
             # check encryption values
             self.check_environment_encryption(env_file)
 
-    def contexts(self):
+    def contexts(self) -> None:
         """
         Prints all docker contexts
         """
         self.cmd('docker context ls')
 
-    def create_context(self):
+    def create_context(self) -> None:
         """
         Creates docker context using user inputs
         """
@@ -590,7 +641,6 @@ class BaseManager(AbstractManager):
             host = f'{protocol}://{username}@{host_address}:{port}'
         else:
             CLI.error('Invalid protocol')
-            exit()
 
         endpoint = f'host={host}'
 
@@ -608,20 +658,19 @@ class BaseManager(AbstractManager):
 
         if input("Confirm? (Y)es/(N)o: ").lower() != 'y':
             CLI.error('Canceled')
-            exit()
 
         # create context
         self.cmd(command)
         self.contexts()
 
-    def get_container_suffix(self, service):
+    def get_container_suffix(self, service: str) -> str:
         """
         Returns the suffix used for containers for given service
         """
         delimiter = '-'
         return f'{delimiter}{service}'
 
-    def get_container_name(self, service):
+    def get_container_name(self, service: str) -> str:
         """
         Constructs container name with project prefix for given service
         """
@@ -629,27 +678,27 @@ class BaseManager(AbstractManager):
         prefix = self.get_project_by_service(service)
         return f'{prefix}{suffix}'.replace('_', '-')
 
-    def get_service_containers(self, service):
+    def get_service_containers(self, service: str) -> List[str]:
         """
         Prints container names of given service
         """
         containers = self.docker_compose("ps --format '{{.Names}}' %s" % service, return_output=True)
         return containers.strip().split('\n')
 
-    def get_number_of_containers(self, service):
+    def get_number_of_containers(self, service: str) -> int:
         """
         Prints number of containers for given service
         """
         return len(self.get_service_containers(service))
 
-    def get_image_suffix(self, service):
+    def get_image_suffix(self, service: str) -> str:
         """
         Returns the suffix used for image for given service
         """
         delimiter = '_'
         return f'{delimiter}{service}'
 
-    def get_image_name(self, service):
+    def get_image_name(self, service: str) -> str:
         """
         Constructs image name for given service
         """
@@ -657,7 +706,7 @@ class BaseManager(AbstractManager):
         prefix = self.get_project_by_service(service)
         return f'{prefix}{suffix}'.replace('-', '_')
 
-    def has_healthcheck(self, container):
+    def has_healthcheck(self, container: str) -> bool:
         """
         Checks if given container has defined healthcheck
         """
@@ -665,7 +714,7 @@ class BaseManager(AbstractManager):
 
         return healthcheck_config and healthcheck_config.get('Test') != ['NONE']
 
-    def get_healthcheck_start_period(self, container):
+    def get_healthcheck_start_period(self, container: str) -> Optional[float]:
         """
         Returns healthcheck start period for given container (if any)
         """
@@ -677,7 +726,7 @@ class BaseManager(AbstractManager):
             # TODO: return default value as fallback?
             return None
 
-    def check_health(self, container):
+    def check_health(self, container: str) -> Optional[Tuple[bool, str]]:
         """
         Checks current health of given container
         """
@@ -690,7 +739,7 @@ class BaseManager(AbstractManager):
             else:
                 return False, status
 
-    def healthcheck(self, container=None):
+    def healthcheck(self, container: str) -> Optional[bool]:
         """
         Execute health-check of given project container
         """
@@ -727,6 +776,10 @@ class BaseManager(AbstractManager):
 
                 if retries > 1:
                     sleep(interval)
+
+            # All retries exhausted, container is unhealthy
+            console.print(f'[red bold]Container {container} failed to become healthy after {retries} retries[/red bold]')
+            return False
         else:
             CLI.warning(f"Container '{container}' doesn't have healthcheck command defined. Looking for start period value...")
             start_period = self.get_healthcheck_start_period(container)
@@ -736,19 +789,20 @@ class BaseManager(AbstractManager):
                 CLI.warning(f'Stopping and removing container {container}')
                 self.docker(f'container stop {container}')
                 self.docker(f'container rm {container}')
-                exit()
+                sys.exit(1)
 
             # If container doesn't have healthcheck command, sleep for N seconds
             CLI.info(f'Sleeping for {start_period} seconds...')
             sleep(start_period)
             return None
 
-    def build(self, params=''):
+    def build(self, services: Optional[List[str]] = None) -> None:
         """
         Builds all services with Dockerfiles
         """
         CLI.info(f'Building...')
-        CLI.info(f'Params = {params}')
+        params = ' '.join(services) if services else ''
+        CLI.info(f'Services = {params}')
 
         # Construct build args from config
         build_args = self.config['build']['args']
@@ -768,6 +822,10 @@ class BaseManager(AbstractManager):
             # Build all services using docker compose
             self.docker_compose(f'build {build_args} {params} --pull', use_connection=False)
         elif build_tool == 'docker':
+            # Build commands for parallel execution
+            docker_connection = ''  # use_connection=False
+            build_commands = []
+
             for service, info in self.services_to_build().items():
                 platform = f"--platform={info['platform']}" if info['platform'] != '' else ''
                 cache_from = ' '.join([f"--cache-from {cache}" for cache in info['cache_from']]) if info['cache_from'] != [] else ''
@@ -775,16 +833,20 @@ class BaseManager(AbstractManager):
                 image = info['image'] if info['image'] != '' else f"{info['project_name']}-{service}".lstrip('-')
 
                 # build paths for docker build command (paths in compose are relative to compose file, but paths for docker command are relative to $PWD)
-                context = normpath(path.join(self.compose_path, info['context']))
-                dockerfile = normpath(path.join(context, info['dockerfile']))
+                context = str(Path(self.compose_path) / info['context'])
+                dockerfile = str(Path(context) / info['dockerfile'])
 
-                # Build service using docker
-                self.docker(f"build {context} {build_args} {args} {platform} {cache_from} -t {image} -f {dockerfile} {params}",
-                            use_connection=False)
+                cmd = f"{docker_connection} docker build {context} {build_args} {args} {platform} {cache_from} -t {image} -f {dockerfile} {params}"
+                build_commands.append(cmd.strip())
+
+            # Run builds in parallel
+            if build_commands:
+                CLI.info(f'Building {len(build_commands)} services in parallel...')
+                self.run_parallel(build_commands, "Building services")
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
-    def project_services(self):
+    def project_services(self) -> Dict[str, List[str]]:
         """
         Returns project names by compose files
         """
@@ -799,7 +861,7 @@ class BaseManager(AbstractManager):
 
         return projects
 
-    def get_project_by_service(self, service):
+    def get_project_by_service(self, service: str) -> Optional[str]:
         project_services = self.project_services()
 
         for project, services in project_services.items():
@@ -808,7 +870,7 @@ class BaseManager(AbstractManager):
 
         return None
 
-    def services(self, compose_file=None):
+    def services(self, compose_file: Optional[str] = None) -> List[str]:
         """
         Returns all defined services
         """
@@ -825,7 +887,7 @@ class BaseManager(AbstractManager):
 
         return services
 
-    def services_to_build(self, compose_file=None):
+    def services_to_build(self, compose_file: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         """
         Prints all services which will be build
         """
@@ -854,27 +916,29 @@ class BaseManager(AbstractManager):
 
         return data
 
-    def push(self, params=''):
+    def push(self, services: Optional[List[str]] = None) -> None:
         """
         Push built images to repository
         """
         CLI.info(f'Pushing...')
-        CLI.info(f'Params = {params}')
+        params = ' '.join(services) if services else ''
+        CLI.info(f'Services = {params}')
 
         # Push using docker compose
         self.docker_compose(f'push {params}', use_connection=False)
 
-    def pull(self, params=''):
+    def pull(self, services: Optional[List[str]] = None) -> None:
         """
         Pulls required images for services
         """
         CLI.info('Pulling...')
-        CLI.info(f'Params = {params}')
+        params = ' '.join(services) if services else ''
+        CLI.info(f'Services = {params}')
 
         # Pull using docker compose
         self.docker_compose(f'pull {params}')
 
-    def upload(self):
+    def upload(self) -> None:
         """
         Uploads mantis config, compose file <br/>and environment files to server
         """
@@ -891,12 +955,12 @@ class BaseManager(AbstractManager):
 
             # mantis config file
             for file in files_to_upload:
-                if os.path.exists(file):
+                if Path(file).exists():
                     self.cmd(f'rsync -arvz -e \'ssh -p {self.port}\' -rvzh --progress {file} {self.user}@{self.host}:{self.project_path}/{file}')
                 else:
                     CLI.info(f'{self.config_file} does not exists. Skipping...')
 
-    def restart(self, service=None):
+    def restart(self, service: Optional[str] = None) -> None:
         """
         Restarts all containers by calling compose down and up
         """
@@ -921,14 +985,18 @@ class BaseManager(AbstractManager):
         CLI.step(3, 3, 'Prune Docker images')
         self.clean()
 
-    def deploy(self, dirty=False):
+    def deploy(self, dirty: bool = False, strategy: str = 'blue-green') -> None:
         """
         Runs deployment process: uploads files, pulls images, runs zero-downtime deployment, removes suffixes, reloads webserver, clean
+
+        Args:
+            dirty: Skip zero-downtime and cleaning steps
+            strategy: Deployment strategy - 'rolling' (one-by-one) or 'blue-green' (scale 2x)
         """
         CLI.info('Deploying...')
 
         if dirty:
-            CLI.warning('...but dirty (no zero-downtime, without cleaning)') 
+            CLI.warning('...but dirty (no zero-downtime, without cleaning)')
 
         self.upload()
         self.pull()
@@ -936,10 +1004,19 @@ class BaseManager(AbstractManager):
         is_running = len(self.get_containers(only_running=True)) != 0
 
         if is_running and not dirty:
-            self.zero_downtime()
+            if strategy == 'rolling':
+                CLI.info('Using rolling update strategy (one-by-one)...')
+                success = self.rolling_update()
+            else:  # blue-green
+                CLI.info('Using blue-green strategy (scale 2x)...')
+                success = self.zero_downtime()
+
+            if not success:
+                CLI.danger('Deployment aborted due to rollback.')
+                return
 
         # Preserve number of scaled containers
-        scale_param = ''
+        scale_param: List[str] = []
         if is_running:
             scales = {}
             for service in self.services():
@@ -950,25 +1027,29 @@ class BaseManager(AbstractManager):
                 if number_of_containers > replicas:
                     scales[service] = number_of_containers
 
-            scale_param = ' '.join([f'--scale {service}={scale}' for service, scale in scales.items()])
+            scale_param = [f'--scale {service}={scale}' for service, scale in scales.items()]
 
-        self.up(scale_param)
+        self.up(scale_param if scale_param else None)
         self.remove_suffixes()
         self.try_to_reload_webserver()
 
         if not dirty:
             self.clean()
 
-    def zero_downtime(self, service=None):
+        CLI.success('Deployment complete!')
+
+    def zero_downtime(self, service: Optional[str] = None) -> bool:
         """
-        Runs zero-downtime deployment of services (or given service)
+        Runs zero-downtime deployment of services (or given service).
+        Returns True if zero downtime was successful, False otherwise (rollback performed).
         """
         if not service:
             zero_downtime_services = self.config['zero_downtime']
             for index, service in enumerate(zero_downtime_services):
                 CLI.step(index + 1, len(zero_downtime_services), f'Zero downtime services: {zero_downtime_services}')
-                self.zero_downtime(service)
-            return
+                if not self.zero_downtime(service):
+                    return False  # Rollback happened, stop processing
+            return True
 
         container_prefix = self.get_container_name(service)
 
@@ -977,7 +1058,7 @@ class BaseManager(AbstractManager):
 
         if num_containers == 0:
             CLI.danger(f'Old container for service {service} not found. Skipping zero-downtime deployment...')
-            return
+            return True
 
         # run new containers
         scale = num_containers * 2
@@ -985,9 +1066,46 @@ class BaseManager(AbstractManager):
 
         # healthcheck
         new_containers = self.get_containers(prefix=container_prefix, exclude=old_containers, only_running=True)
+        unhealthy_containers = []
 
         for new_container in new_containers:
-            self.healthcheck(container=new_container)
+            is_healthy = self.healthcheck(container=new_container)
+            if is_healthy is False:
+                unhealthy_containers.append(new_container)
+
+        # Handle unhealthy containers
+        if unhealthy_containers:
+            console = Console()
+            console.print(f'\n[red bold]⚠ Unhealthy containers detected: {", ".join(unhealthy_containers)}[/red bold]\n')
+
+            # Show logs of unhealthy containers
+            for container in unhealthy_containers:
+                console.print(f'[yellow]Logs for {container}:[/yellow]')
+                self.docker(f'logs {container} --tail 50')
+                console.print('')
+
+            # Ask user if they want to rollback
+            rollback = CLI.timed_confirm(
+                "Rollback deployment? (stop new containers and keep old ones)",
+                timeout=10,
+                default=False
+            )
+
+            if rollback:
+                console.print(f'\n[yellow]Rolling back deployment for service {service}...[/yellow]')
+
+                # Stop and remove unhealthy new containers
+                for new_container in new_containers:
+                    if new_container in self.get_containers():
+                        CLI.info(f'Stopping new container [{new_container}]...')
+                        self.docker(f'container stop {new_container}')
+                        CLI.info(f'Removing new container [{new_container}]...')
+                        self.docker(f'container rm {new_container}')
+
+                CLI.success(f'Rollback complete. Old containers preserved: {old_containers}')
+                return False  # Not successful zero-downtime. Rollback performed
+            else:
+                console.print(f'\n[yellow]Continuing deployment with potentially unhealthy containers...[/yellow]')
 
         # reload webserver
         self.try_to_reload_webserver()
@@ -1015,7 +1133,126 @@ class BaseManager(AbstractManager):
         # reload webserver
         self.try_to_reload_webserver()
 
-    def remove_suffixes(self, prefix=''):
+        return True  # Successful zero-downtime. No rollback
+
+    def rolling_update(self, service: Optional[str] = None) -> bool:
+        """
+        Performs rolling update of service containers one at a time.
+
+        Flow for each container:
+        1. Start 1 new container
+        2. Wait for healthy
+        3. Reload webserver
+        4. Remove 1 old container
+
+        Returns True if successful, False if rollback was performed.
+        """
+        if not service:
+            # Process all zero_downtime services
+            zero_downtime_services = self.config['zero_downtime']
+            for index, service in enumerate(zero_downtime_services):
+                CLI.step(index + 1, len(zero_downtime_services), f'Rolling update: {service}')
+                if not self.rolling_update(service):
+                    return False  # Rollback happened, stop processing
+            return True
+
+        console = Console()
+        container_prefix = self.get_container_name(service)
+        old_containers = self.get_containers(prefix=container_prefix, only_running=True)
+        num_containers = len(old_containers)
+
+        if num_containers == 0:
+            CLI.danger(f'No running containers for service {service}. Skipping rolling update...')
+            return True
+
+        console.print(f'\n[blue]Starting rolling update for [yellow]{service}[/yellow] ({num_containers} containers)[/blue]\n')
+
+        # Track containers we've successfully replaced
+        replaced_count = 0
+
+        for i, old_container in enumerate(old_containers):
+            step = i + 1
+            console.print(f'[cyan]━━━ Container {step}/{num_containers} ━━━[/cyan]')
+
+            # Step 1: Scale up by 1 (start new container)
+            current_count = len(self.get_containers(prefix=container_prefix, only_running=True))
+            CLI.info(f'Starting new container (scaling {current_count} → {current_count + 1})...')
+            self.scale(service, current_count + 1)
+
+            # Get the new container (the one that wasn't there before)
+            all_current = self.get_containers(prefix=container_prefix, only_running=True)
+            new_container = None
+            for c in all_current:
+                if c not in old_containers and c != old_container:
+                    # Check if this is a newly created container
+                    if new_container is None or c > new_container:  # Higher suffix = newer
+                        new_container = c
+
+            if not new_container:
+                # Fallback: get the container with highest suffix
+                new_container = sorted(all_current)[-1]
+
+            CLI.info(f'New container: {new_container}')
+
+            # Step 2: Wait for healthy
+            is_healthy = self.healthcheck(container=new_container)
+
+            if is_healthy is False:
+                # Show logs
+                console.print(f'\n[red bold]⚠ Container {new_container} failed health check[/red bold]\n')
+                console.print(f'[yellow]Logs for {new_container}:[/yellow]')
+                self.docker(f'logs {new_container} --tail 50')
+                console.print('')
+
+                # Ask for rollback
+                rollback = CLI.timed_confirm(
+                    "Rollback? (stop new container, keep remaining old ones)",
+                    timeout=10,
+                    default=False
+                )
+
+                if rollback:
+                    console.print(f'\n[yellow]Rolling back...[/yellow]')
+
+                    # Stop and remove the failed new container
+                    if new_container in self.get_containers():
+                        self.docker(f'container stop {new_container}')
+                        self.docker(f'container rm {new_container}')
+
+                    remaining_old = old_containers[i:]  # Containers we haven't replaced yet
+                    CLI.success(f'Rollback complete. Preserved: {remaining_old}')
+                    CLI.info(f'Successfully replaced {replaced_count}/{num_containers} containers before failure.')
+                    return False
+                else:
+                    console.print(f'[yellow]Continuing with potentially unhealthy container...[/yellow]')
+
+            # Step 3: Reload webserver (new container now receiving traffic)
+            self.try_to_reload_webserver()
+
+            # Step 4: Stop and remove old container
+            CLI.info(f'Removing old container: {old_container}')
+            if old_container in self.get_containers():
+                self.docker(f'container stop {old_container}')
+                self.docker(f'container rm {old_container}')
+
+            replaced_count += 1
+            console.print(f'[green]✓ Replaced {old_container} → {new_container}[/green]\n')
+
+        # Rename containers to clean suffixes
+        final_containers = self.get_containers(prefix=container_prefix, only_running=True)
+        for index, container in enumerate(sorted(final_containers)):
+            new_name = f'{container_prefix}-{index + 1}'
+            if container != new_name:
+                CLI.info(f'Renaming {container} → {new_name}')
+                self.docker(f'container rename {container} {new_name}')
+
+        self.remove_suffixes(prefix=container_prefix)
+        self.try_to_reload_webserver()
+
+        console.print(f'\n[green bold]✓ Rolling update complete for {service}[/green bold]\n')
+        return True
+
+    def remove_suffixes(self, prefix: str = '') -> None:
         """
         Removes numerical suffixes from container names (if scale == 1)
         """
@@ -1044,7 +1281,7 @@ class BaseManager(AbstractManager):
                 CLI.info(f'Removing suffix of container {container}')
                 self.docker(f'container rename {container} {new_container}')
 
-    def restart_service(self, service):
+    def restart_service(self, service: str) -> None:
         """
         Stops, removes and recreates container for given service
         """
@@ -1064,10 +1301,10 @@ class BaseManager(AbstractManager):
                 CLI.info(f'{app_container} was not running')
 
         CLI.info(f'Creating new container [{container}]...')
-        self.up(f'--no-deps --no-recreate {service}')
+        self.up(['--no-deps', '--no-recreate', service])
         self.remove_suffixes(prefix=container)
 
-    def try_to_reload_webserver(self):
+    def try_to_reload_webserver(self) -> None:
         """
         Tries to reload webserver (if suitable extension is available)
         """
@@ -1076,13 +1313,14 @@ class BaseManager(AbstractManager):
         except AttributeError:
             CLI.warning('Tried to reload webserver, but no suitable extension found!')
 
-    def stop(self, params=None):
+    def stop(self, containers: Optional[List[str]] = None) -> None:
         """
-        Stops all or given project container
+        Stops all or given project containers
         """
         CLI.info('Stopping containers...')
 
-        containers = self.get_containers() if not params else params.split(' ')
+        if not containers:
+            containers = self.get_containers()
 
         steps = len(containers)
 
@@ -1090,13 +1328,14 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Stopping {container}')
             self.docker(f'container stop {container}')
 
-    def kill(self, params=None):
+    def kill(self, containers: Optional[List[str]] = None) -> None:
         """
-        Kills all or given project container
+        Kills all or given project containers
         """
         CLI.info('Killing containers...')
 
-        containers = self.get_containers() if not params else params.split(' ')
+        if not containers:
+            containers = self.get_containers()
 
         steps = len(containers)
 
@@ -1104,13 +1343,14 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Killing {container}')
             self.docker(f'container kill {container}')
 
-    def start(self, params=''):
+    def start(self, containers: Optional[List[str]] = None) -> None:
         """
-        Starts all or given project container
+        Starts all or given project containers
         """
         CLI.info('Starting containers...')
 
-        containers = self.get_containers() if not params else params.split(' ')
+        if not containers:
+            containers = self.get_containers()
 
         steps = len(containers)
 
@@ -1118,58 +1358,71 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Starting {container}')
             self.docker(f'container start {container}')
 
-    def run(self, params):
+    def run(self, params: List[str]) -> None:
         """
         Calls compose run with params
         """
-        CLI.info(f'Running {params}...')
-        self.docker_compose(f'run {params}')
+        params_str = ' '.join(params) if params else ''
+        CLI.info(f'Running {params_str}...')
+        self.docker_compose(f'run {params_str}')
 
-    def up(self, params=''):
+    def up(self, params: Optional[List[str]] = None) -> None:
         """
         Calls compose up (with optional params)
         """
-        CLI.info(f'Starting up {params}...')
-        self.docker_compose(f'up {params} -d')
+        params_str = ' '.join(params) if params else ''
+        CLI.info(f'Starting up {params_str}...')
+        self.docker_compose(f'up {params_str} -d')
 
-    def down(self, params=''):
+    def down(self, params: Optional[List[str]] = None) -> None:
         """
         Calls compose down (with optional params)
         """
-        CLI.info(f'Running down {params}...')
-        self.docker_compose(f'down {params}')
+        params_str = ' '.join(params) if params else ''
+        CLI.info(f'Running down {params_str}...')
+        self.docker_compose(f'down {params_str}')
 
-    def scale(self, service, scale):
+    def scale(self, service: str, scale: int) -> None:
         """
         Scales service to given scale
         """
-        self.up(f'--no-deps --no-recreate --scale {service}={scale}')
+        self.up([f'--no-deps', '--no-recreate', '--scale', f'{service}={scale}'])
 
-    def remove(self, params=''):
+    def remove(self, containers: Optional[List[str]] = None, force: bool = False) -> None:
         """
-        Removes all or given project container
+        Removes all or given project containers
         """
         CLI.info('Removing containers...')
 
-        containers = self.get_containers() if params == '' else params.split(' ')
+        if not containers:
+            containers = self.get_containers()
 
         steps = len(containers)
+        force_flag = '-f ' if force else ''
 
         for index, container in enumerate(containers):
             CLI.step(index + 1, steps, f'Removing {container}')
-            self.docker(f'container rm {container}')
+            self.docker(f'container rm {force_flag}{container}')
 
-    def clean(self, params=''):  # todo clean on all nodes
+    def rename(self, container: str, new_name: str) -> None:
+        """
+        Renames container to a new name
+        """
+        CLI.info(f'Renaming container {container} to {new_name}')
+        self.docker(f'container rename {container} {new_name}')
+
+    def clean(self, params: Optional[List[str]] = None) -> None:  # todo clean on all nodes
         """
         Clean images, containers, networks
         """
         CLI.info('Cleaning...')
+        params_str = ' '.join(params) if params else ''
         # self.docker(f'builder prune')
-        self.docker(f'system prune {params} -a --force')
+        self.docker(f'system prune {params_str} -a --force')
         # self.docker(f'container prune')
         # self.docker(f'container prune --force')
 
-    def status(self):
+    def status(self) -> None:
         """
         Prints images and containers
         """
@@ -1241,7 +1494,7 @@ class BaseManager(AbstractManager):
 
             console.print(containers_table)
 
-    def networks(self):
+    def networks(self) -> None:
         """
         Prints docker networks
         """
@@ -1265,7 +1518,7 @@ class BaseManager(AbstractManager):
                 containers = ', '.join(containers.split())
                 print(f'{network}\t{containers}'.strip())
 
-    def logs(self, params=None):
+    def logs(self, params: Optional[str] = None) -> None:
         """
         Prints logs of all or given project container
         """
@@ -1279,7 +1532,7 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'{container} logs')
             self.docker(f'logs {container} {lines}')
 
-    def bash(self, params):
+    def bash(self, params: str) -> None:
         """
         Runs bash in container
         """
@@ -1287,14 +1540,14 @@ class BaseManager(AbstractManager):
         self.docker(f'exec -it --user root {params} /bin/bash')
         # self.docker_compose(f'run --entrypoint /bin/bash {container}')
 
-    def sh(self, params):
+    def sh(self, params: str) -> None:
         """
         Runs sh in container
         """
         CLI.info('Logging to container...')
         self.docker(f'exec -it --user root {params} /bin/sh')
 
-    def ssh(self):
+    def ssh(self) -> None:
         if not self.connection:
             CLI.error('Missing connection details')
 
@@ -1302,25 +1555,25 @@ class BaseManager(AbstractManager):
             CLI.error('Unknown host')
 
         CLI.info(f'Executing SSH connection: {self.connection}')
-        os.system(f'ssh {self.user}@{self.host} -p {self.port or 22}')
+        subprocess.run(['ssh', f'{self.user}@{self.host}', '-p', str(self.port or 22)])
 
-    def exec(self, params):
+    def exec(self, container: str, cmd: list):
         """
         Executes command in container
         """
-        container, command = params.split(' ', maxsplit=1)
+        command = ' '.join(cmd)
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec {container} {command}')
 
-    def exec_it(self, params):
+    def exec_it(self, container: str, cmd: list):
         """
         Executes command in container using interactive pseudo-TTY
         """
-        container, command = params.split(' ', maxsplit=1)
+        command = ' '.join(cmd)
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')
 
-    def get_healthcheck_config(self, container):
+    def get_healthcheck_config(self, container: str) -> Optional[Dict[str, Any]]:
         """
         Prints health-check config (if any) of given container
         """
@@ -1332,7 +1585,7 @@ class BaseManager(AbstractManager):
 
         return None
 
-    def read_compose_configs(self):
+    def read_compose_configs(self) -> Dict[str, Any]:
         """
         Returns merged compose configs
         """
@@ -1345,7 +1598,7 @@ class BaseManager(AbstractManager):
 
         return config
 
-    def get_deploy_replicas(self, service):
+    def get_deploy_replicas(self, service: str) -> int:
         """
         Returns default number of deploy replicas of given services
         """
@@ -1362,9 +1615,9 @@ class BaseManager(AbstractManager):
 
         return replicas
 
-    def backup_volume(self, volume):
+    def backup_volume(self, volume: str) -> None:
         # backups folder
-        backup_path = os.getcwd() + '/backups/'
+        backup_path = str(Path.cwd() / 'backups')
 
         # Get current date, time and timezone name
         current_datetime = datetime.now()
@@ -1379,9 +1632,9 @@ class BaseManager(AbstractManager):
 
         self.docker(command)
 
-    def restore_volume(self, volume, file):
+    def restore_volume(self, volume: str, file: str) -> None:
         # backups folder
-        backup_path = os.getcwd() + '/backups/'
+        backup_path = str(Path.cwd() / 'backups')
 
         command = f'run --rm \
         -v {volume}:/{volume} \
@@ -1390,3 +1643,83 @@ class BaseManager(AbstractManager):
         tar -xzvf /backup/{file}'
 
         self.docker(command)
+
+
+def get_extension_classes(extensions: List[str]) -> List[type]:
+    extension_classes: List[type] = []
+
+    # extensions
+    for extension in extensions:
+        extension_class_name = extension if '.' in extension else f"mantis.extensions.{extension.lower()}.{extension}"
+        extension_class = import_string(extension_class_name)
+        extension_classes.append(extension_class)
+
+    return extension_classes
+
+
+def resolve_environment(environment_id: Optional[str], config: Dict[str, Any]) -> Optional[str]:
+    """
+    Resolves environment prefix to full environment ID.
+
+    If the prefix matches exactly one environment, returns that environment ID.
+    If multiple environments match, raises an error with the ambiguous options.
+    If no environments match, raises an error with available options.
+    """
+    if not environment_id:
+        return None
+
+    # Single connection mode - no environment resolution needed
+    if config.get('connection'):
+        return environment_id
+
+    connections = config.get('connections', {})
+    available_envs = list(connections.keys())
+
+    # Check for exact match first
+    if environment_id in available_envs:
+        return environment_id
+
+    # Find all environments that start with the prefix
+    matches = [env for env in available_envs if env.startswith(environment_id)]
+
+    if len(matches) == 1:
+        CLI.info(f'Environment "{environment_id}" resolved to "{matches[0]}"')
+        return matches[0]
+    elif len(matches) > 1:
+        CLI.error(f'Ambiguous environment prefix "{environment_id}". Matches: {", ".join(sorted(matches))}')
+    else:
+        CLI.error(f'Environment "{environment_id}" not found. Available: {", ".join(sorted(available_envs))}')
+
+
+def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False) -> BaseManager:
+    # config file
+    config_file = find_config(environment_id)
+    config = load_config(config_file)
+
+    # Resolve environment prefix to full ID
+    environment_id = resolve_environment(environment_id, config)
+
+    # class name of the manager
+    manager_class_name = config.get('manager_class', 'mantis.managers.BaseManager')
+
+    # get manager class
+    manager_class = import_string(manager_class_name)
+
+    # setup extensions
+    extensions = config.get('extensions', {})
+    extension_classes = get_extension_classes(extensions.keys())
+
+    CLI.info(f"Extensions: {', '.join(extensions.keys())}")
+
+    # create dynamic manager class
+    class MantisManager(*[manager_class] + extension_classes):
+        pass
+
+    manager = MantisManager(config_file=config_file, environment_id=environment_id, mode=mode, dry_run=dry_run)
+
+    # set extensions data
+    for extension, extension_params in extensions.items():
+        if 'service' in extension_params:
+            setattr(manager, f'{extension}_service'.lower(), extension_params['service'])
+
+    return manager

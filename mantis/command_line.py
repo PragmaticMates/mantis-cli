@@ -1,215 +1,196 @@
 #!/usr/bin/env python
-import os
-import sys
-import inspect
+"""
+Mantis CLI - Docker deployment tool
 
-from rich.console import Console
-from rich.table import Table
-from rich.text import Text
+Usage:
+    mantis [OPTIONS] COMMAND [ARGS]... [+ COMMAND [ARGS]...]
+
+Examples:
+    mantis -e production status
+    mantis -e production deploy --dirty
+    mantis -e production build + push + deploy
+    mantis -e production build web api + push + deploy
+    mantis status                          (single connection mode)
+    mantis manage migrate
+"""
+import sys
+from typing import List, Tuple
+
+import click
+import typer
 
 from mantis import VERSION
-from mantis.helpers import CLI, nested_set
-from mantis.logic import get_manager, execute
-from mantis.managers import AbstractManager, BaseManager
-from mantis.extensions.django import Django
-from mantis.extensions.nginx import Nginx
-from mantis.extensions.postgres import Postgres
+from mantis.app import app, state
+from mantis.managers import get_manager
+
+# Import commands to register them with the app
+from mantis import commands  # noqa: F401
+
+# Command separator for chaining
+COMMAND_SEPARATOR = '+'
 
 
-def parse_args(arguments):
-    d = {
-        'environment_id': None,
-        'commands': [],
-        'settings': {}
+def split_args(args: List[str]) -> Tuple[List[str], List[List[str]]]:
+    """
+    Split args into global options and command groups using '+' separator.
+
+    Input:  ['-e', 'prod', 'build', 'web', '+', 'push', '+', 'deploy']
+    Output: (['-e', 'prod'], [['build', 'web'], ['push'], ['deploy']])
+    """
+    # Split by separator
+    groups = []
+    current = []
+
+    for arg in args:
+        if arg == COMMAND_SEPARATOR:
+            if current:
+                groups.append(current)
+                current = []
+        else:
+            current.append(arg)
+
+    if current:
+        groups.append(current)
+
+    if not groups:
+        return [], []
+
+    # First group: separate global options from first command
+    first_group = groups[0]
+    global_opts = []
+
+    # Global options are at the start and begin with '-'
+    i = 0
+    while i < len(first_group):
+        arg = first_group[i]
+        if arg.startswith('-'):
+            global_opts.append(arg)
+            # Handle options with values: -e prod, --env prod
+            if arg in ('-e', '--env', '-m', '--mode') and i + 1 < len(first_group):
+                i += 1
+                global_opts.append(first_group[i])
+            i += 1
+        else:
+            # First non-option is start of command
+            break
+
+    # Remaining of first group is the first command
+    first_cmd = first_group[i:] if i < len(first_group) else []
+
+    # Build command groups
+    cmd_groups = []
+    if first_cmd:
+        cmd_groups.append(first_cmd)
+    cmd_groups.extend(groups[1:])
+
+    return global_opts, cmd_groups
+
+
+def parse_global_options(global_opts: List[str]) -> dict:
+    """Parse global options into a dict. Only used for multi-command chaining."""
+    result = {
+        'env': None,
+        'mode': 'remote',
+        'dry_run': False,
     }
 
-    for arg in arguments:
-        if not arg.startswith('-'):
-            d['environment_id'] = arg
-        # elif '=' in arg and ':' not in arg:
-        elif '=' in arg:
-            s, v = arg.split('=', maxsplit=1)
-            d['settings'][s.strip('-')] = v
+    i = 0
+    while i < len(global_opts):
+        opt = global_opts[i]
+        if opt in ('-e', '--env') and i + 1 < len(global_opts):
+            result['env'] = global_opts[i + 1]
+            i += 2
+        elif opt in ('-m', '--mode') and i + 1 < len(global_opts):
+            result['mode'] = global_opts[i + 1]
+            i += 2
+        elif opt in ('-n', '--dry-run'):
+            result['dry_run'] = True
+            i += 1
         else:
-            d['commands'].append(arg)
+            i += 1
 
-    return d
+    return result
+
+
+def invoke_command(click_app, cmd_name: str, cmd_args: List[str], parent_ctx):
+    """Invoke a single command with its arguments."""
+    from mantis.helpers import CLI
+
+    cmd = click_app.get_command(parent_ctx, cmd_name)
+    if cmd is None:
+        CLI.error(f"Unknown command: {cmd_name}")
+
+    state._current_command = cmd_name
+
+    # Create context for this command and invoke
+    try:
+        with cmd.make_context(cmd_name, cmd_args, parent=parent_ctx) as ctx:
+            cmd.invoke(ctx)
+    except click.exceptions.Exit:
+        # Normal exit (e.g., from --help)
+        pass
 
 
 def run():
-    arguments = sys.argv.copy()
-    arguments.pop(0)
+    """Entry point with command chaining support using '+' separator."""
+    args = sys.argv[1:]
 
-    # check params
-    params = parse_args(arguments)
+    # No args - show help
+    if not args:
+        app()
+        return
 
-    # version info
-    version_info = f'Mantis v{VERSION}'
+    global_opts, cmd_groups = split_args(args)
 
-    if params['commands'] == ['--version']:
-        return print(version_info)
+    # No commands found - delegate to Typer (handles --help, --version, errors)
+    if not cmd_groups:
+        sys.argv = [sys.argv[0]] + global_opts
+        app()
+        return
 
-    if params['commands'] == ['--help']:
-        return help()
+    # Handle --version early
+    if '--version' in global_opts or '-v' in global_opts:
+        print(f"Mantis v{VERSION}")
+        return
 
-    # get params
-    environment_id = params['environment_id']
-    commands = params['commands']
-    mode = params['settings'].get('mode', 'remote')
+    # Handle --help: show help for first command
+    if '--help' in global_opts or '-h' in global_opts:
+        sys.argv = [sys.argv[0]] + cmd_groups[0][:1] + ['--help']
+        app()
+        return
 
-    # get manager
-    manager = get_manager(environment_id, mode)
+    # Check if any command has --help in its args
+    for cmd_group in cmd_groups:
+        if '--help' in cmd_group or '-h' in cmd_group:
+            sys.argv = [sys.argv[0]] + cmd_group[:1] + ['--help']
+            app()
+            return
 
-    if len(params['commands']) == 0:
-        CLI.error('Missing commands. Check mantis --help for more information.')
+    # Single command without chaining - delegate to Typer for normal flow
+    if len(cmd_groups) == 1:
+        sys.argv = [sys.argv[0]] + global_opts + cmd_groups[0]
+        app()
+        return
 
-    if mode not in ['remote', 'ssh', 'host']:
-        CLI.error('Incorrect mode. Check mantis --help for more information.')
+    # Multiple commands - parse options and initialize state manually
+    opts = parse_global_options(global_opts)
+    state._mode = opts['mode']
+    state._dry_run = opts['dry_run']
+    state._manager = get_manager(opts['env'], opts['mode'], dry_run=opts['dry_run'])
 
-    hostname = os.popen('hostname').read().rstrip("\n")
+    # Get Click app from Typer
+    click_app = typer.main.get_command(app)
 
-    # check config settings
-    settings_config = params['settings'].get('config', None)
-
-    if settings_config:
-        # override manager config
-        for override_config in settings_config.split(','):
-            key, value = override_config.split('=')
-            nested_set(
-                dic=manager.config,
-                keys=key.split('.'),
-                value=value
-            )
-
-    console = Console()
-
-    heading = Text.assemble(
-        version_info, ", ",
-        ("Environment ID = ", "") if manager.environment_id else ("(single connection mode), ", "bold") if manager.single_connection_mode else ("", ""),
-        (str(manager.environment_id) + ", ", "bold") if manager.environment_id else ("", ""),
-        (str(manager.host) + ", ", "red") if manager.connection and manager.host else ("", ""),
-        "mode: ", (str(manager.mode), "green"),
-        ", hostname: ", (hostname, "blue")
-    )
-    console.print(heading)
-
-    if mode == 'ssh':
-        # Build mantis command - environment_id is optional in single connection mode
-        env_part = f'{environment_id} ' if environment_id else ''
-        cmds = [
-            f'cd {manager.project_path}',
-            f'mantis {env_part}--mode=host {" ".join(commands)}'
-        ]
-        cmd = ';'.join(cmds)
-        exec = f"ssh -t {manager.user}@{manager.host} -p {manager.port} '{cmd}'"
-        os.system(exec)
-    else:
-        # execute all commands
-        for command in commands:
-            if ':' in command:
-                command, params = command.split(':')
-                params = params.split(',')
-            else:
-                params = []
-
-            execute(manager, command, params)
-
-def get_class_commands(cls, exclude_from=None):
-    """
-    Extract commands from a class for help display.
-    Returns list of tuples: (command_str, description)
-    """
-    commands = []
-    exclude_methods = dir(exclude_from) if exclude_from else []
-
-    methods = inspect.getmembers(cls, predicate=inspect.isfunction)
-
-    for method_name, method in methods:
-        # skip private methods and excluded methods
-        if method_name.startswith('_') or method_name in exclude_methods:
-            continue
-
-        command = method_name.replace('_', '-')
-
-        # Get the method signature
-        signature = inspect.signature(method)
-
-        # Parameters (skip 'self')
-        parameters = [p for p in signature.parameters.keys() if p != 'self']
-
-        # Check if parameters are optional
-        params_are_optional = True
-
-        for param_name, param in signature.parameters.items():
-            if param_name == 'self':
-                continue
-            if param.default == inspect.Parameter.empty:
-                params_are_optional = False
-
-        # Build command string
-        command = f"--{command}"
-        params_str = ""
-
-        if parameters:
-            if not params_are_optional:
-                params_str += '['
-
-            params_str += ':'
-
-            params_str += ','.join(parameters)
-
-            if not params_are_optional:
-                params_str += ']'
-
-        docs = method.__doc__ or ''
-
-        commands.append((f"{command}{params_str}", docs.strip()))
-
-    return commands
+    # Create parent context and invoke each command
+    try:
+        with click_app.make_context('mantis', [], resilient_parsing=True) as parent_ctx:
+            for cmd_group in cmd_groups:
+                cmd_name = cmd_group[0]
+                cmd_args = cmd_group[1:]
+                invoke_command(click_app, cmd_name, cmd_args, parent_ctx)
+    except click.exceptions.Exit:
+        pass
 
 
-def help():
-    print(f'\nUsage:\n\
-    mantis [--mode=remote|ssh|host] [environment] --command[:params]')
-
-    print('\nModes:\n\
-    remote \truns commands remotely from local machine using DOCKER_HOST or DOCKER_CONTEXT (default)\n\
-    ssh \tconnects to host via ssh and run all mantis commands on remote machine directly (mantis-cli needs to be installed on server)\n\
-    host \truns mantis on host machine directly without invoking connection (used as proxy for ssh mode)')
-
-    print(f'\nEnvironment:\n\
-    Either "local" or any custom environment identifier defined as connection in your config file.\n\
-    Optional when using single connection mode (config has "connection" instead of "connections").')
-
-    console = Console()
-
-    # Base commands
-    print(f'\nCommands:')
-    table = Table(show_header=True, header_style="bold")
-    table.add_column("Command", style="cyan")
-    table.add_column("Description")
-
-    for command, description in get_class_commands(BaseManager, exclude_from=AbstractManager):
-        table.add_row(command, description)
-
-    console.print(table)
-
-    # Extension commands
-    extensions = [
-        ('Django', Django),
-        ('Nginx', Nginx),
-        ('Postgres', Postgres),
-    ]
-
-    for ext_name, ext_class in extensions:
-        ext_commands = get_class_commands(ext_class)
-        if ext_commands:
-            print(f'\n{ext_name} extension:')
-            ext_table = Table(show_header=True, header_style="bold")
-            ext_table.add_column("Command", style="yellow")
-            ext_table.add_column("Description")
-
-            for command, description in ext_commands:
-                ext_table.add_row(command, description)
-
-            console.print(ext_table)
+if __name__ == "__main__":
+    run()

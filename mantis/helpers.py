@@ -1,4 +1,9 @@
+import select
+import sys
+from contextlib import contextmanager
+
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.text import Text
 
 # Shared console instance
@@ -15,7 +20,27 @@ class CLI(object):
     def error(text):
         styled_text = Text(str(text), style='red')
         _console.print(styled_text)
-        exit(1)
+        sys.exit(1)
+
+    @staticmethod
+    @contextmanager
+    def status(message: str):
+        """Context manager that shows a spinner while executing."""
+        with _console.status(f"[bold blue]{message}..."):
+            yield
+
+    @staticmethod
+    @contextmanager
+    def progress():
+        """Context manager for progress bar operations."""
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=_console,
+        ) as progress:
+            yield progress
 
     @staticmethod
     def bold(text, end='\n'):
@@ -54,6 +79,29 @@ class CLI(object):
         if label is None:
             label = uri
         return f'[link={uri}]{label}[/link]'
+
+    @staticmethod
+    def timed_confirm(prompt: str, timeout: int = 10, default: bool = False) -> bool:
+        """
+        Ask user for confirmation with a timeout.
+        Returns default value if user doesn't respond within timeout.
+        """
+        default_str = "Y/n" if default else "y/N"
+        _console.print(f"[yellow]{prompt} ({default_str}) [dim][{timeout}s timeout][/dim][/yellow]", end=" ")
+        sys.stdout.flush()
+
+        try:
+            ready, _, _ = select.select([sys.stdin], [], [], timeout)
+            if ready:
+                response = sys.stdin.readline().strip().lower()
+                if response == '':
+                    return default
+                return response in ('y', 'yes')
+            else:
+                _console.print(f"\n[dim]Timeout reached, using default: {'yes' if default else 'no'}[/dim]")
+                return default
+        except Exception:
+            return default
 
 
 def nested_set(dic, keys, value):

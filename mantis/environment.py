@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from mantis.helpers import CLI
 
@@ -21,17 +22,19 @@ class Environment(object):
         if not self.path:
             return
 
-        if not os.path.exists(self.path):
+        env_path = Path(self.path)
+
+        if not env_path.exists():
             CLI.error(f"Environment path '{self.path}' does not exist")
 
-        if not os.path.isdir(self.path):
+        if not env_path.is_dir():
             CLI.error(f"Environment path '{self.path}' is not directory")
 
         for dirpath, directories, files in os.walk(self.path):
-            environment_filenames = list(filter(lambda f: f.endswith('.env'), files))
-            encrypted_environment_filenames = list(filter(lambda f: f.endswith('.env.encrypted'), files))
-            self.files = list(map(lambda x: os.path.join(dirpath, x), environment_filenames))
-            self.encrypted_files = list(map(lambda x: os.path.join(dirpath, x), encrypted_environment_filenames))
+            environment_filenames = [f for f in files if f.endswith('.env')]
+            encrypted_environment_filenames = [f for f in files if f.endswith('.env.encrypted')]
+            self.files = [os.path.join(dirpath, f) for f in environment_filenames]
+            self.encrypted_files = [os.path.join(dirpath, f) for f in encrypted_environment_filenames]
 
     def setup_single_mode(self):
         """
@@ -39,32 +42,34 @@ class Environment(object):
         instead of environment subfolders
         """
         self.path = self.folder
+        env_path = Path(self.path)
 
-        if not os.path.exists(self.path):
+        if not env_path.exists():
             CLI.warning(f"Environment path '{self.path}' does not exist")
             self.files = []
             self.encrypted_files = []
             return
 
-        if not os.path.isdir(self.path):
+        if not env_path.is_dir():
             CLI.error(f"Environment path '{self.path}' is not directory")
 
         CLI.info(f"Found environment path (single mode): '{self.path}'")
 
         # Look for env files directly in the folder (not in subdirectories)
-        files = os.listdir(self.path)
-        environment_filenames = list(filter(lambda f: f.endswith('.env') and not f.endswith('.encrypted'), files))
-        encrypted_environment_filenames = list(filter(lambda f: f.endswith('.env.encrypted'), files))
-        self.files = list(map(lambda x: os.path.join(self.path, x), environment_filenames))
-        self.encrypted_files = list(map(lambda x: os.path.join(self.path, x), encrypted_environment_filenames))
+        files = [f.name for f in env_path.iterdir() if f.is_file()]
+        environment_filenames = [f for f in files if f.endswith('.env') and not f.endswith('.encrypted')]
+        encrypted_environment_filenames = [f for f in files if f.endswith('.env.encrypted')]
+        self.files = [str(env_path / f) for f in environment_filenames]
+        self.encrypted_files = [str(env_path / f) for f in encrypted_environment_filenames]
 
     def _get_path(self, id):
         possible_folder_names = [f'.{id}', id]
-        possible_folders = list(map(lambda x: os.path.normpath(os.path.join(self.folder, x)), possible_folder_names))
+        possible_folders = [str(Path(self.folder) / name) for name in possible_folder_names]
 
         for environment_path in possible_folders:
-            if os.path.exists(environment_path):
-                if not os.path.isdir(environment_path):
+            env_path = Path(environment_path)
+            if env_path.exists():
+                if not env_path.is_dir():
                     CLI.error(f"Environment path '{environment_path}' is not directory")
 
                 CLI.info(f"Found environment path: '{environment_path}'")
@@ -73,7 +78,7 @@ class Environment(object):
         CLI.danger(f"Environment path not found. Tried: {', '.join(possible_folders)}")
 
     def read(self, path):
-        if not os.path.exists(path):
+        if not Path(path).exists():
             CLI.error(f'Environment file {path} does not exist')
             return None
 
