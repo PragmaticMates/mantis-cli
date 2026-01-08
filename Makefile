@@ -1,3 +1,6 @@
+test:
+	./venv/bin/pytest tests/ -v
+
 sdist-and-upload:
 	make sdist
 	make upload

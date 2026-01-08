@@ -18,7 +18,7 @@ EPILOG = """\
 
   mantis -e production deploy --dirty
 
-  mantis -e production build push deploy
+  mantis -e production build + push + deploy
 
   mantis -e prod manage migrate --fake
 
@@ -48,9 +48,6 @@ app = typer.Typer(
 
 # Commands that don't require environment (populated by @no_env_required decorator)
 NO_ENV_COMMANDS: set[str] = set()
-
-# All registered command names (populated by @command decorator for argument parsing)
-COMMAND_NAMES: set[str] = set()
 
 # Cache hostname
 _hostname = socket.gethostname()
@@ -144,11 +141,6 @@ def command(
     """
     def decorator(func: Callable) -> Callable:
         cmd_name = name or func.__name__.replace('_', '-')
-
-        # Track command names for argument parsing
-        COMMAND_NAMES.add(cmd_name)
-        if shortcut:
-            COMMAND_NAMES.add(shortcut)
 
         # Mark as no-env command
         if no_env:

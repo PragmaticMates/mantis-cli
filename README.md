@@ -71,8 +71,8 @@ Use `connections` (dict) when you have multiple environments like stage, product
 In this mode, you must specify the environment in every command:
 
 ```bash
-mantis production status
-mantis stage deploy
+mantis -e production status
+mantis -e stage deploy
 ```
 
 #### Single connection mode
@@ -114,20 +114,20 @@ Then you can encrypt your environment files using symmetric encryption.
 Every environment variable is encrypted separately instead of encrypting the whole file for better tracking of changes in VCS.
 
 ```bash
-mantis <ENVIRONMENT> encrypt-env
+mantis -e <ENVIRONMENT> encrypt-env
 ```
 
 Decryption is easy like this:
 
 ```bash
-mantis <ENVIRONMENT> decrypt-env
+mantis -e <ENVIRONMENT> decrypt-env
 ```
 
 When decrypting, mantis prompts user for confirmation.
 You can bypass that by forcing decryption which can be useful in CI/CD pipeline:
 
 ```bash
-mantis <ENVIRONMENT> decrypt-env --force
+mantis -e <ENVIRONMENT> decrypt-env --force
 ```
 
 ## Usage
@@ -135,14 +135,22 @@ mantis <ENVIRONMENT> decrypt-env --force
 General usage of mantis-cli has this format:
 
 ```bash
-mantis [OPTIONS] [ENVIRONMENT] COMMAND [ARGS]...
+mantis [OPTIONS] COMMAND [ARGS]... [+ COMMAND [ARGS]...]
+```
+
+Use `+` to chain multiple commands:
+
+```bash
+mantis -e production build + push + deploy
 ```
 
 ### Options
 
 | Option          | Description                                       |
 |-----------------|---------------------------------------------------|
+| --env, -e       | Environment ID (e.g., stage, production)          |
 | --mode, -m      | Execution mode: remote (default), ssh, host       |
+| --dry-run, -n   | Show commands without executing                   |
 | --version, -v   | Show version and exit                             |
 | --help, -h      | Show help message                                 |
 
@@ -233,20 +241,25 @@ Run `mantis commands` to see all available commands with their descriptions.
 
 ```bash
 mantis --version
-mantis local encrypt-env
-mantis stage build
-mantis production logs web
+mantis -e local encrypt-env
+mantis -e stage build
+mantis -e production logs web
 
-# Run multiple commands at once
-mantis stage build push deploy status logs
+# Run multiple commands using + separator
+mantis -e stage build + push + deploy
+mantis -e stage build web api + push + deploy + status
 
 # Commands with arguments
-mantis production deploy --dirty
-mantis production manage migrate
-mantis production pg-dump --data-only --table users
+mantis -e production deploy --dirty
+mantis -e production manage migrate
+mantis -e production pg-dump --data-only --table users
+
+# Single connection mode (no environment needed)
+mantis status
+mantis deploy
 ```
 
-Check `mantis --help` for more details, or `mantis commands` for a full list of commands.
+Check `mantis --help` for more details, or `mantis COMMAND --help` for command-specific help.
 
 ## Flow
 
@@ -255,7 +268,7 @@ Check `mantis --help` for more details, or `mantis commands` for a full list of 
 Once you define mantis config for your project and optionally create encryption key, you can build your docker images:
 
 ```bash
-mantis <ENVIRONMENT> build
+mantis -e <ENVIRONMENT> build
 ```
 
 Mantis either uses `docker-compose --build` or `docker build` command depending on build tool defined in your config.
@@ -266,7 +279,7 @@ Build image names use '_' as word separator.
 Built images needs to be pushed to your repository defined in compose file (you need to authenticate)
 
 ```bash
-mantis <ENVIRONMENT> push
+mantis -e <ENVIRONMENT> push
 ```
 
 ### 3. Deployment
@@ -274,7 +287,13 @@ mantis <ENVIRONMENT> push
 Deployment to your remote server is being executed by calling simple command:
 
 ```bash
-mantis <ENVIRONMENT> deploy
+mantis -e <ENVIRONMENT> deploy
+```
+
+Or chain all steps together:
+
+```bash
+mantis -e <ENVIRONMENT> build + push + deploy
 ```
 
 The deployment process consists of multiple steps:
@@ -294,25 +313,25 @@ Docker container names use '-' as word separator (docker compose v2 convention).
 Once deployed, you can verify the container status:
 
 ```bash
-mantis <ENVIRONMENT> status
+mantis -e <ENVIRONMENT> status
 ```
 
 list all docker networks:
 
 ```bash
-mantis <ENVIRONMENT> networks
+mantis -e <ENVIRONMENT> networks
 ```
 
 and also check all container logs:
 
 ```bash
-mantis <ENVIRONMENT> logs
+mantis -e <ENVIRONMENT> logs
 ```
 
 If you need to follow logs of a specific container, you can do it by passing container name to command:
 
 ```bash
-mantis <ENVIRONMENT> logs <container-name>
+mantis -e <ENVIRONMENT> logs <container-name>
 ```
 
 ### 5. Another useful commands
@@ -320,21 +339,21 @@ mantis <ENVIRONMENT> logs <container-name>
 Sometimes, instead of calling whole deployment process, you just need to call compose commands directly:
 
 ```bash
-mantis <ENVIRONMENT> up
-mantis <ENVIRONMENT> down
-mantis <ENVIRONMENT> restart
-mantis <ENVIRONMENT> stop
-mantis <ENVIRONMENT> kill
-mantis <ENVIRONMENT> start
-mantis <ENVIRONMENT> clean
+mantis -e <ENVIRONMENT> up
+mantis -e <ENVIRONMENT> down
+mantis -e <ENVIRONMENT> restart
+mantis -e <ENVIRONMENT> stop
+mantis -e <ENVIRONMENT> kill
+mantis -e <ENVIRONMENT> start
+mantis -e <ENVIRONMENT> clean
 ```
 
 Commands over a single container:
 
 ```bash
-mantis <ENVIRONMENT> bash <container-name>
-mantis <ENVIRONMENT> sh <container-name>
-mantis <ENVIRONMENT> run <params>
+mantis -e <ENVIRONMENT> bash <container-name>
+mantis -e <ENVIRONMENT> sh <container-name>
+mantis -e <ENVIRONMENT> run <params>
 ```
 
 ## Zero-downtime deployment
