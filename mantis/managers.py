@@ -985,9 +985,13 @@ class BaseManager(AbstractManager):
         CLI.step(3, 3, 'Prune Docker images')
         self.clean()
 
-    def deploy(self, dirty: bool = False) -> None:
+    def deploy(self, dirty: bool = False, strategy: str = 'blue-green') -> None:
         """
         Runs deployment process: uploads files, pulls images, runs zero-downtime deployment, removes suffixes, reloads webserver, clean
+
+        Args:
+            dirty: Skip zero-downtime and cleaning steps
+            strategy: Deployment strategy - 'rolling' (one-by-one) or 'blue-green' (scale 2x)
         """
         CLI.info('Deploying...')
 
@@ -1000,8 +1004,15 @@ class BaseManager(AbstractManager):
         is_running = len(self.get_containers(only_running=True)) != 0
 
         if is_running and not dirty:
-            if not self.zero_downtime():
-                CLI.danger('Deployment aborted.')
+            if strategy == 'rolling':
+                CLI.info('Using rolling update strategy (one-by-one)...')
+                success = self.rolling_update()
+            else:  # blue-green
+                CLI.info('Using blue-green strategy (scale 2x)...')
+                success = self.zero_downtime()
+
+            if not success:
+                CLI.danger('Deployment aborted due to rollback.')
                 return
 
         # Preserve number of scaled containers
@@ -1123,6 +1134,123 @@ class BaseManager(AbstractManager):
         self.try_to_reload_webserver()
 
         return True  # Successful zero-downtime. No rollback
+
+    def rolling_update(self, service: Optional[str] = None) -> bool:
+        """
+        Performs rolling update of service containers one at a time.
+
+        Flow for each container:
+        1. Start 1 new container
+        2. Wait for healthy
+        3. Reload webserver
+        4. Remove 1 old container
+
+        Returns True if successful, False if rollback was performed.
+        """
+        if not service:
+            # Process all zero_downtime services
+            zero_downtime_services = self.config['zero_downtime']
+            for index, service in enumerate(zero_downtime_services):
+                CLI.step(index + 1, len(zero_downtime_services), f'Rolling update: {service}')
+                if not self.rolling_update(service):
+                    return False  # Rollback happened, stop processing
+            return True
+
+        console = Console()
+        container_prefix = self.get_container_name(service)
+        old_containers = self.get_containers(prefix=container_prefix, only_running=True)
+        num_containers = len(old_containers)
+
+        if num_containers == 0:
+            CLI.danger(f'No running containers for service {service}. Skipping rolling update...')
+            return True
+
+        console.print(f'\n[blue]Starting rolling update for [yellow]{service}[/yellow] ({num_containers} containers)[/blue]\n')
+
+        # Track containers we've successfully replaced
+        replaced_count = 0
+
+        for i, old_container in enumerate(old_containers):
+            step = i + 1
+            console.print(f'[cyan]━━━ Container {step}/{num_containers} ━━━[/cyan]')
+
+            # Step 1: Scale up by 1 (start new container)
+            current_count = len(self.get_containers(prefix=container_prefix, only_running=True))
+            CLI.info(f'Starting new container (scaling {current_count} → {current_count + 1})...')
+            self.scale(service, current_count + 1)
+
+            # Get the new container (the one that wasn't there before)
+            all_current = self.get_containers(prefix=container_prefix, only_running=True)
+            new_container = None
+            for c in all_current:
+                if c not in old_containers and c != old_container:
+                    # Check if this is a newly created container
+                    if new_container is None or c > new_container:  # Higher suffix = newer
+                        new_container = c
+
+            if not new_container:
+                # Fallback: get the container with highest suffix
+                new_container = sorted(all_current)[-1]
+
+            CLI.info(f'New container: {new_container}')
+
+            # Step 2: Wait for healthy
+            is_healthy = self.healthcheck(container=new_container)
+
+            if is_healthy is False:
+                # Show logs
+                console.print(f'\n[red bold]⚠ Container {new_container} failed health check[/red bold]\n')
+                console.print(f'[yellow]Logs for {new_container}:[/yellow]')
+                self.docker(f'logs {new_container} --tail 50')
+                console.print('')
+
+                # Ask for rollback
+                rollback = CLI.timed_confirm(
+                    "Rollback? (stop new container, keep remaining old ones)",
+                    timeout=10,
+                    default=False
+                )
+
+                if rollback:
+                    console.print(f'\n[yellow]Rolling back...[/yellow]')
+
+                    # Stop and remove the failed new container
+                    if new_container in self.get_containers():
+                        self.docker(f'container stop {new_container}')
+                        self.docker(f'container rm {new_container}')
+
+                    remaining_old = old_containers[i:]  # Containers we haven't replaced yet
+                    CLI.success(f'Rollback complete. Preserved: {remaining_old}')
+                    CLI.info(f'Successfully replaced {replaced_count}/{num_containers} containers before failure.')
+                    return False
+                else:
+                    console.print(f'[yellow]Continuing with potentially unhealthy container...[/yellow]')
+
+            # Step 3: Reload webserver (new container now receiving traffic)
+            self.try_to_reload_webserver()
+
+            # Step 4: Stop and remove old container
+            CLI.info(f'Removing old container: {old_container}')
+            if old_container in self.get_containers():
+                self.docker(f'container stop {old_container}')
+                self.docker(f'container rm {old_container}')
+
+            replaced_count += 1
+            console.print(f'[green]✓ Replaced {old_container} → {new_container}[/green]\n')
+
+        # Rename containers to clean suffixes
+        final_containers = self.get_containers(prefix=container_prefix, only_running=True)
+        for index, container in enumerate(sorted(final_containers)):
+            new_name = f'{container_prefix}-{index + 1}'
+            if container != new_name:
+                CLI.info(f'Renaming {container} → {new_name}')
+                self.docker(f'container rename {container} {new_name}')
+
+        self.remove_suffixes(prefix=container_prefix)
+        self.try_to_reload_webserver()
+
+        console.print(f'\n[green bold]✓ Rolling update complete for {service}[/green bold]\n')
+        return True
 
     def remove_suffixes(self, prefix: str = '') -> None:
         """
