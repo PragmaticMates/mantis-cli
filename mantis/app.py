@@ -49,6 +49,9 @@ app = typer.Typer(
 # Commands that don't require environment (populated by @no_env_required decorator)
 NO_ENV_COMMANDS: set[str] = set()
 
+# All registered command names (populated by @command decorator for argument parsing)
+COMMAND_NAMES: set[str] = set()
+
 # Cache hostname
 _hostname = socket.gethostname()
 
@@ -142,6 +145,11 @@ def command(
     def decorator(func: Callable) -> Callable:
         cmd_name = name or func.__name__.replace('_', '-')
 
+        # Track command names for argument parsing
+        COMMAND_NAMES.add(cmd_name)
+        if shortcut:
+            COMMAND_NAMES.add(shortcut)
+
         # Mark as no-env command
         if no_env:
             NO_ENV_COMMANDS.add(cmd_name)
@@ -176,12 +184,19 @@ def version_callback(value: bool):
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     environment: Optional[str] = typer.Option(None, "--env", "-e", help="Environment ID"),
     mode: str = typer.Option("remote", "--mode", "-m", help="Execution mode: remote, ssh, host"),
     dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show commands without executing"),
     version: bool = typer.Option(False, "--version", "-v", callback=version_callback, is_eager=True, help="Show version and exit"),
 ):
     """Mantis CLI - Docker deployment tool."""
+    import sys
+
+    # Skip initialization when showing help or completions
+    if ctx.resilient_parsing or '--help' in sys.argv or '-h' in sys.argv:
+        return
+
     state._mode = mode
     state._dry_run = dry_run
     state._manager = get_manager(environment, mode, dry_run=dry_run)
