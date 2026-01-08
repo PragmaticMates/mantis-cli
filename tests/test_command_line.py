@@ -150,7 +150,7 @@ class TestSplitArgs:
 
 
 class TestParseGlobalOptions:
-    """Tests for parse_global_options function."""
+    """Tests for parse_global_options function (used only for multi-command chaining)."""
 
     def test_environment_short(self):
         """Test -e option."""
@@ -190,30 +190,6 @@ class TestParseGlobalOptions:
 
         assert opts['dry_run'] is True
 
-    def test_version_short(self):
-        """Test -v option."""
-        opts = parse_global_options(['-v'])
-
-        assert opts['version'] is True
-
-    def test_version_long(self):
-        """Test --version option."""
-        opts = parse_global_options(['--version'])
-
-        assert opts['version'] is True
-
-    def test_help_short(self):
-        """Test -h option."""
-        opts = parse_global_options(['-h'])
-
-        assert opts['help'] is True
-
-    def test_help_long(self):
-        """Test --help option."""
-        opts = parse_global_options(['--help'])
-
-        assert opts['help'] is True
-
     def test_all_options(self):
         """Test all options combined."""
         opts = parse_global_options(['-e', 'prod', '-m', 'ssh', '-n'])
@@ -221,8 +197,6 @@ class TestParseGlobalOptions:
         assert opts['env'] == 'prod'
         assert opts['mode'] == 'ssh'
         assert opts['dry_run'] is True
-        assert opts['help'] is False
-        assert opts['version'] is False
 
     def test_defaults(self):
         """Test default values."""
@@ -231,8 +205,6 @@ class TestParseGlobalOptions:
         assert opts['env'] is None
         assert opts['mode'] == 'remote'
         assert opts['dry_run'] is False
-        assert opts['help'] is False
-        assert opts['version'] is False
 
     def test_unknown_options_ignored(self):
         """Test that unknown options are ignored."""

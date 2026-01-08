@@ -58,7 +58,6 @@ def split_args(args: List[str]) -> Tuple[List[str], List[List[str]]]:
     # First group: separate global options from first command
     first_group = groups[0]
     global_opts = []
-    cmd_start = 0
 
     # Global options are at the start and begin with '-'
     i = 0
@@ -88,13 +87,11 @@ def split_args(args: List[str]) -> Tuple[List[str], List[List[str]]]:
 
 
 def parse_global_options(global_opts: List[str]) -> dict:
-    """Parse global options into a dict."""
+    """Parse global options into a dict. Only used for multi-command chaining."""
     result = {
         'env': None,
         'mode': 'remote',
         'dry_run': False,
-        'help': False,
-        'version': False,
     }
 
     i = 0
@@ -108,12 +105,6 @@ def parse_global_options(global_opts: List[str]) -> dict:
             i += 2
         elif opt in ('-n', '--dry-run'):
             result['dry_run'] = True
-            i += 1
-        elif opt in ('-v', '--version'):
-            result['version'] = True
-            i += 1
-        elif opt in ('-h', '--help'):
-            result['help'] = True
             i += 1
         else:
             i += 1
@@ -157,16 +148,13 @@ def run():
         app()
         return
 
-    # Parse global options
-    opts = parse_global_options(global_opts)
-
-    # Handle --version
-    if opts['version']:
+    # Handle --version early
+    if '--version' in global_opts or '-v' in global_opts:
         print(f"Mantis v{VERSION}")
         return
 
     # Handle --help: show help for first command
-    if opts['help']:
+    if '--help' in global_opts or '-h' in global_opts:
         sys.argv = [sys.argv[0]] + cmd_groups[0][:1] + ['--help']
         app()
         return
@@ -184,7 +172,8 @@ def run():
         app()
         return
 
-    # Multiple commands - manual invocation
+    # Multiple commands - parse options and initialize state manually
+    opts = parse_global_options(global_opts)
     state._mode = opts['mode']
     state._dry_run = opts['dry_run']
     state._manager = get_manager(opts['env'], opts['mode'], dry_run=opts['dry_run'])
