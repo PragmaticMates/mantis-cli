@@ -177,65 +177,126 @@ The environment is also used as an identifier for remote connection.
 
 ### Commands
 
-Run `mantis commands` to see all available commands with their descriptions.
+Run `mantis --help` to see all available commands with their descriptions.
 
-| Command / Shortcut            | Description                                                       |
-|-------------------------------|-------------------------------------------------------------------|
-| status / s                    | Prints images and containers                                      |
-| deploy [--dirty] / d          | Runs deployment process                                           |
-| build [services...] / b       | Builds all services with Dockerfiles                              |
-| pull [services...] / p        | Pulls required images for services                                |
-| push [services...] / u        | Push built images to repository                                   |
-| upload                        | Uploads config, compose and env files to server                   |
-| clean / c                     | Clean images, containers, networks                                |
-| logs [container] / l          | Prints logs of containers                                         |
-| networks / n                  | Prints docker networks                                            |
-| healthcheck [container] / hc  | Execute health-check of container                                 |
-| up [params...]                | Calls compose up                                                  |
-| down [params...]              | Calls compose down                                                |
-| restart [service]             | Restarts all containers                                           |
-| stop [containers...]          | Stops containers                                                  |
-| start [containers...]         | Starts containers                                                 |
-| kill [containers...]          | Kills containers                                                  |
-| remove [containers...]        | Removes containers                                                |
-| bash <container>              | Runs bash in container                                            |
-| sh <container>                | Runs sh in container                                              |
-| exec <container> <command>    | Executes command in container                                     |
-| ssh                           | Connects to remote host via SSH                                   |
-| scale <service> <num>         | Scales service to given number                                    |
-| zero-downtime [service]       | Runs zero-downtime deployment                                     |
-| encrypt-env [--force]         | Encrypts environment files                                        |
-| decrypt-env [--force]         | Decrypts environment files                                        |
-| check-env                     | Compares encrypted and decrypted env files                        |
-| generate-key                  | Creates new encryption key                                        |
-| read-key                      | Returns encryption key value                                      |
-| check-config                  | Validates config file                                             |
-| contexts                      | Prints all docker contexts                                        |
-| create-context                | Creates docker context                                            |
-| services                      | Lists all defined services                                        |
-| commands                      | Lists all available commands                                      |
+**Core commands:**
+
+| Command / Shortcut                    | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| status / s                            | Prints images and containers                              |
+| deploy [--dirty] [--strategy] / d     | Runs deployment process                                   |
+| rolling-update [service] / ru         | Performs rolling update of containers one-by-one          |
+| clean [params...] / c                 | Clean images, containers, networks                        |
+
+**Files:**
+
+| Command / Shortcut                    | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| upload / u                            | Uploads config, compose and env files to server           |
+
+**Images:**
+
+| Command / Shortcut                    | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| build [SERVICES...] / b               | Builds all services with Dockerfiles                      |
+| pull [SERVICES...] / pl               | Pulls required images for services                        |
+| push [SERVICES...] / p                | Push built images to repository                           |
+| get-image-name SERVICE                | Gets image name for service                               |
+
+**Containers:**
+
+| Command / Shortcut                    | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| logs [CONTAINER] / l                  | Prints logs of containers                                 |
+| networks / n                          | Prints docker networks                                    |
+| healthcheck [CONTAINER] / hc          | Execute health-check of container                         |
+| stop [CONTAINERS...]                  | Stops containers                                          |
+| start [CONTAINERS...]                 | Starts containers                                         |
+| kill [CONTAINERS...]                  | Kills containers                                          |
+| remove [CONTAINERS...] [--force]      | Removes containers                                        |
+| rename CONTAINER NEW_NAME             | Rename container                                          |
+| bash CONTAINER                        | Runs bash in container                                    |
+| sh CONTAINER                          | Runs sh in container                                      |
+| exec CONTAINER COMMAND...             | Executes command in container                             |
+| exec-it CONTAINER COMMAND...          | Executes command in container (interactive)               |
+| get-container-name SERVICE            | Gets container name for service                           |
+| remove-suffixes [PREFIX]              | Removes numerical suffixes from container names           |
+
+**Compose:**
+
+| Command                               | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| up [PARAMS...]                        | Calls compose up                                          |
+| down [PARAMS...]                      | Calls compose down                                        |
+| run PARAMS...                         | Calls compose run with params                             |
+
+**Services:**
+
+| Command                               | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| restart [SERVICE]                     | Restarts containers                                       |
+| scale SERVICE NUM                     | Scales service to given number                            |
+| zero-downtime [SERVICE]               | Runs zero-downtime deployment                             |
+| restart-service SERVICE               | Restarts a specific service                               |
+| services                              | Lists all defined services                                |
+| services-to-build                     | Lists services that will be built                         |
+
+**Volumes:**
+
+| Command                               | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| backup-volume VOLUME                  | Backups volume to a file                                  |
+| restore-volume VOLUME FILE            | Restores volume from a file                               |
+
+**Secrets:**
+
+| Command                               | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| show-env [KEYWORD]                    | Shows environment variables from .env files               |
+| encrypt-env [--force]                 | Encrypts environment files                                |
+| decrypt-env [--force]                 | Decrypts environment files                                |
+| check-env                             | Compares encrypted and decrypted env files                |
+| generate-key                          | Creates new encryption key                                |
+| read-key                              | Returns encryption key value                              |
+
+**Configuration:**
+
+| Command                               | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| show-config                           | Shows the JSON mantis config                              |
+| check-config                          | Validates config file                                     |
+
+**Connections:**
+
+| Command                               | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| contexts                              | Prints all docker contexts                                |
+| create-context                        | Creates docker context                                    |
+| ssh                                   | Connects to remote host via SSH                           |
 
 **Django extension:**
 
-| Command                       | Description                                                       |
-|-------------------------------|-------------------------------------------------------------------|
-| shell                         | Runs Django shell                                                 |
-| manage <command> [args...]    | Runs Django manage command                                        |
-| send-test-email               | Sends test email to admins                                        |
+| Command                               | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| shell                                 | Runs Django shell                                         |
+| manage CMD [ARGS...]                  | Runs Django manage command                                |
+| send-test-email                       | Sends test email to admins                                |
 
 **PostgreSQL extension:**
 
-| Command                       | Description                                                       |
-|-------------------------------|-------------------------------------------------------------------|
-| psql                          | Starts psql console                                               |
-| pg-dump [--data-only] [--table TABLE] | Backups database                                          |
-| pg-restore <filename> [--table TABLE] | Restores database from backup                             |
+| Command                               | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| psql                                  | Starts psql console                                       |
+| pg-dump [--data-only] [--table]       | Backups PostgreSQL database                               |
+| pg-dump-data [--table]                | Backups PostgreSQL database (data only)                   |
+| pg-restore FILENAME [--table]         | Restores database from backup                             |
+| pg-restore-data FILENAME TABLE        | Restores database data from backup                        |
 
 **Nginx extension:**
 
-| Command                       | Description                                                       |
-|-------------------------------|-------------------------------------------------------------------|
-| reload-webserver              | Reloads nginx                                                     |
+| Command                               | Description                                               |
+|---------------------------------------|-----------------------------------------------------------|
+| reload-webserver                      | Reloads nginx webserver                                   |
 
 ### Examples
 

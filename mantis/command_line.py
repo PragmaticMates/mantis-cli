@@ -10,6 +10,10 @@ Examples:
     mantis -e production deploy --dirty
     mantis -e production build + push + deploy
     mantis -e production build web api + push + deploy
+    mantis -e prod manage migrate --fake
+    mantis -e prod pg-dump --data-only --table users
+    mantis -e prod bash web
+    mantis -e prod logs django
     mantis status                          (single connection mode)
     mantis manage migrate
 """

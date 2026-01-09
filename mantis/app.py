@@ -18,7 +18,9 @@ EPILOG = """\
 
   mantis -e production deploy --dirty
 
-  mantis -e production build + push + deploy
+  mantis -e production build [yellow]+[/yellow] push [yellow]+[/yellow] deploy
+
+  mantis -e production build web api [yellow]+[/yellow] push [yellow]+[/yellow] deploy
 
   mantis -e prod manage migrate --fake
 
