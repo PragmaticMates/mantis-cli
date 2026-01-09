@@ -1660,6 +1660,42 @@ def get_extension_classes(extensions: List[str]) -> List[type]:
 SECRETS_COMMANDS = {'show-env', 'encrypt-env', 'decrypt-env', 'check-env'}
 
 
+def validate_environment_for_commands(environment_id: str, config: Dict[str, Any], config_file: str, commands: list) -> None:
+    """
+    Validates that the environment exists for ALL specified commands.
+    Raises an error if any command cannot use this environment.
+    """
+    # Single connection mode - no validation needed
+    if config.get('connection'):
+        return
+
+    # Get folder-based environments
+    env_folder = config.get('environment', {}).get('folder', '<MANTIS>/../environments')
+    config_dir = str(Path(config_file).parent.resolve())
+    env_path = Path(env_folder.replace('<MANTIS>', config_dir)).resolve()
+    folder_envs = []
+    if env_path.exists() and env_path.is_dir():
+        folder_envs = [d.name for d in env_path.iterdir() if d.is_dir()]
+
+    # Get connection-based environments
+    connections = config.get('connections', {})
+    connection_envs = list(connections.keys())
+
+    # Check each command
+    for cmd in commands:
+        if cmd in SECRETS_COMMANDS:
+            # Secrets command needs folder-based environment
+            if environment_id not in folder_envs:
+                CLI.error(f'Environment "{environment_id}" not available for command "{cmd}". '
+                         f'Available environments (folders): {", ".join(sorted(folder_envs)) if folder_envs else "none"}')
+        else:
+            # Other commands need connection or 'local'
+            if 'local' not in environment_id and environment_id not in connection_envs:
+                available = ['local'] + connection_envs
+                CLI.error(f'Environment "{environment_id}" not available for command "{cmd}". '
+                         f'Available connections: {", ".join(sorted(available))}')
+
+
 def resolve_environment(environment_id: Optional[str], config: Dict[str, Any], config_file: str, command: str = None) -> Optional[str]:
     """
     Resolves environment prefix to full environment ID.
@@ -1711,13 +1747,18 @@ def resolve_environment(environment_id: Optional[str], config: Dict[str, Any], c
         CLI.error(f'Environment "{environment_id}" not found. Available: {", ".join(sorted(available_envs))}')
 
 
-def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False, command: str = None) -> BaseManager:
+def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False, commands: list = None) -> BaseManager:
     # config file
-    config_file = find_config(environment_id, command=command)
+    config_file = find_config(environment_id, commands=commands)
     config = load_config(config_file)
 
     # Resolve environment prefix to full ID
-    environment_id = resolve_environment(environment_id, config, config_file, command=command)
+    first_command = commands[0] if commands else None
+    environment_id = resolve_environment(environment_id, config, config_file, command=first_command)
+
+    # Validate environment works for ALL commands
+    if environment_id and commands:
+        validate_environment_for_commands(environment_id, config, config_file, commands)
 
     # class name of the manager
     manager_class_name = config.get('manager_class', 'mantis.managers.BaseManager')

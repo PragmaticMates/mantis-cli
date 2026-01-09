@@ -181,10 +181,11 @@ def run():
 
     # Multiple commands - parse options and initialize state manually
     opts = parse_global_options(global_opts)
-    first_command = cmd_groups[0][0] if cmd_groups else None
+    # Collect all command names from all groups
+    all_commands = [group[0] for group in cmd_groups if group]
     state._mode = opts['mode']
     state._dry_run = opts['dry_run']
-    state._manager = get_manager(opts['env'], opts['mode'], dry_run=opts['dry_run'], command=first_command)
+    state._manager = get_manager(opts['env'], opts['mode'], dry_run=opts['dry_run'], commands=all_commands)
 
     # Get Click app from Typer
     click_app = typer.main.get_command(app)
