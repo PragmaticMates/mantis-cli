@@ -15,7 +15,10 @@ def get_config_dir(config_path: str) -> str:
     return str(Path(config_path).parent)
 
 
-def find_config(environment_id=None):
+SECRETS_COMMANDS = {'show-env', 'encrypt-env', 'decrypt-env', 'check-env'}
+
+
+def find_config(environment_id=None, command=None):
     env_path = os.environ.get('MANTIS_CONFIG', None)
 
     if env_path and env_path != '':
@@ -49,7 +52,9 @@ def find_config(environment_id=None):
     table = Table(show_header=True, header_style="bold")
     table.add_column("#", style="cyan")
     table.add_column("Path")
-    table.add_column("Connections")
+    # For secrets commands show "Environments", for others show "Connections"
+    column_name = "Environments" if command in SECRETS_COMMANDS else "Connections"
+    table.add_column(column_name)
 
     # Track which configs have matching environments and single connection configs
     matching_configs = []
@@ -65,33 +70,53 @@ def find_config(environment_id=None):
 
         if single_connection:
             # Single connection mode - display the connection string
-            connections_display = '[green](single)[/green]'
+            environments_display = '[green](single)[/green]'
             single_connection_configs.append((index, path))
             # Single connection matches when no environment is specified
             has_match = not environment_id
         else:
-            # Multi-environment mode - display connection keys
-            connections = list(config.get('connections', {}).keys())
-            all_environments.update(connections)
+            # Get environment folders from the environments directory
+            folder_envs = []
+            env_folder = config.get('environment', {}).get('folder', '<MANTIS>/../environments')
+            config_dir = str(Path(path).parent.resolve())
+            env_path = Path(env_folder.replace('<MANTIS>', config_dir)).resolve()
+            if env_path.exists() and env_path.is_dir():
+                folder_envs = sorted([d.name for d in env_path.iterdir() if d.is_dir()])
 
-            # Check if any connection matches the environment prefix
-            colorful_connections = []
-            for connection in connections:
+            # For secrets commands: show folder-based environments only
+            # For other commands: show connections + local
+            if command in SECRETS_COMMANDS:
+                environments = folder_envs
+            else:
+                connection_envs = list(config.get('connections', {}).keys())
+                # Combine: local first, then connection envs (no duplicates)
+                environments = ['local'] + [e for e in connection_envs if e != 'local']
+
+            all_environments.update(environments)
+
+            # "local" is a special environment for non-secrets commands
+            if command not in SECRETS_COMMANDS and environment_id and 'local' in environment_id:
+                has_match = True
+                matching_configs.append((index, path))
+
+            # Check if any environment matches the environment prefix
+            colorful_environments = []
+            for env in environments:
                 # Highlight in green if exact match or prefix match
-                matches = environment_id and (connection == environment_id or connection.startswith(environment_id))
+                matches = environment_id and (env == environment_id or env.startswith(environment_id))
                 if matches:
                     has_match = True
                 color = 'green' if matches else 'yellow'
-                colorful_connections.append(f'[{color}]{connection}[/{color}]')
-            connections_display = ', '.join(colorful_connections)
+                colorful_environments.append(f'[{color}]{env}[/{color}]')
+            environments_display = ', '.join(colorful_environments)
 
-            if has_match:
+            if has_match and (index, path) not in matching_configs:
                 matching_configs.append((index, path))
 
         # Dim path if no environment match
         config_dir = get_config_dir(path)
         path_display = config_dir if has_match else f'[dim]{config_dir}[/dim]'
-        table.add_row(str(index + 1), path_display, connections_display)
+        table.add_row(str(index + 1), path_display, environments_display)
 
     # Always print the table when multiple configs found
     console.print(table)

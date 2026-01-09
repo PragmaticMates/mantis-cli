@@ -185,7 +185,7 @@ def version_callback(value: bool):
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
     environment: Optional[str] = typer.Option(None, "--env", "-e", help="Environment ID"),
@@ -200,6 +200,21 @@ def main(
     if ctx.resilient_parsing or '--help' in sys.argv or '-h' in sys.argv:
         return
 
+    # Get the command being invoked (find first non-option argument after global options)
+    command = None
+    skip_next = False
+    for arg in sys.argv[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in ('-e', '--env', '-m', '--mode'):
+            skip_next = True
+            continue
+        if arg.startswith('-'):
+            continue
+        command = arg
+        break
+
     state._mode = mode
     state._dry_run = dry_run
-    state._manager = get_manager(environment, mode, dry_run=dry_run)
+    state._manager = get_manager(environment, mode, dry_run=dry_run, command=command)

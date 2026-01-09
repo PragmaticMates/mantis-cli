@@ -28,7 +28,7 @@ class AbstractManager(object):
     environment_id = None
 
     def __init__(self, config_file: str = None, environment_id: str = None, mode: str = 'remote', dry_run: bool = False):
-        self.environmentironment_id = environment_id
+        self.environment_id = environment_id
         self.mode = mode
         self.dry_run = dry_run
 
@@ -36,7 +36,7 @@ class AbstractManager(object):
         self.config_file = config_file
 
         if not config_file:
-            self.config_file = find_config(self.environmentironment_id)
+            self.config_file = find_config(self.environment_id)
 
         config = load_config(self.config_file)
 
@@ -163,8 +163,8 @@ class AbstractManager(object):
         self.single_connection_mode = has_single_connection
 
         # Validate: environment_id should not be provided in single connection mode
-        if self.single_connection_mode and self.environmentironment_id:
-            CLI.error(f'Config error: Environment "{self.environmentironment_id}" was provided, but config uses single connection mode. Remove the environment argument or switch to named environments using "connections".')
+        if self.single_connection_mode and self.environment_id:
+            CLI.error(f'Config error: Environment "{self.environment_id}" was provided, but config uses single connection mode. Remove the environment argument or switch to named environments using "connections".')
 
         self.key_file = normalize(str(Path(self.config['encryption']['folder']) / 'mantis.key'))
         self.environmentironment_path = normalize(self.config['environment']['folder'])
@@ -172,8 +172,8 @@ class AbstractManager(object):
         if self.single_connection_mode:
             # In single connection mode, compose files are directly in compose folder
             self.compose_path = normalize(self.config['compose']['folder'])
-        elif self.environmentironment_id:
-            self.compose_path = normalize(str(Path(self.config['compose']['folder']) / self.environmentironment_id))
+        elif self.environment_id:
+            self.compose_path = normalize(str(Path(self.config['compose']['folder']) / self.environment_id))
 
     def init_environment(self) -> None:
         if self.single_connection_mode:
@@ -196,7 +196,7 @@ class AbstractManager(object):
             self.compose_config = self.read_compose_configs()
             return
 
-        if not self.environmentironment_id:
+        if not self.environment_id:
             self.environment = Environment(
                 environment_id=None,
                 folder=self.environmentironment_path,
@@ -205,7 +205,7 @@ class AbstractManager(object):
             return
 
         self.environment = Environment(
-            environment_id=self.environmentironment_id,
+            environment_id=self.environment_id,
             folder=self.environmentironment_path,
         )
 
@@ -1657,7 +1657,10 @@ def get_extension_classes(extensions: List[str]) -> List[type]:
     return extension_classes
 
 
-def resolve_environment(environment_id: Optional[str], config: Dict[str, Any]) -> Optional[str]:
+SECRETS_COMMANDS = {'show-env', 'encrypt-env', 'decrypt-env', 'check-env'}
+
+
+def resolve_environment(environment_id: Optional[str], config: Dict[str, Any], config_file: str, command: str = None) -> Optional[str]:
     """
     Resolves environment prefix to full environment ID.
 
@@ -1672,8 +1675,25 @@ def resolve_environment(environment_id: Optional[str], config: Dict[str, Any]) -
     if config.get('connection'):
         return environment_id
 
-    connections = config.get('connections', {})
-    available_envs = list(connections.keys())
+    # Get folder-based environments
+    env_folder = config.get('environment', {}).get('folder', '<MANTIS>/../environments')
+    config_dir = str(Path(config_file).parent.resolve())
+    env_path = Path(env_folder.replace('<MANTIS>', config_dir)).resolve()
+    folder_envs = []
+    if env_path.exists() and env_path.is_dir():
+        folder_envs = [d.name for d in env_path.iterdir() if d.is_dir()]
+
+    # For secrets commands: use folder-based environments only
+    # For other commands: use connections + local
+    if command in SECRETS_COMMANDS:
+        available_envs = folder_envs
+    else:
+        # "local" is a special environment that doesn't require a connection
+        if 'local' in environment_id:
+            return environment_id
+
+        connections = config.get('connections', {})
+        available_envs = ['local'] + list(connections.keys())
 
     # Check for exact match first
     if environment_id in available_envs:
@@ -1691,13 +1711,13 @@ def resolve_environment(environment_id: Optional[str], config: Dict[str, Any]) -
         CLI.error(f'Environment "{environment_id}" not found. Available: {", ".join(sorted(available_envs))}')
 
 
-def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False) -> BaseManager:
+def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False, command: str = None) -> BaseManager:
     # config file
-    config_file = find_config(environment_id)
+    config_file = find_config(environment_id, command=command)
     config = load_config(config_file)
 
     # Resolve environment prefix to full ID
-    environment_id = resolve_environment(environment_id, config)
+    environment_id = resolve_environment(environment_id, config, config_file, command=command)
 
     # class name of the manager
     manager_class_name = config.get('manager_class', 'mantis.managers.BaseManager')
