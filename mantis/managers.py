@@ -18,7 +18,7 @@ from rich.table import Table
 from mantis.cryptography import Crypto
 from mantis.environment import Environment
 from mantis.helpers import CLI, import_string, merge_json
-from mantis.config import find_config, load_config, check_config, load_template_config
+from mantis.config import find_config, load_config, check_config, load_template_config, DEFAULT_ENV_FOLDER
 
 
 class AbstractManager(object):
@@ -1670,7 +1670,7 @@ def validate_environment_for_commands(environment_id: str, config: Dict[str, Any
         return
 
     # Get folder-based environments
-    env_folder = config.get('environment', {}).get('folder', '<MANTIS>/../environments')
+    env_folder = config.get('environment', {}).get('folder', DEFAULT_ENV_FOLDER)
     config_dir = str(Path(config_file).parent.resolve())
     env_path = Path(env_folder.replace('<MANTIS>', config_dir)).resolve()
     folder_envs = []
@@ -1712,7 +1712,7 @@ def resolve_environment(environment_id: Optional[str], config: Dict[str, Any], c
         return environment_id
 
     # Get folder-based environments
-    env_folder = config.get('environment', {}).get('folder', '<MANTIS>/../environments')
+    env_folder = config.get('environment', {}).get('folder', DEFAULT_ENV_FOLDER)
     config_dir = str(Path(config_file).parent.resolve())
     env_path = Path(env_folder.replace('<MANTIS>', config_dir)).resolve()
     folder_envs = []

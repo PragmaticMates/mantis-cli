@@ -13,6 +13,7 @@ from mantis.config import (
     format_env_list,
     get_config_dir,
     SECRETS_COMMANDS,
+    DEFAULT_ENV_FOLDER,
 )
 
 
@@ -297,6 +298,24 @@ class TestSecretsCommands:
     def test_is_set(self):
         """Test that SECRETS_COMMANDS is a set for O(1) lookup."""
         assert isinstance(SECRETS_COMMANDS, set)
+
+
+class TestDefaultEnvFolder:
+    """Tests for DEFAULT_ENV_FOLDER constant."""
+
+    def test_matches_schema_default(self):
+        """Test that DEFAULT_ENV_FOLDER matches the schema default."""
+        from mantis.schema import EnvironmentConfig
+        schema_default = EnvironmentConfig.model_fields['folder'].default
+        assert DEFAULT_ENV_FOLDER == schema_default
+
+    def test_contains_mantis_placeholder(self):
+        """Test that DEFAULT_ENV_FOLDER contains the <MANTIS> placeholder."""
+        assert '<MANTIS>' in DEFAULT_ENV_FOLDER
+
+    def test_expected_value(self):
+        """Test the expected default value."""
+        assert DEFAULT_ENV_FOLDER == '<MANTIS>/../environments'
 
 
 class TestAnalyzeConfig:

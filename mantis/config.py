@@ -10,9 +10,13 @@ from rich.console import Console
 from rich.table import Table
 
 from mantis.helpers import CLI
+from mantis.schema import EnvironmentConfig
 
 
 SECRETS_COMMANDS = {'show-env', 'encrypt-env', 'decrypt-env', 'check-env'}
+
+# Default environment folder from schema
+DEFAULT_ENV_FOLDER = EnvironmentConfig.model_fields['folder'].default
 
 
 def get_config_dir(config_path: str) -> str:
@@ -46,7 +50,7 @@ def analyze_config(path: str, index: int) -> ConfigAnalysis:
         return analysis
 
     # Get folder-based environments
-    env_folder = config.get('environment', {}).get('folder', '<MANTIS>/../environments')
+    env_folder = config.get('environment', {}).get('folder', DEFAULT_ENV_FOLDER)
     config_dir = str(Path(path).parent.resolve())
     env_path = Path(env_folder.replace('<MANTIS>', config_dir)).resolve()
     if env_path.exists() and env_path.is_dir():
