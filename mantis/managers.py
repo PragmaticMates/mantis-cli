@@ -15,7 +15,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from rich.console import Console
 from rich.table import Table
 
-from mantis.crypto import Crypto
+from mantis.cryptography import Crypto
 from mantis.environment import Environment
 from mantis.helpers import CLI, import_string, merge_json
 from mantis.config import find_config, load_config, check_config, load_template_config
@@ -28,7 +28,7 @@ class AbstractManager(object):
     environment_id = None
 
     def __init__(self, config_file: str = None, environment_id: str = None, mode: str = 'remote', dry_run: bool = False):
-        self.environment_id = environment_id
+        self.environmentironment_id = environment_id
         self.mode = mode
         self.dry_run = dry_run
 
@@ -36,7 +36,7 @@ class AbstractManager(object):
         self.config_file = config_file
 
         if not config_file:
-            self.config_file = find_config(self.environment_id)
+            self.config_file = find_config(self.environmentironment_id)
 
         config = load_config(self.config_file)
 
@@ -71,7 +71,7 @@ class AbstractManager(object):
     @property
     def connection_details(self) -> Optional[Dict[str, Optional[str]]]:
         # In single connection mode, env.id is None but we still have a connection
-        if not self.single_connection_mode and self.env.id is None:
+        if not self.single_connection_mode and self.environment.id is None:
             return None
 
         property_name = '_connection_details'
@@ -84,7 +84,7 @@ class AbstractManager(object):
         if hasattr(self, property_name):
             return getattr(self, property_name)
 
-        if self.env.id and 'local' in self.env.id:
+        if self.environment.id and 'local' in self.environment.id:
             details = {
                 'host': 'localhost',
                 'user': None,
@@ -121,12 +121,12 @@ class AbstractManager(object):
     @property
     def docker_connection(self) -> str:
         # In single connection mode or when env.id contains 'local', no extra connection needed
-        if not self.single_connection_mode and (self.env.id is None or 'local' in self.env.id):
+        if not self.single_connection_mode and (self.environment.id is None or 'local' in self.environment.id):
             return ''
 
         if self.mode == 'remote':
             if self.connection is None:
-                env_info = f' for environment {self.env.id}' if self.env.id else ''
+                env_info = f' for environment {self.environment.id}' if self.environment.id else ''
                 CLI.error(f'Connection{env_info} not defined!')
             if self.connection.startswith('ssh://'):
                 return f'DOCKER_HOST="{self.connection}"'
@@ -163,24 +163,24 @@ class AbstractManager(object):
         self.single_connection_mode = has_single_connection
 
         # Validate: environment_id should not be provided in single connection mode
-        if self.single_connection_mode and self.environment_id:
-            CLI.error(f'Config error: Environment "{self.environment_id}" was provided, but config uses single connection mode. Remove the environment argument or switch to named environments using "connections".')
+        if self.single_connection_mode and self.environmentironment_id:
+            CLI.error(f'Config error: Environment "{self.environmentironment_id}" was provided, but config uses single connection mode. Remove the environment argument or switch to named environments using "connections".')
 
         self.key_file = normalize(str(Path(self.config['encryption']['folder']) / 'mantis.key'))
-        self.environment_path = normalize(self.config['environment']['folder'])
+        self.environmentironment_path = normalize(self.config['environment']['folder'])
 
         if self.single_connection_mode:
             # In single connection mode, compose files are directly in compose folder
             self.compose_path = normalize(self.config['compose']['folder'])
-        elif self.environment_id:
-            self.compose_path = normalize(str(Path(self.config['compose']['folder']) / self.environment_id))
+        elif self.environmentironment_id:
+            self.compose_path = normalize(str(Path(self.config['compose']['folder']) / self.environmentironment_id))
 
     def init_environment(self) -> None:
         if self.single_connection_mode:
             # Single connection mode: no environment_id required
-            self.env = Environment(
+            self.environment = Environment(
                 environment_id=None,
-                folder=self.environment_path,
+                folder=self.environmentironment_path,
                 single_mode=True,
             )
 
@@ -196,21 +196,21 @@ class AbstractManager(object):
             self.compose_config = self.read_compose_configs()
             return
 
-        if not self.environment_id:
-            self.env = Environment(
+        if not self.environmentironment_id:
+            self.environment = Environment(
                 environment_id=None,
-                folder=self.environment_path,
+                folder=self.environmentironment_path,
             )
             self.connection = None
             return
 
-        self.env = Environment(
-            environment_id=self.environment_id,
-            folder=self.environment_path,
+        self.environment = Environment(
+            environment_id=self.environmentironment_id,
+            folder=self.environmentironment_path,
         )
 
         # connection
-        self.connection = self.config['connections'].get(self.env.id, None)
+        self.connection = self.config['connections'].get(self.environment.id, None)
 
         # compose files (recursive)
         compose_dir = Path(self.compose_path)
@@ -235,7 +235,7 @@ class AbstractManager(object):
 
         try:
             decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)
-            loaded_environment = self.env.load(env_file)
+            loaded_environment = self.environment.load(env_file)
 
             if decrypted_environment is None or loaded_environment is None:
                 return False
@@ -246,7 +246,7 @@ class AbstractManager(object):
 
     def check_environment_encryption(self, env_file: str) -> None:
         decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)  # .env.encrypted
-        loaded_environment = self.env.load(env_file)  # .env
+        loaded_environment = self.environment.load(env_file)  # .env
 
         if decrypted_environment is None:
             env_file_encrypted = f'{env_file}.encrypted'
@@ -461,7 +461,7 @@ class BaseManager(AbstractManager):
 
             values = {}
 
-            for env_file in self.env.files:
+            for env_file in self.environment.files:
                 value = self.encrypt_env(params=params, env_file=env_file, return_value=return_value)
                 if return_value:
                     values.update(value)
@@ -480,7 +480,7 @@ class BaseManager(AbstractManager):
         if not self.KEY:
             CLI.error('Missing mantis key! (%s)' % self.key_file)
 
-        decrypted_lines = self.env.read(env_file)
+        decrypted_lines = self.environment.read(env_file)
 
         if not decrypted_lines:
             return None
@@ -527,7 +527,7 @@ class BaseManager(AbstractManager):
 
             values = {}
 
-            for encrypted_env_file in self.env.encrypted_files:
+            for encrypted_env_file in self.environment.encrypted_files:
                 env_file = encrypted_env_file.rstrip('.encrypted')
                 value = self.decrypt_env(params=params, env_file=env_file, return_value=return_value)
                 if return_value:
@@ -548,7 +548,7 @@ class BaseManager(AbstractManager):
         if not self.KEY:
             CLI.error('Missing mantis key!')
 
-        encrypted_lines = self.env.read(env_file_encrypted)
+        encrypted_lines = self.environment.read(env_file_encrypted)
 
         if encrypted_lines is None:
             return None
@@ -593,19 +593,19 @@ class BaseManager(AbstractManager):
         """
         Compares encrypted and decrypted env files
         """
-        if not hasattr(self.env, 'encrypted_files'):
+        if not hasattr(self.environment, 'encrypted_files'):
             CLI.error('No encrypted files')
 
         # check if pair file exists
-        for encrypted_env_file in self.env.encrypted_files:
+        for encrypted_env_file in self.environment.encrypted_files:
             env_file = encrypted_env_file.rstrip('.encrypted')
             if not Path(env_file).exists():
                 CLI.warning(f'Environment file {env_file} does not exist')
 
-        if not hasattr(self.env, 'files'):
+        if not hasattr(self.environment, 'files'):
             CLI.error('No environment files')
 
-        for env_file in self.env.files:
+        for env_file in self.environment.files:
             env_file_encrypted = f'{env_file}.encrypted'
 
             # check if pair file exists
@@ -942,7 +942,7 @@ class BaseManager(AbstractManager):
         """
         Uploads mantis config, compose file <br/>and environment files to server
         """
-        if self.env.id == 'local':
+        if self.environment.id == 'local':
             print('Skipping for local...')
         elif not self.connection:
             CLI.warning('Connection not defined. Skipping uploading files')
@@ -951,7 +951,7 @@ class BaseManager(AbstractManager):
         elif self.mode == 'ssh':
             CLI.info('Uploading docker compose configs, environment files and mantis')
 
-            files_to_upload = [self.config_file] + self.compose_files + self.env.files
+            files_to_upload = [self.config_file] + self.compose_files + self.environment.files
 
             # mantis config file
             for file in files_to_upload:
