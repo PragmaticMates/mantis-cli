@@ -49,6 +49,9 @@ app = typer.Typer(
 # Commands that don't require environment (populated by @no_env_required decorator)
 NO_ENV_COMMANDS: set[str] = set()
 
+# Deferred shortcuts (registered after all commands to appear at end of help)
+_DEFERRED_SHORTCUTS: list[tuple] = []
+
 # Cache hostname
 _hostname = socket.gethostname()
 
@@ -159,13 +162,19 @@ def command(
             kwargs['rich_help_panel'] = panel
         registered = app.command(cmd_name, **kwargs)(wrapper)
 
-        # Register shortcut
+        # Defer shortcut registration (to appear at end of help)
         if shortcut:
-            app.command(shortcut, rich_help_panel="Shortcuts", help=f"Alias for '{cmd_name}'")(wrapper)
+            _DEFERRED_SHORTCUTS.append((shortcut, cmd_name, wrapper))
 
         return registered
 
     return decorator
+
+
+def register_shortcuts():
+    """Register all deferred shortcuts. Call after all commands are imported."""
+    for shortcut, cmd_name, wrapper in _DEFERRED_SHORTCUTS:
+        app.command(shortcut, rich_help_panel="Shortcuts", help=f"Alias for '{cmd_name}'")(wrapper)
 
 
 def version_callback(value: bool):

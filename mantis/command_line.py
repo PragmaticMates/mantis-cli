@@ -20,11 +20,14 @@ import click
 import typer
 
 from mantis import VERSION
-from mantis.app import app, state
+from mantis.app import app, state, register_shortcuts
 from mantis.managers import get_manager
 
 # Import commands to register them with the app
 from mantis import commands  # noqa: F401
+
+# Register shortcuts after all commands (so they appear at end of help)
+register_shortcuts()
 
 # Command separator for chaining
 COMMAND_SEPARATOR = '+'
