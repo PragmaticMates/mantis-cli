@@ -16,9 +16,11 @@ def shell():
 def manage(
     cmd: str = typer.Argument(..., help="Django management command"),
     args: Optional[List[str]] = typer.Argument(None, help="Command arguments"),
+    if_healthy: bool = typer.Option(False, "--if-healthy", help="Only execute if container is healthy"),
+    healthy_timeout: Optional[int] = typer.Option(None, "--healthy-timeout", help="Wait up to N seconds for container to become healthy"),
 ):
     """Runs Django manage command"""
-    state.manage(cmd=cmd, args=args)
+    state.manage(cmd=cmd, args=args, if_healthy=if_healthy, healthy_timeout=healthy_timeout)
 
 
 @command(name="send-test-email", panel="Django")

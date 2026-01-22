@@ -279,8 +279,12 @@ Run `mantis --help` to see all available commands with their descriptions.
 | Command                               | Description                                               |
 |---------------------------------------|-----------------------------------------------------------|
 | shell                                 | Runs Django shell                                         |
-| manage CMD [ARGS...]                  | Runs Django manage command                                |
+| manage [OPTIONS] CMD [ARGS...]        | Runs Django manage command                                |
 | send-test-email                       | Sends test email to admins                                |
+
+The `manage` command supports health-check options:
+- `--if-healthy`: Only execute if the container is currently healthy. Skips with a warning if not healthy.
+- `--healthy-timeout N`: Wait up to N seconds for the container to become healthy before executing. Polls every second and skips the command if the timeout is reached.
 
 **PostgreSQL extension:**
 
@@ -313,6 +317,7 @@ mantis -e stage build web api + push + deploy + status
 # Commands with arguments
 mantis -e production deploy --dirty
 mantis -e production manage migrate
+mantis -e production manage --healthy-timeout 60 migrate
 mantis -e production pg-dump --data-only --table users
 
 # Single connection mode (no environment needed)

@@ -822,10 +822,6 @@ class BaseManager(AbstractManager):
             # Build all services using docker compose
             self.docker_compose(f'build {build_args} {params} --pull', use_connection=False)
         elif build_tool == 'docker':
-            # Build commands for parallel execution
-            docker_connection = ''  # use_connection=False
-            build_commands = []
-
             for service, info in self.services_to_build().items():
                 platform = f"--platform={info['platform']}" if info['platform'] != '' else ''
                 cache_from = ' '.join([f"--cache-from {cache}" for cache in info['cache_from']]) if info['cache_from'] != [] else ''
@@ -836,13 +832,9 @@ class BaseManager(AbstractManager):
                 context = str(Path(self.compose_path) / info['context'])
                 dockerfile = str(Path(context) / info['dockerfile'])
 
-                cmd = f"{docker_connection} docker build {context} {build_args} {args} {platform} {cache_from} -t {image} -f {dockerfile} {params}"
-                build_commands.append(cmd.strip())
-
-            # Run builds in parallel
-            if build_commands:
-                CLI.info(f'Building {len(build_commands)} services in parallel...')
-                self.run_parallel(build_commands, "Building services")
+                self.docker(
+                    f"build {context} {build_args} {args} {platform} {cache_from} -t {image} -f {dockerfile} {params}",
+                    use_connection=False)
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
@@ -1454,17 +1446,33 @@ class BaseManager(AbstractManager):
         containers_output = self.docker('container ls -a --format "{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}\t{{.Size}}"', return_output=True)
 
         if containers_output.strip():
+            # Get stats for running containers (CPU and memory usage)
+            stats_output = self.docker('stats --no-stream --format "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"', return_output=True)
+            stats_map = {}
+            if stats_output.strip():
+                for line in stats_output.strip().split('\n'):
+                    stats_parts = line.split('\t')
+                    if len(stats_parts) >= 3:
+                        stats_map[stats_parts[0]] = {'cpu': stats_parts[1], 'mem': stats_parts[2]}
+
             containers_table = Table(show_header=True, header_style="bold")
             containers_table.add_column("NAME", style="blue")
             containers_table.add_column("STATUS")
             containers_table.add_column("IMAGE", style="magenta")
             containers_table.add_column("PORTS")
             containers_table.add_column("SIZE", style="dark_orange")
+            containers_table.add_column("CPU", style="white")
+            containers_table.add_column("MEMORY", style="yellow")
 
             for line in containers_output.strip().split('\n'):
                 parts = line.split('\t')
                 if len(parts) >= 5:
                     name, status, image, ports, size = parts[0], parts[1], parts[2], parts[3], parts[4]
+
+                    # Get CPU and memory stats (only available for running containers)
+                    container_stats = stats_map.get(name, {'cpu': '-', 'mem': '-'})
+                    cpu = container_stats['cpu']
+                    mem = container_stats['mem']
 
                     # Colorize status based on state
                     if 'Up' in status:
@@ -1490,7 +1498,7 @@ class BaseManager(AbstractManager):
                             colored_ports.append(f'[cyan]{port}[/cyan]')
                     ports_formatted = '\n'.join(colored_ports)
 
-                    containers_table.add_row(name, status_colored, image, ports_formatted, size)
+                    containers_table.add_row(name, status_colored, image, ports_formatted, size, cpu, mem)
 
             console.print(containers_table)
 
