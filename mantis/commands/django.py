@@ -27,3 +27,9 @@ def manage(
 def send_test_email():
     """Sends test email to admins"""
     state.send_test_email()
+
+
+@command(name="reset-migrations", panel="Django")
+def reset_migrations():
+    """Clears migration history and fakes all migrations"""
+    state.reset_migrations()

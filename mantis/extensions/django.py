@@ -73,3 +73,11 @@ class Django():
         """Sends test email to admins"""
         CLI.info('Sending test email...')
         self.docker(f'exec -i {self.django_container} python manage.py sendtestemail --admins')
+
+    def reset_migrations(self):
+        """Clears migration history and fakes all migrations"""
+        CLI.info('Resetting migrations...')
+        container = self.django_container
+        self.docker(f'exec -i {container} python manage.py shell -c "from django.db import connection; cursor = connection.cursor(); cursor.execute(\'DELETE FROM django_migrations\')"')
+        CLI.info('Faking migrations...')
+        self.docker(f'exec -i {container} python manage.py migrate --fake')
