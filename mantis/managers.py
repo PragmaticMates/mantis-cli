@@ -1350,13 +1350,14 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Starting {container}')
             self.docker(f'container start {container}')
 
-    def run(self, params: List[str]) -> None:
+    def run(self, params: List[str], rm: bool = False) -> None:
         """
         Calls compose run with params
         """
         params_str = ' '.join(params) if params else ''
+        rm_flag = '--rm' if rm else ''
         CLI.info(f'Running {params_str}...')
-        self.docker_compose(f'run {params_str}')
+        self.docker_compose(f'run {rm_flag} {params_str}')
 
     def up(self, params: Optional[List[str]] = None) -> None:
         """
