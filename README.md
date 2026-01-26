@@ -281,6 +281,7 @@ Run `mantis --help` to see all available commands with their descriptions.
 | shell                                 | Runs Django shell                                         |
 | manage [OPTIONS] CMD [ARGS...]        | Runs Django manage command                                |
 | send-test-email                       | Sends test email to admins                                |
+| reset-migrations                      | Clears migration history and fakes all migrations         |
 
 The `manage` command supports health-check options:
 - `--if-healthy`: Only execute if the container is currently healthy. Skips with a warning if not healthy.
