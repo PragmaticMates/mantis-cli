@@ -15,10 +15,10 @@ from typing import Optional, List, Dict, Any, Tuple
 from rich.console import Console
 from rich.table import Table
 
-from mantis.crypto import Crypto
+from mantis.cryptography import Crypto
 from mantis.environment import Environment
 from mantis.helpers import CLI, import_string, merge_json
-from mantis.config import find_config, load_config, check_config, load_template_config
+from mantis.config import find_config, load_config, check_config, load_template_config, DEFAULT_ENV_FOLDER
 
 
 class AbstractManager(object):
@@ -71,7 +71,7 @@ class AbstractManager(object):
     @property
     def connection_details(self) -> Optional[Dict[str, Optional[str]]]:
         # In single connection mode, env.id is None but we still have a connection
-        if not self.single_connection_mode and self.env.id is None:
+        if not self.single_connection_mode and self.environment.id is None:
             return None
 
         property_name = '_connection_details'
@@ -84,7 +84,7 @@ class AbstractManager(object):
         if hasattr(self, property_name):
             return getattr(self, property_name)
 
-        if self.env.id and 'local' in self.env.id:
+        if self.environment.id and 'local' in self.environment.id:
             details = {
                 'host': 'localhost',
                 'user': None,
@@ -121,12 +121,12 @@ class AbstractManager(object):
     @property
     def docker_connection(self) -> str:
         # In single connection mode or when env.id contains 'local', no extra connection needed
-        if not self.single_connection_mode and (self.env.id is None or 'local' in self.env.id):
+        if not self.single_connection_mode and (self.environment.id is None or 'local' in self.environment.id):
             return ''
 
         if self.mode == 'remote':
             if self.connection is None:
-                env_info = f' for environment {self.env.id}' if self.env.id else ''
+                env_info = f' for environment {self.environment.id}' if self.environment.id else ''
                 CLI.error(f'Connection{env_info} not defined!')
             if self.connection.startswith('ssh://'):
                 return f'DOCKER_HOST="{self.connection}"'
@@ -167,7 +167,7 @@ class AbstractManager(object):
             CLI.error(f'Config error: Environment "{self.environment_id}" was provided, but config uses single connection mode. Remove the environment argument or switch to named environments using "connections".')
 
         self.key_file = normalize(str(Path(self.config['encryption']['folder']) / 'mantis.key'))
-        self.environment_path = normalize(self.config['environment']['folder'])
+        self.environmentironment_path = normalize(self.config['environment']['folder'])
 
         if self.single_connection_mode:
             # In single connection mode, compose files are directly in compose folder
@@ -178,9 +178,9 @@ class AbstractManager(object):
     def init_environment(self) -> None:
         if self.single_connection_mode:
             # Single connection mode: no environment_id required
-            self.env = Environment(
+            self.environment = Environment(
                 environment_id=None,
-                folder=self.environment_path,
+                folder=self.environmentironment_path,
                 single_mode=True,
             )
 
@@ -197,20 +197,20 @@ class AbstractManager(object):
             return
 
         if not self.environment_id:
-            self.env = Environment(
+            self.environment = Environment(
                 environment_id=None,
-                folder=self.environment_path,
+                folder=self.environmentironment_path,
             )
             self.connection = None
             return
 
-        self.env = Environment(
+        self.environment = Environment(
             environment_id=self.environment_id,
-            folder=self.environment_path,
+            folder=self.environmentironment_path,
         )
 
         # connection
-        self.connection = self.config['connections'].get(self.env.id, None)
+        self.connection = self.config['connections'].get(self.environment.id, None)
 
         # compose files (recursive)
         compose_dir = Path(self.compose_path)
@@ -235,7 +235,7 @@ class AbstractManager(object):
 
         try:
             decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)
-            loaded_environment = self.env.load(env_file)
+            loaded_environment = self.environment.load(env_file)
 
             if decrypted_environment is None or loaded_environment is None:
                 return False
@@ -246,7 +246,7 @@ class AbstractManager(object):
 
     def check_environment_encryption(self, env_file: str) -> None:
         decrypted_environment = self.decrypt_env(env_file=env_file, return_value=True)  # .env.encrypted
-        loaded_environment = self.env.load(env_file)  # .env
+        loaded_environment = self.environment.load(env_file)  # .env
 
         if decrypted_environment is None:
             env_file_encrypted = f'{env_file}.encrypted'
@@ -461,7 +461,7 @@ class BaseManager(AbstractManager):
 
             values = {}
 
-            for env_file in self.env.files:
+            for env_file in self.environment.files:
                 value = self.encrypt_env(params=params, env_file=env_file, return_value=return_value)
                 if return_value:
                     values.update(value)
@@ -480,7 +480,7 @@ class BaseManager(AbstractManager):
         if not self.KEY:
             CLI.error('Missing mantis key! (%s)' % self.key_file)
 
-        decrypted_lines = self.env.read(env_file)
+        decrypted_lines = self.environment.read(env_file)
 
         if not decrypted_lines:
             return None
@@ -527,7 +527,7 @@ class BaseManager(AbstractManager):
 
             values = {}
 
-            for encrypted_env_file in self.env.encrypted_files:
+            for encrypted_env_file in self.environment.encrypted_files:
                 env_file = encrypted_env_file.rstrip('.encrypted')
                 value = self.decrypt_env(params=params, env_file=env_file, return_value=return_value)
                 if return_value:
@@ -548,7 +548,7 @@ class BaseManager(AbstractManager):
         if not self.KEY:
             CLI.error('Missing mantis key!')
 
-        encrypted_lines = self.env.read(env_file_encrypted)
+        encrypted_lines = self.environment.read(env_file_encrypted)
 
         if encrypted_lines is None:
             return None
@@ -593,19 +593,19 @@ class BaseManager(AbstractManager):
         """
         Compares encrypted and decrypted env files
         """
-        if not hasattr(self.env, 'encrypted_files'):
+        if not hasattr(self.environment, 'encrypted_files'):
             CLI.error('No encrypted files')
 
         # check if pair file exists
-        for encrypted_env_file in self.env.encrypted_files:
+        for encrypted_env_file in self.environment.encrypted_files:
             env_file = encrypted_env_file.rstrip('.encrypted')
             if not Path(env_file).exists():
                 CLI.warning(f'Environment file {env_file} does not exist')
 
-        if not hasattr(self.env, 'files'):
+        if not hasattr(self.environment, 'files'):
             CLI.error('No environment files')
 
-        for env_file in self.env.files:
+        for env_file in self.environment.files:
             env_file_encrypted = f'{env_file}.encrypted'
 
             # check if pair file exists
@@ -822,10 +822,6 @@ class BaseManager(AbstractManager):
             # Build all services using docker compose
             self.docker_compose(f'build {build_args} {params} --pull', use_connection=False)
         elif build_tool == 'docker':
-            # Build commands for parallel execution
-            docker_connection = ''  # use_connection=False
-            build_commands = []
-
             for service, info in self.services_to_build().items():
                 platform = f"--platform={info['platform']}" if info['platform'] != '' else ''
                 cache_from = ' '.join([f"--cache-from {cache}" for cache in info['cache_from']]) if info['cache_from'] != [] else ''
@@ -836,13 +832,9 @@ class BaseManager(AbstractManager):
                 context = str(Path(self.compose_path) / info['context'])
                 dockerfile = str(Path(context) / info['dockerfile'])
 
-                cmd = f"{docker_connection} docker build {context} {build_args} {args} {platform} {cache_from} -t {image} -f {dockerfile} {params}"
-                build_commands.append(cmd.strip())
-
-            # Run builds in parallel
-            if build_commands:
-                CLI.info(f'Building {len(build_commands)} services in parallel...')
-                self.run_parallel(build_commands, "Building services")
+                self.docker(
+                    f"build {context} {build_args} {args} {platform} {cache_from} -t {image} -f {dockerfile} {params}",
+                    use_connection=False)
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
 
@@ -942,7 +934,7 @@ class BaseManager(AbstractManager):
         """
         Uploads mantis config, compose file <br/>and environment files to server
         """
-        if self.env.id == 'local':
+        if self.environment.id == 'local':
             print('Skipping for local...')
         elif not self.connection:
             CLI.warning('Connection not defined. Skipping uploading files')
@@ -951,7 +943,7 @@ class BaseManager(AbstractManager):
         elif self.mode == 'ssh':
             CLI.info('Uploading docker compose configs, environment files and mantis')
 
-            files_to_upload = [self.config_file] + self.compose_files + self.env.files
+            files_to_upload = [self.config_file] + self.compose_files + self.environment.files
 
             # mantis config file
             for file in files_to_upload:
@@ -1358,13 +1350,14 @@ class BaseManager(AbstractManager):
             CLI.step(index + 1, steps, f'Starting {container}')
             self.docker(f'container start {container}')
 
-    def run(self, params: List[str]) -> None:
+    def run(self, params: List[str], rm: bool = False) -> None:
         """
         Calls compose run with params
         """
         params_str = ' '.join(params) if params else ''
+        rm_flag = '--rm' if rm else ''
         CLI.info(f'Running {params_str}...')
-        self.docker_compose(f'run {params_str}')
+        self.docker_compose(f'run {rm_flag} {params_str}')
 
     def up(self, params: Optional[List[str]] = None) -> None:
         """
@@ -1454,17 +1447,33 @@ class BaseManager(AbstractManager):
         containers_output = self.docker('container ls -a --format "{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}\t{{.Size}}"', return_output=True)
 
         if containers_output.strip():
+            # Get stats for running containers (CPU and memory usage)
+            stats_output = self.docker('stats --no-stream --format "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"', return_output=True)
+            stats_map = {}
+            if stats_output.strip():
+                for line in stats_output.strip().split('\n'):
+                    stats_parts = line.split('\t')
+                    if len(stats_parts) >= 3:
+                        stats_map[stats_parts[0]] = {'cpu': stats_parts[1], 'mem': stats_parts[2]}
+
             containers_table = Table(show_header=True, header_style="bold")
             containers_table.add_column("NAME", style="blue")
             containers_table.add_column("STATUS")
             containers_table.add_column("IMAGE", style="magenta")
             containers_table.add_column("PORTS")
             containers_table.add_column("SIZE", style="dark_orange")
+            containers_table.add_column("CPU", style="white")
+            containers_table.add_column("MEMORY", style="yellow")
 
             for line in containers_output.strip().split('\n'):
                 parts = line.split('\t')
                 if len(parts) >= 5:
                     name, status, image, ports, size = parts[0], parts[1], parts[2], parts[3], parts[4]
+
+                    # Get CPU and memory stats (only available for running containers)
+                    container_stats = stats_map.get(name, {'cpu': '-', 'mem': '-'})
+                    cpu = container_stats['cpu']
+                    mem = container_stats['mem']
 
                     # Colorize status based on state
                     if 'Up' in status:
@@ -1490,7 +1499,7 @@ class BaseManager(AbstractManager):
                             colored_ports.append(f'[cyan]{port}[/cyan]')
                     ports_formatted = '\n'.join(colored_ports)
 
-                    containers_table.add_row(name, status_colored, image, ports_formatted, size)
+                    containers_table.add_row(name, status_colored, image, ports_formatted, size, cpu, mem)
 
             console.print(containers_table)
 
@@ -1657,7 +1666,46 @@ def get_extension_classes(extensions: List[str]) -> List[type]:
     return extension_classes
 
 
-def resolve_environment(environment_id: Optional[str], config: Dict[str, Any]) -> Optional[str]:
+SECRETS_COMMANDS = {'show-env', 'encrypt-env', 'decrypt-env', 'check-env'}
+
+
+def validate_environment_for_commands(environment_id: str, config: Dict[str, Any], config_file: str, commands: list) -> None:
+    """
+    Validates that the environment exists for ALL specified commands.
+    Raises an error if any command cannot use this environment.
+    """
+    # Single connection mode - no validation needed
+    if config.get('connection'):
+        return
+
+    # Get folder-based environments
+    env_folder = config.get('environment', {}).get('folder', DEFAULT_ENV_FOLDER)
+    config_dir = str(Path(config_file).parent.resolve())
+    env_path = Path(env_folder.replace('<MANTIS>', config_dir)).resolve()
+    folder_envs = []
+    if env_path.exists() and env_path.is_dir():
+        folder_envs = [d.name for d in env_path.iterdir() if d.is_dir()]
+
+    # Get connection-based environments
+    connections = config.get('connections', {})
+    connection_envs = list(connections.keys())
+
+    # Check each command
+    for cmd in commands:
+        if cmd in SECRETS_COMMANDS:
+            # Secrets command needs folder-based environment
+            if environment_id not in folder_envs:
+                CLI.error(f'Environment "{environment_id}" not available for command "{cmd}". '
+                         f'Available environments (folders): {", ".join(sorted(folder_envs)) if folder_envs else "none"}')
+        else:
+            # Other commands need connection or 'local'
+            if 'local' not in environment_id and environment_id not in connection_envs:
+                available = ['local'] + connection_envs
+                CLI.error(f'Environment "{environment_id}" not available for command "{cmd}". '
+                         f'Available connections: {", ".join(sorted(available))}')
+
+
+def resolve_environment(environment_id: Optional[str], config: Dict[str, Any], config_file: str, command: str = None) -> Optional[str]:
     """
     Resolves environment prefix to full environment ID.
 
@@ -1672,8 +1720,25 @@ def resolve_environment(environment_id: Optional[str], config: Dict[str, Any]) -
     if config.get('connection'):
         return environment_id
 
-    connections = config.get('connections', {})
-    available_envs = list(connections.keys())
+    # Get folder-based environments
+    env_folder = config.get('environment', {}).get('folder', DEFAULT_ENV_FOLDER)
+    config_dir = str(Path(config_file).parent.resolve())
+    env_path = Path(env_folder.replace('<MANTIS>', config_dir)).resolve()
+    folder_envs = []
+    if env_path.exists() and env_path.is_dir():
+        folder_envs = [d.name for d in env_path.iterdir() if d.is_dir()]
+
+    # For secrets commands: use folder-based environments only
+    # For other commands: use connections + local
+    if command in SECRETS_COMMANDS:
+        available_envs = folder_envs
+    else:
+        # "local" is a special environment that doesn't require a connection
+        if 'local' in environment_id:
+            return environment_id
+
+        connections = config.get('connections', {})
+        available_envs = ['local'] + list(connections.keys())
 
     # Check for exact match first
     if environment_id in available_envs:
@@ -1691,13 +1756,18 @@ def resolve_environment(environment_id: Optional[str], config: Dict[str, Any]) -
         CLI.error(f'Environment "{environment_id}" not found. Available: {", ".join(sorted(available_envs))}')
 
 
-def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False) -> BaseManager:
+def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False, commands: list = None) -> BaseManager:
     # config file
-    config_file = find_config(environment_id)
+    config_file = find_config(environment_id, commands=commands)
     config = load_config(config_file)
 
     # Resolve environment prefix to full ID
-    environment_id = resolve_environment(environment_id, config)
+    first_command = commands[0] if commands else None
+    environment_id = resolve_environment(environment_id, config, config_file, command=first_command)
+
+    # Validate environment works for ALL commands
+    if environment_id and commands:
+        validate_environment_for_commands(environment_id, config, config_file, commands)
 
     # class name of the manager
     manager_class_name = config.get('manager_class', 'mantis.managers.BaseManager')

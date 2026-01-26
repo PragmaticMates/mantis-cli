@@ -13,7 +13,7 @@ class Postgres():
     def psql(self):
         """Starts psql console"""
         CLI.info('Starting psql...')
-        env = self.env.load()
+        env = self.environment.load()
         self.docker(f'exec -it {self.postgres_container} psql -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} -W')
 
     def pg_dump(self, data_only=False, table=None):
@@ -32,7 +32,7 @@ class Postgres():
         table_params = f'--table={table}' if table else ''
 
         now = datetime.datetime.now()
-        env = self.env.load()
+        env = self.environment.load()
         filename = now.strftime(f"{env['POSTGRES_DBNAME']}_%Y%m%d_%H%M{data_only_suffix}.{extension}")
         CLI.info(f'Backuping database into file {filename}')
         self.docker(f'exec -it {self.postgres_container} bash -c \'pg_dump {compressed_params} {data_only_param} -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} {table_params} {env["POSTGRES_DBNAME"]} -W > /backups/{filename}\'')
@@ -51,7 +51,7 @@ class Postgres():
             table_params = ''
 
         CLI.underline("Don't forget to drop database at first to prevent constraints collisions!")
-        env = self.env.load()
+        env = self.environment.load()
         self.docker(f'exec -it {self.postgres_container} bash -c \'pg_restore -h {env["POSTGRES_HOST"]} -U {env["POSTGRES_USER"]} -d {env["POSTGRES_DBNAME"]} {table_params} -W < /backups/{filename}\'')
 
     def pg_restore_data(self, filename, table):

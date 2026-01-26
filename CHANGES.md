@@ -1,25 +1,65 @@
 # Release notes
 
-## v19.1.6 (2424-04-18)
+## v22.0.0 (2026-01-26)
+- `manage` command takes optional `--if-healthy` and `--healthy-timeout` arguments 
+- removed parallel building as it wasn't helpful  
+- `run` command takes optional `--rm` argument
+- new Django command: `reset-migrations` - truncates django_migrations table and fakes all migrations
+
+## v21.0.0 (2026-01-08)
+- **Major refactoring: migrated CLI from argparse to Typer**
+- command chaining using `+` separator (e.g., `mantis -e prod build + push + deploy`)
+- rich help panels and command shortcuts
+- pydantic config validation
+- dry run mode (`--dry-run`, `-n`)
+- auto-select config when only one mantis.json found
+- dimmed mantis configs without environment match during selection
+- environment shortcut resolution
+- deployment rollback if zero-downtime container is not healthy
+- new commands: `rename`, `rolling-update`, `show-config`
+- keyword argument for `show-env` command
+- improved mantis config resolution based on given commands and environment
+- using pathlib and subprocess instead of os.path and os.system
+- commands split into subfiles with custom command decorator
+- type annotations throughout codebase
+- github actions for tests
+
+## v20.0.0 (2026-01-02)
+- don't proceed when no mantis config found
+- support for single connection mode (use `connection` instead of `connections` in config)
+- colorful tables in status output
+- removed prettytables dependency
+- updated help command
+- removed Color class
+- environment files are encrypted and decrypted only if changed
+
+## v19.2.0 (2024-11-26)
+- fixed init for empty environment
+- exec_it method for interactive execution
+
+## v19.1.7 (2024-10-15)
+- removing suffixes only for services with different container name
+
+## v19.1.6 (2024-04-18)
 - checking healthcheck test command
 - zero-downtime removes suffixes
 
-## v19.1.5 (2424-03-27)
+## v19.1.5 (2024-03-27)
 - deployment checks for running containers only
 
-## v19.1.4 (2424-03-27)
+## v19.1.4 (2024-03-27)
 - removed "--no-deps" from up command in deployment
 
-## v19.1.3 (2424-03-27)
+## v19.1.3 (2024-03-27)
 - get_containers() takes only_running param (default=False). Solves issue of scaling containers. 
 
-## v19.1.2 (2424-03-19)
+## v19.1.2 (2024-03-19)
 - fixed context for docker builder
 
-## v19.1.1 (2424-03-14)
+## v19.1.1 (2024-03-14)
 - fixed container names in extensions
 
-## v19.1.0 (2424-03-14)
+## v19.1.0 (2024-03-14)
 - new commands: --backup-volume and --restore-volume
 
 ## v19.0.0 (2024-03-14)

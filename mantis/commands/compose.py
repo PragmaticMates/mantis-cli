@@ -25,6 +25,7 @@ def down(
 @command(name="run", panel="Compose")
 def run_cmd(
     params: List[str] = typer.Argument(..., help="Compose run parameters"),
+    rm: bool = typer.Option(False, "--rm", help="Remove container after run"),
 ):
     """Calls compose run with params"""
-    state.run(params=params)
+    state.run(params=params, rm=rm)

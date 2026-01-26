@@ -10,6 +10,10 @@ Examples:
     mantis -e production deploy --dirty
     mantis -e production build + push + deploy
     mantis -e production build web api + push + deploy
+    mantis -e prod manage migrate --fake
+    mantis -e prod pg-dump --data-only --table users
+    mantis -e prod bash web
+    mantis -e prod logs django
     mantis status                          (single connection mode)
     mantis manage migrate
 """
@@ -20,11 +24,14 @@ import click
 import typer
 
 from mantis import VERSION
-from mantis.app import app, state
+from mantis.app import app, state, register_shortcuts
 from mantis.managers import get_manager
 
 # Import commands to register them with the app
 from mantis import commands  # noqa: F401
+
+# Register shortcuts after all commands (so they appear at end of help)
+register_shortcuts()
 
 # Command separator for chaining
 COMMAND_SEPARATOR = '+'
@@ -174,9 +181,11 @@ def run():
 
     # Multiple commands - parse options and initialize state manually
     opts = parse_global_options(global_opts)
+    # Collect all command names from all groups
+    all_commands = [group[0] for group in cmd_groups if group]
     state._mode = opts['mode']
     state._dry_run = opts['dry_run']
-    state._manager = get_manager(opts['env'], opts['mode'], dry_run=opts['dry_run'])
+    state._manager = get_manager(opts['env'], opts['mode'], dry_run=opts['dry_run'], commands=all_commands)
 
     # Get Click app from Typer
     click_app = typer.main.get_command(app)

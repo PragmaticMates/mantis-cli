@@ -18,7 +18,9 @@ EPILOG = """\
 
   mantis -e production deploy --dirty
 
-  mantis -e production build + push + deploy
+  mantis -e production build [yellow]+[/yellow] push [yellow]+[/yellow] deploy
+
+  mantis -e production build web api [yellow]+[/yellow] push [yellow]+[/yellow] deploy
 
   mantis -e prod manage migrate --fake
 
@@ -48,6 +50,9 @@ app = typer.Typer(
 
 # Commands that don't require environment (populated by @no_env_required decorator)
 NO_ENV_COMMANDS: set[str] = set()
+
+# Deferred shortcuts (registered after all commands to appear at end of help)
+_DEFERRED_SHORTCUTS: list[tuple] = []
 
 # Cache hostname
 _hostname = socket.gethostname()
@@ -159,13 +164,19 @@ def command(
             kwargs['rich_help_panel'] = panel
         registered = app.command(cmd_name, **kwargs)(wrapper)
 
-        # Register shortcut
+        # Defer shortcut registration (to appear at end of help)
         if shortcut:
-            app.command(shortcut, rich_help_panel="Shortcuts", help=f"Alias for '{cmd_name}'")(wrapper)
+            _DEFERRED_SHORTCUTS.append((shortcut, cmd_name, wrapper))
 
         return registered
 
     return decorator
+
+
+def register_shortcuts():
+    """Register all deferred shortcuts. Call after all commands are imported."""
+    for shortcut, cmd_name, wrapper in _DEFERRED_SHORTCUTS:
+        app.command(shortcut, rich_help_panel="Shortcuts", help=f"Alias for '{cmd_name}'")(wrapper)
 
 
 def version_callback(value: bool):
@@ -174,7 +185,7 @@ def version_callback(value: bool):
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
     environment: Optional[str] = typer.Option(None, "--env", "-e", help="Environment ID"),
@@ -189,6 +200,20 @@ def main(
     if ctx.resilient_parsing or '--help' in sys.argv or '-h' in sys.argv:
         return
 
+    # Get all commands being invoked (find non-option arguments after global options)
+    commands = []
+    skip_next = False
+    for arg in sys.argv[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in ('-e', '--env', '-m', '--mode'):
+            skip_next = True
+            continue
+        if arg.startswith('-') or arg == '+':
+            continue
+        commands.append(arg)
+
     state._mode = mode
     state._dry_run = dry_run
-    state._manager = get_manager(environment, mode, dry_run=dry_run)
+    state._manager = get_manager(environment, mode, dry_run=dry_run, commands=commands)
