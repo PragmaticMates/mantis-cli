@@ -1,5 +1,8 @@
 # Release notes
 
+## v22.0.1 (2026-01-30)
+- `manage` command checks for TTY availability
+
 ## v22.0.0 (2026-01-26)
 - `manage` command takes optional `--if-healthy` and `--healthy-timeout` arguments 
 - removed parallel building as it wasn't helpful  
