@@ -1,3 +1,4 @@
+import sys
 import time
 from typing import Optional
 
@@ -67,7 +68,8 @@ class Django():
         CLI.info('Django manage...')
         args_str = ' '.join(args) if args else ''
         full_cmd = f'{cmd} {args_str}'.strip()
-        self.docker(f'exec -ti {container} python manage.py {full_cmd}')
+        tty_flag = 't' if sys.stdin.isatty() else ''
+        self.docker(f'exec -i{tty_flag} {container} python manage.py {full_cmd}')
 
     def send_test_email(self):
         """Sends test email to admins"""
