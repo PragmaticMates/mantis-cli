@@ -16,7 +16,9 @@ setup(
     url='https://github.com/PragmaticMates/mantis-cli',
     packages=find_packages(),
     include_package_data=True,
-    install_requires=['cffi', 'cryptography', 'pycryptodome', 'pydantic', 'PyYAML', 'rich', 'typer'],
+    # click is imported directly by command_line.py. It used to arrive transitively via typer,
+    # but typer 0.27.0 dropped that dependency, so a fresh install lost it.
+    install_requires=['cffi', 'click', 'cryptography', 'pycryptodome', 'pydantic', 'PyYAML', 'rich', 'typer'],
     entry_points={
         'console_scripts': ['mantis=mantis.command_line:run'],
     },
