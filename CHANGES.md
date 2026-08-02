@@ -1,5 +1,9 @@
 # Release notes
 
+## v22.0.3 (2026-08-02)
+- declare `click` as a dependency — it is imported directly, and typer 0.27.0 stopped providing it
+  transitively, so fresh installs of 22.0.2 and earlier crashed with `ModuleNotFoundError: No module named 'click'`
+
 ## v22.0.2 (2026-08-02)
 - config defaults are merged deeply, so declaring one key of a section no longer drops the rest of it
   (e.g. `"compose": {"command": "docker compose"}` used to raise `KeyError: 'folder'`)
