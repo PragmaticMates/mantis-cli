@@ -123,6 +123,27 @@ def random_string(n=10):
     chars = string.ascii_lowercase + string.ascii_uppercase + string.digits
     return ''.join(random.choice(chars) for _ in range(n))
 
+
+def merge_defaults(defaults, overrides):
+    """
+    Deep-merges user config over template defaults.
+
+    dict.update() is shallow, so declaring a single key of a section used to drop the rest
+    of that section's defaults: {"compose": {"command": "docker compose"}} left compose.folder
+    undefined and raised KeyError later on. Only mappings recurse — lists and scalars from
+    the user config replace the default outright.
+    """
+    merged = dict(defaults)
+
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = merge_defaults(merged[key], value)
+        else:
+            merged[key] = value
+
+    return merged
+
+
 def merge_json(obj1, obj2):
     # Base case: if both values are dictionaries, merge recursively
     if isinstance(obj1, dict) and isinstance(obj2, dict):

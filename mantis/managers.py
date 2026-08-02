@@ -17,7 +17,7 @@ from rich.table import Table
 
 from mantis.cryptography import Crypto
 from mantis.environment import Environment
-from mantis.helpers import CLI, import_string, merge_json
+from mantis.helpers import CLI, import_string, merge_defaults, merge_json
 from mantis.config import find_config, load_config, check_config, load_template_config, DEFAULT_ENV_FOLDER
 
 
@@ -146,11 +146,9 @@ class AbstractManager(object):
         # Load config template file
         defaults = load_template_config()
 
-        # Merge custom config and default values
-        defaults.update(config)
-
-        # Save merged config to variable
-        self.config = defaults.copy()
+        # Merge custom config over default values. Deep merge, so declaring one key of a
+        # section keeps the rest of that section's defaults.
+        self.config = merge_defaults(defaults, config)
 
         # Detect single connection mode (connection string instead of connections dict)
         has_single_connection = self.config.get('connection') is not None
