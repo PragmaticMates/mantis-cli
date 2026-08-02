@@ -1,5 +1,10 @@
 # Release notes
 
+## v22.1.0 (2026-08-03)
+- `build` reads `cache_to` from each service's compose `build` section, alongside the `cache_from`
+  it already supported, and passes it to `docker build` as `--cache-to`. Lets a layer cache survive
+  between machines that share no local docker state, such as CI runners.
+
 ## v22.0.3 (2026-08-02)
 - declare `click` as a dependency — it is imported directly, and typer 0.27.0 stopped providing it
   transitively, so fresh installs of 22.0.2 and earlier crashed with `ModuleNotFoundError: No module named 'click'`
