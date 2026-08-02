@@ -53,6 +53,34 @@ TODO:
 
 See [template file](https://github.com/PragmaticMates/mantis-cli/blob/master/mantis/mantis.tpl) for exact JSON structure.
 
+### Build settings
+
+With `build.tool` set to `"docker"`, mantis builds each service that declares a `build:` section
+in your compose files, reading `context`, `dockerfile`, `args`, `platform`, `cache_from` and
+`cache_to` from it. Nothing else needs configuring — the compose file stays the single source of
+truth:
+
+```yaml
+services:
+  backend:
+    image: acme/app:production
+    build:
+      context: ../../../
+      dockerfile: ./configs/docker/production/backend/Dockerfile
+      cache_from:
+        - type=registry,ref=acme/app:production
+      cache_to:
+        - type=inline
+```
+
+`cache_from` and `cache_to` become `--cache-from` / `--cache-to` on `docker build`, which is how
+you keep a layer cache across machines that share no local docker state — CI runners, for
+instance. Inline cache stores the metadata in the image being pushed and reads it back from the
+previous one, so no separate cache tag is needed; note that it records only the final image's
+layers, which is enough whenever earlier build stages copy their output forward.
+
+With `build.tool` set to `"compose"`, `docker compose build` handles all of this itself.
+
 ### Connections
 
 Mantis supports two connection modes: **multi-environment** and **single connection**.

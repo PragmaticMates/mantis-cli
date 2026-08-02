@@ -823,6 +823,7 @@ class BaseManager(AbstractManager):
             for service, info in self.services_to_build().items():
                 platform = f"--platform={info['platform']}" if info['platform'] != '' else ''
                 cache_from = ' '.join([f"--cache-from {cache}" for cache in info['cache_from']]) if info['cache_from'] != [] else ''
+                cache_to = ' '.join([f"--cache-to {cache}" for cache in info['cache_to']]) if info['cache_to'] != [] else ''
                 args = ' '.join([f"--build-arg {key}={value}" for key, value in info['args'].items()]) if info['args'] != {} else ''
                 image = info['image'] if info['image'] != '' else f"{info['project_name']}-{service}".lstrip('-')
 
@@ -831,7 +832,7 @@ class BaseManager(AbstractManager):
                 dockerfile = str(Path(context) / info['dockerfile'])
 
                 self.docker(
-                    f"build {context} {build_args} {args} {platform} {cache_from} -t {image} -f {dockerfile} {params}",
+                    f"build {context} {build_args} {args} {platform} {cache_from} {cache_to} -t {image} -f {dockerfile} {params}",
                     use_connection=False)
         else:
             CLI.error(f'Unknown build tool: {build_tool}. Available tools: {", ".join(available_tools)}')
@@ -899,6 +900,7 @@ class BaseManager(AbstractManager):
                         'dockerfile': build.get('dockerfile', 'Dockerfile'),
                         'context': build.get('context', '.'),
                         'cache_from': build.get('cache_from', []),
+                        'cache_to': build.get('cache_to', []),
                         'args': build.get('args', {}),
                         'image': service_config.get('image', ''),
                         'platform': service_config.get('platform', '')
