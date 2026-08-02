@@ -1,5 +1,9 @@
 # Release notes
 
+## v22.0.2 (2026-08-02)
+- config defaults are merged deeply, so declaring one key of a section no longer drops the rest of it
+  (e.g. `"compose": {"command": "docker compose"}` used to raise `KeyError: 'folder'`)
+
 ## v22.0.1 (2026-01-30)
 - `manage` command checks for TTY availability
 
