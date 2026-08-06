@@ -1,5 +1,33 @@
 # Release notes
 
+## v22.3.0 (2026-08-06)
+- commands taking a container (`logs`, `healthcheck`, `bash`, `sh`, `exec`, `exec-it`) accept a
+  service name too, so `logs app` reads `<project>-app`. An exact container name keeps the highest
+  priority, scaled and explicitly named containers are matched as well, and a name which is not a
+  declared service still matches `<project>-<name>` containers (`htmltopdf` for `htmltopdf-1` and
+  `htmltopdf-2`).
+- `logs` follows multiple containers at once, prefixing each line with a container name. It used to
+  follow them one by one, so with `-f` the first container never finished and the rest were never
+  reached.
+
+## v22.2.0 (2026-08-06)
+- new `tunnel` config section. With `DOCKER_HOST=ssh://`, docker opens a separate SSH connection for
+  every command, which runs into sshd's `MaxStartups` when `compose pull` fans out over all services
+  and spawns a `ProxyCommand` process each time. Docker offers no way to pass `ssh` options, so
+  mantis now opens one SSH master itself, forwards the remote docker socket to a local one and
+  points every docker command at it. Forwarded channels are not counted against sshd's `MaxSessions`,
+  so no server-side configuration is needed.
+- `tunnel.enabled` unset (default) detects availability per run, `true` skips that detection, `false`
+  never tunnels, and `--no-tunnel` skips it for a single run. Detection needs a probe, as `ssh -L` to
+  a unix socket succeeds even when nothing listens on the far end, so the tunnel is only kept once
+  the docker daemon has answered through it. Whenever it cannot be used, mantis warns and falls back
+  to a connection per docker command, so deployments keep working.
+- new `check-tunnel` command, which ignores `tunnel.enabled` and reports a refused forward separately
+  from an unreachable socket, as they need different fixes (`AllowStreamLocalForwarding` versus
+  `docker` group membership).
+- `build` and `push` no longer require a connection for their environment. They run against the local
+  docker daemon, so an environment which only has a folder with env files is enough for them.
+
 ## v22.1.0 (2026-08-03)
 - `build` reads `cache_to` from each service's compose `build` section, alongside the `cache_from`
   it already supported, and passes it to `docker build` as `--cache-to`. Lets a layer cache survive
