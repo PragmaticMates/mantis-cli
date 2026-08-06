@@ -38,6 +38,22 @@ class EnvironmentConfig(BaseModel):
     file_prefix: str = ""
 
 
+class TunnelConfig(BaseModel):
+    """
+    SSH tunnel forwarding the remote docker socket to a local one.
+
+    Without it, every docker/compose call opens its own SSH connection, which bursts
+    past sshd's MaxStartups (and multiplies ProxyCommand processes). With it, the whole
+    mantis run shares a single SSH connection.
+
+    Leave "enabled" unset to detect availability per run, set it to true to skip that
+    detection on a server known to support it, or to false to never tunnel at all.
+    """
+    enabled: Optional[bool] = None
+    remote_socket: str = "/var/run/docker.sock"
+    ssh_options: List[str] = Field(default_factory=list)
+
+
 class MantisConfig(BaseModel):
     """Main mantis configuration schema."""
     # Extensions
@@ -57,6 +73,7 @@ class MantisConfig(BaseModel):
     # Connections (mutually exclusive)
     connection: Optional[str] = None
     connections: Dict[str, str] = Field(default_factory=dict)
+    tunnel: TunnelConfig = Field(default_factory=TunnelConfig)
 
     # Custom manager class
     manager_class: str = "mantis.managers.BaseManager"

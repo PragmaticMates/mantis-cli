@@ -1,8 +1,12 @@
 import asyncio
+import atexit
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 import yaml
 from collections import defaultdict
@@ -27,10 +31,18 @@ class AbstractManager(object):
     """
     environment_id = None
 
-    def __init__(self, config_file: str = None, environment_id: str = None, mode: str = 'remote', dry_run: bool = False):
+    def __init__(self, config_file: str = None, environment_id: str = None, mode: str = 'remote', dry_run: bool = False, use_tunnel: bool = True):
         self.environment_id = environment_id
         self.mode = mode
         self.dry_run = dry_run
+
+        # SSH tunnel state (see ensure_tunnel)
+        self.use_tunnel = use_tunnel
+        self._tunnel_lock = threading.Lock()
+        self._tunnel_socket = None
+        self._tunnel_control_socket = None
+        self._tunnel_dir = None
+        self._tunnel_failed = False
 
         # config file
         self.config_file = config_file
@@ -119,6 +131,202 @@ class AbstractManager(object):
         return details
 
     @property
+    def tunnel_config(self) -> Dict[str, Any]:
+        return self.config.get('tunnel', {})
+
+    def ensure_tunnel(self) -> Optional[str]:
+        """
+        Returns path of a local unix socket forwarded to the remote docker socket,
+        opening the SSH master connection on first use.
+
+        Returns None when tunnelling does not apply (disabled, non-ssh connection, ...) or
+        when it turns out to be unavailable. In both cases the caller falls back to a
+        plain ssh:// docker host.
+
+        An explicitly enabled tunnel is used straight away. An unset one is detected: the
+        forward succeeds even when nothing listens on the remote socket, so availability
+        is only known once the docker daemon has answered through it.
+        """
+        if self._tunnel_socket:
+            return self._tunnel_socket
+
+        with self._tunnel_lock:
+            # another thread may have opened it meanwhile
+            if self._tunnel_socket or self._tunnel_failed:
+                return self._tunnel_socket
+
+            enabled = self.tunnel_config.get('enabled')
+
+            if not self.use_tunnel or enabled is False:
+                return None
+
+            if self.mode != 'remote':
+                return None
+
+            if not self.connection or not self.connection.startswith('ssh://'):
+                return None
+
+            if not self.host or not self.user:
+                return None
+
+            # an explicitly enabled tunnel is trusted, an unset one is verified
+            detect = enabled is None and not self.dry_run
+
+            if detect:
+                CLI.info('Tunnel not configured, checking if it is available...')
+
+            # assigned before probing, so the docker call below does not re-enter here
+            self._tunnel_socket = self.start_tunnel()
+
+            if self._tunnel_socket and detect:
+                version = self.probe_tunnel()
+
+                if version:
+                    CLI.success(f'Tunnel is available (docker {version}). '
+                                f'Enable it in config to skip this check.')
+                else:
+                    CLI.warning(
+                        'Docker daemon did not answer through the SSH tunnel.\n'
+                        'Falling back to a separate SSH connection per docker command.'
+                    )
+                    self.stop_tunnel()
+
+            self._tunnel_failed = self._tunnel_socket is None
+
+            return self._tunnel_socket
+
+    def probe_tunnel(self) -> Optional[str]:
+        """
+        Returns the version of the docker daemon answering through the tunnel,
+        or None when nothing answers on the remote socket.
+        """
+        version = self.docker('version --format "{{.Server.Version}}"', return_output=True)
+        version = version.strip() if version else ''
+
+        return version or None
+
+    def start_tunnel(self) -> Optional[str]:
+        """
+        Opens a single backgrounded SSH master forwarding the remote docker socket.
+        Every docker command then reuses it instead of opening its own connection.
+        """
+        remote_socket = self.tunnel_config.get('remote_socket', '/var/run/docker.sock')
+        ssh_options = self.tunnel_config.get('ssh_options', [])
+
+        # unix socket paths are limited to ~104 characters, so prefer a shallow base
+        # directory over the default temp folder (macOS uses a deep /var/folders/... one)
+        base_dir = '/tmp' if Path('/tmp').is_dir() else None
+
+        self._tunnel_dir = tempfile.mkdtemp(prefix='mantis-', dir=base_dir)
+        local_socket = str(Path(self._tunnel_dir) / 'docker.sock')
+        control_socket = str(Path(self._tunnel_dir) / 'ssh.ctl')
+
+        command = [
+            'ssh', '-f', '-N', '-M',
+            '-S', control_socket,
+            '-o', 'ExitOnForwardFailure=yes',
+            '-o', 'ServerAliveInterval=30',
+            '-o', 'ServerAliveCountMax=3',
+            '-L', f'{local_socket}:{remote_socket}',
+            '-p', str(self.port or 22),
+            *ssh_options,
+            f'{self.user}@{self.host}',
+        ]
+
+        if self.dry_run:
+            CLI.warning(f'[DRY-RUN] {" ".join(command)}')
+            self.remove_tunnel_dir()
+            return local_socket
+
+        CLI.info(f'Opening SSH tunnel to {self.user}@{self.host}...')
+
+        # ssh -f keeps its inherited output open in the backgrounded process, so a pipe
+        # would never reach EOF and subprocess.run would block forever. Use a file.
+        output_file = Path(self._tunnel_dir) / 'ssh.log'
+
+        with open(output_file, 'w') as output:
+            result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=output, stderr=output)
+
+        if result.returncode != 0:
+            CLI.warning(
+                f'Failed to open SSH tunnel: {output_file.read_text().strip()}\n'
+                f'Falling back to a separate SSH connection per docker command.'
+            )
+            self.remove_tunnel_dir()
+            return None
+
+        self._tunnel_control_socket = control_socket
+        atexit.register(self.stop_tunnel)
+
+        return local_socket
+
+    def stop_tunnel(self) -> None:
+        """
+        Closes the SSH master connection and removes its temporary files. Idempotent.
+        """
+        if self._tunnel_control_socket:
+            subprocess.run(
+                ['ssh', '-S', self._tunnel_control_socket, '-O', 'exit', f'{self.user}@{self.host}'],
+                capture_output=True, text=True
+            )
+            self._tunnel_control_socket = None
+
+        self._tunnel_socket = None
+        self.remove_tunnel_dir()
+
+    def remove_tunnel_dir(self) -> None:
+        if self._tunnel_dir:
+            shutil.rmtree(self._tunnel_dir, ignore_errors=True)
+            self._tunnel_dir = None
+
+    def check_tunnel(self) -> bool:
+        """
+        Verifies the SSH tunnel can be used for this connection, regardless of whether it
+        is enabled in the config. Opens it, queries the remote docker daemon and closes it
+        again, telling apart a refused forward from a missing access to the docker socket.
+        """
+        if self.mode != 'remote':
+            CLI.error(f'Tunnel is only used in remote mode, not in "{self.mode}" mode.')
+
+        if not self.connection:
+            env_info = f' for environment {self.environment.id}' if self.environment.id else ''
+            CLI.error(f'Connection{env_info} not defined!')
+
+        if not self.connection.startswith('ssh://'):
+            CLI.error(f'Tunnel requires an ssh:// connection, but this one is "{self.connection}".')
+
+        remote_socket = self.tunnel_config.get('remote_socket', '/var/run/docker.sock')
+
+        if self.tunnel_config.get('enabled') is False:
+            CLI.warning('Tunnel is disabled in config, checking anyway...')
+
+        CLI.step(1, 2, f'Forwarding {self.user}@{self.host}:{remote_socket}')
+
+        # bypass ensure_tunnel, the point of the check is to ignore the config
+        self._tunnel_socket = self.start_tunnel()
+
+        if not self._tunnel_socket:
+            CLI.danger('Tunnel is NOT available.')
+            CLI.info(f'The server may not allow forwarding of unix sockets. '
+                     f'Check "AllowStreamLocalForwarding" in its sshd_config.')
+            return False
+
+        CLI.step(2, 2, 'Querying docker daemon through the tunnel')
+
+        version = self.probe_tunnel()
+
+        self.stop_tunnel()
+
+        if not version:
+            CLI.danger('Tunnel is NOT available.')
+            CLI.info(f'The forward works, but the docker daemon did not answer on {remote_socket}. '
+                     f'Make sure user "{self.user}" can access it (usually by being in the "docker" group).')
+            return False
+
+        CLI.success(f'Tunnel is available (docker {version}).')
+        return True
+
+    @property
     def docker_connection(self) -> str:
         # In single connection mode or when env.id contains 'local', no extra connection needed
         if not self.single_connection_mode and (self.environment.id is None or 'local' in self.environment.id):
@@ -129,6 +337,11 @@ class AbstractManager(object):
                 env_info = f' for environment {self.environment.id}' if self.environment.id else ''
                 CLI.error(f'Connection{env_info} not defined!')
             if self.connection.startswith('ssh://'):
+                tunnel_socket = self.ensure_tunnel()
+
+                if tunnel_socket:
+                    return f'DOCKER_HOST="unix://{tunnel_socket}"'
+
                 return f'DOCKER_HOST="{self.connection}"'
             elif self.connection.startswith('context://'):
                 context_name = self.connection.replace('context://', '')
@@ -1668,6 +1881,11 @@ def get_extension_classes(extensions: List[str]) -> List[type]:
 
 SECRETS_COMMANDS = {'show-env', 'encrypt-env', 'decrypt-env', 'check-env'}
 
+# Commands running against the local docker daemon, so they need no connection
+# (see use_connection=False in build and push). They accept any environment which is
+# either defined as a connection or has an environment folder.
+LOCAL_COMMANDS = {'build', 'b', 'push', 'p'}
+
 
 def validate_environment_for_commands(environment_id: str, config: Dict[str, Any], config_file: str, commands: list) -> None:
     """
@@ -1697,6 +1915,12 @@ def validate_environment_for_commands(environment_id: str, config: Dict[str, Any
             if environment_id not in folder_envs:
                 CLI.error(f'Environment "{environment_id}" not available for command "{cmd}". '
                          f'Available environments (folders): {", ".join(sorted(folder_envs)) if folder_envs else "none"}')
+        elif cmd in LOCAL_COMMANDS:
+            # Local command needs no connection, a folder-based environment is enough
+            if 'local' not in environment_id and environment_id not in connection_envs and environment_id not in folder_envs:
+                available = ['local'] + connection_envs + folder_envs
+                CLI.error(f'Environment "{environment_id}" not available for command "{cmd}". '
+                         f'Available environments: {", ".join(sorted(set(available)))}')
         else:
             # Other commands need connection or 'local'
             if 'local' not in environment_id and environment_id not in connection_envs:
@@ -1729,6 +1953,7 @@ def resolve_environment(environment_id: Optional[str], config: Dict[str, Any], c
         folder_envs = [d.name for d in env_path.iterdir() if d.is_dir()]
 
     # For secrets commands: use folder-based environments only
+    # For local commands: use connections + folders + local
     # For other commands: use connections + local
     if command in SECRETS_COMMANDS:
         available_envs = folder_envs
@@ -1737,8 +1962,13 @@ def resolve_environment(environment_id: Optional[str], config: Dict[str, Any], c
         if 'local' in environment_id:
             return environment_id
 
-        connections = config.get('connections', {})
-        available_envs = ['local'] + list(connections.keys())
+        connection_envs = list(config.get('connections', {}).keys())
+
+        if command in LOCAL_COMMANDS:
+            # no connection needed, a folder-based environment is enough
+            available_envs = list(dict.fromkeys(['local'] + connection_envs + folder_envs))
+        else:
+            available_envs = ['local'] + connection_envs
 
     # Check for exact match first
     if environment_id in available_envs:
@@ -1756,7 +1986,7 @@ def resolve_environment(environment_id: Optional[str], config: Dict[str, Any], c
         CLI.error(f'Environment "{environment_id}" not found. Available: {", ".join(sorted(available_envs))}')
 
 
-def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False, commands: list = None) -> BaseManager:
+def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False, commands: list = None, use_tunnel: bool = True) -> BaseManager:
     # config file
     config_file = find_config(environment_id, commands=commands)
     config = load_config(config_file)
@@ -1785,7 +2015,7 @@ def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False,
     class MantisManager(*[manager_class] + extension_classes):
         pass
 
-    manager = MantisManager(config_file=config_file, environment_id=environment_id, mode=mode, dry_run=dry_run)
+    manager = MantisManager(config_file=config_file, environment_id=environment_id, mode=mode, dry_run=dry_run, use_tunnel=use_tunnel)
 
     # set extensions data
     for extension, extension_params in extensions.items():

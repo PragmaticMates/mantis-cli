@@ -33,5 +33,10 @@
   "project_path": "~",
   "connection": null,
   "connections": {
+  },
+  "tunnel": {
+    "enabled": null,
+    "remote_socket": "/var/run/docker.sock",
+    "ssh_options": []
   }
 }

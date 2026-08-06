@@ -191,6 +191,7 @@ def main(
     environment: Optional[str] = typer.Option(None, "--env", "-e", help="Environment ID"),
     mode: str = typer.Option("remote", "--mode", "-m", help="Execution mode: remote, ssh, host"),
     dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show commands without executing"),
+    no_tunnel: bool = typer.Option(False, "--no-tunnel", help="Do not tunnel the remote docker socket over a single SSH connection"),
     version: bool = typer.Option(False, "--version", "-v", callback=version_callback, is_eager=True, help="Show version and exit"),
 ):
     """Mantis CLI - Docker deployment tool."""
@@ -216,4 +217,4 @@ def main(
 
     state._mode = mode
     state._dry_run = dry_run
-    state._manager = get_manager(environment, mode, dry_run=dry_run, commands=commands)
+    state._manager = get_manager(environment, mode, dry_run=dry_run, commands=commands, use_tunnel=not no_tunnel)

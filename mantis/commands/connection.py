@@ -1,4 +1,6 @@
-"""Connection commands: contexts, create-context, ssh."""
+"""Connection commands: contexts, create-context, ssh, check-tunnel."""
+import typer
+
 from mantis.app import command, state
 
 
@@ -18,3 +20,10 @@ def create_context():
 def ssh_cmd():
     """Connects to remote host via SSH"""
     state.ssh()
+
+
+@command(name="check-tunnel", panel="Connections")
+def check_tunnel():
+    """Checks if the docker socket can be tunnelled over SSH"""
+    if not state.check_tunnel():
+        raise typer.Exit(code=1)

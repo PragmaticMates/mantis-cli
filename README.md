@@ -47,6 +47,10 @@ You can use ``<MANTIS>`` variable in your paths if needed as a relative referenc
 | project_path             | string | path to folder with project files on remote server           |
 | connection               | string | single connection string (use instead of connections)        |
 | connections              | dict   | definition of your connections for each environment          |
+| tunnel                   | dict   | SSH tunnel settings                                          |
+| tunnel.enabled           | bool   | share a single SSH connection for the whole run (null = auto)|
+| tunnel.remote_socket     | string | path to the docker socket on the server                      |
+| tunnel.ssh_options       | array  | extra options passed to the ssh command                      |
 
 TODO:
 - default values
@@ -121,6 +125,70 @@ mantis deploy
 Environment files are looked up directly in the `environment.folder` instead of environment-specific subfolders.
 
 **Note:** You cannot define both `connection` and `connections` in the same config file.
+
+#### SSH tunnel
+
+With a plain `ssh://` connection, Docker opens a **separate SSH connection for every
+command** mantis runs. A single deployment issues dozens of them, and `compose pull` fans
+out over all services at once. That burst runs into sshd's `MaxStartups`, which drops
+connections beyond its threshold:
+
+```
+kex_exchange_identification: read: Connection reset by peer
+```
+
+It is also slow when the connection goes through a `ProxyCommand` (Cloudflare Access,
+bastion hosts, ...), because each connection spawns its own proxy process.
+
+The tunnel makes mantis open **one** SSH connection per run, forwarding the remote docker
+socket to a local one and pointing every docker command at it.
+
+Docker itself offers no way to pass `ssh` options (`ControlMaster` and friends), so this
+is handled entirely by mantis — no `~/.ssh/config` changes are needed, and connection
+details keep coming from your `ssh://` connection string. Unlike `ControlMaster`
+multiplexing, forwarded channels are not counted against sshd's `MaxSessions`, so no
+server-side configuration is required either.
+
+`tunnel.enabled` decides how much mantis verifies before trusting it:
+
+| value | behaviour |
+|-------|-----------|
+| unset (default) | detect per run: tunnel, and keep it only if the docker daemon answers through it |
+| `true` | tunnel without detecting, for a server already known to support it |
+| `false` | never tunnel |
+
+```json
+"tunnel": {
+    "enabled": true
+}
+```
+
+Detection costs one extra round-trip per run and cannot be skipped by opening the forward
+alone: `ssh -L` to a unix socket succeeds even when nothing listens on the far end, so a
+tunnel only proves itself once the daemon has replied. Set `enabled` explicitly once
+`check-tunnel` (below) confirms a server, and that round-trip goes away.
+
+Requirements on the server: the connecting user must be able to read the docker socket
+(typically membership in the `docker` group), and `AllowStreamLocalForwarding` must not
+be disabled — it defaults to `yes`. Whenever the tunnel cannot be used, mantis warns and
+falls back to a connection per docker command, so deployments keep working either way.
+
+The check ignores `tunnel.enabled`, so it answers "would this work" rather than "is this
+on" — use it before setting `enabled` to `true`:
+
+```bash
+mantis -e production check-tunnel
+```
+
+It opens the tunnel, asks the remote docker daemon for its version and closes it again,
+exiting non-zero on failure. A refused forward and an unreachable socket are reported
+separately, since they need different fixes (`sshd_config` versus group membership).
+
+Pass `--no-tunnel` to disable it for a single run:
+
+```bash
+mantis -e production --no-tunnel deploy
+```
 
 ### Encryption
 
@@ -301,6 +369,7 @@ Run `mantis --help` to see all available commands with their descriptions.
 | contexts                              | Prints all docker contexts                                |
 | create-context                        | Creates docker context                                    |
 | ssh                                   | Connects to remote host via SSH                           |
+| check-tunnel                          | Checks if the docker socket can be tunnelled over SSH     |
 
 **Django extension:**
 

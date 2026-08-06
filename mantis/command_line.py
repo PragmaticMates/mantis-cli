@@ -99,6 +99,7 @@ def parse_global_options(global_opts: List[str]) -> dict:
         'env': None,
         'mode': 'remote',
         'dry_run': False,
+        'use_tunnel': True,
     }
 
     i = 0
@@ -112,6 +113,9 @@ def parse_global_options(global_opts: List[str]) -> dict:
             i += 2
         elif opt in ('-n', '--dry-run'):
             result['dry_run'] = True
+            i += 1
+        elif opt == '--no-tunnel':
+            result['use_tunnel'] = False
             i += 1
         else:
             i += 1
@@ -185,7 +189,7 @@ def run():
     all_commands = [group[0] for group in cmd_groups if group]
     state._mode = opts['mode']
     state._dry_run = opts['dry_run']
-    state._manager = get_manager(opts['env'], opts['mode'], dry_run=opts['dry_run'], commands=all_commands)
+    state._manager = get_manager(opts['env'], opts['mode'], dry_run=opts['dry_run'], commands=all_commands, use_tunnel=opts['use_tunnel'])
 
     # Get Click app from Typer
     click_app = typer.main.get_command(app)

@@ -302,6 +302,95 @@ class TestResolveEnvironment:
         assert result == 'test'
 
 
+class TestLocalCommands:
+    """build and push run against the local docker daemon, so they need no connection."""
+
+    @staticmethod
+    def _config():
+        return {
+            'environment': {'folder': '<MANTIS>/../environments'},
+            'connections': {'stage': 'ssh://user@host:22'}
+        }
+
+    @staticmethod
+    def _folder_envs(mock_iterdir, mock_is_dir, mock_exists, names):
+        mock_exists.return_value = True
+        mock_is_dir.return_value = True
+
+        entries = []
+        for name in names:
+            entry = MagicMock()
+            entry.name = name
+            entry.is_dir.return_value = True
+            entries.append(entry)
+
+        mock_iterdir.return_value = entries
+
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.is_dir')
+    @patch('pathlib.Path.iterdir')
+    def test_resolves_folder_only_environment(self, mock_iterdir, mock_is_dir, mock_exists):
+        """An environment with files but no connection is enough to build an image."""
+        self._folder_envs(mock_iterdir, mock_is_dir, mock_exists, ['test', 'stage'])
+
+        assert resolve_environment('test', self._config(), '/path/to/mantis.json', 'build') == 'test'
+
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.is_dir')
+    @patch('pathlib.Path.iterdir')
+    def test_resolves_connection_environment(self, mock_iterdir, mock_is_dir, mock_exists):
+        """Connections keep working for build, even without an environment folder."""
+        self._folder_envs(mock_iterdir, mock_is_dir, mock_exists, ['test'])
+
+        assert resolve_environment('stage', self._config(), '/path/to/mantis.json', 'push') == 'stage'
+
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.is_dir')
+    @patch('pathlib.Path.iterdir')
+    def test_validation_accepts_folder_only_environment(self, mock_iterdir, mock_is_dir, mock_exists):
+        """Building an environment without a connection is not an error."""
+        self._folder_envs(mock_iterdir, mock_is_dir, mock_exists, ['test'])
+
+        # Should not raise any error
+        validate_environment_for_commands(
+            'test', self._config(), '/path/to/mantis.json', ['build', 'push']
+        )
+
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.is_dir')
+    @patch('pathlib.Path.iterdir')
+    @patch('mantis.managers.CLI.error')
+    def test_deploying_that_environment_still_fails(
+        self, mock_error, mock_iterdir, mock_is_dir, mock_exists
+    ):
+        """A connection is still required for commands which talk to a server."""
+        self._folder_envs(mock_iterdir, mock_is_dir, mock_exists, ['test'])
+
+        validate_environment_for_commands(
+            'test', self._config(), '/path/to/mantis.json', ['deploy']
+        )
+
+        mock_error.assert_called_once()
+        assert 'deploy' in mock_error.call_args[0][0]
+
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.is_dir')
+    @patch('pathlib.Path.iterdir')
+    @patch('mantis.managers.CLI.error')
+    def test_unknown_environment_still_fails(
+        self, mock_error, mock_iterdir, mock_is_dir, mock_exists
+    ):
+        """An environment which is neither a folder nor a connection is rejected."""
+        self._folder_envs(mock_iterdir, mock_is_dir, mock_exists, ['test'])
+
+        validate_environment_for_commands(
+            'preview', self._config(), '/path/to/mantis.json', ['build']
+        )
+
+        mock_error.assert_called_once()
+        assert 'preview' in mock_error.call_args[0][0]
+
+
 class TestSecretsCommandsConstant:
     """Tests for SECRETS_COMMANDS constant in managers module."""
 
