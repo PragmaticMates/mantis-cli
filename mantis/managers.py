@@ -2,7 +2,9 @@ import asyncio
 import atexit
 import json
 import os
+import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -519,10 +521,13 @@ class AbstractManager(object):
         except OSError as e:
             CLI.error(f"{error_message}: {e}")
 
-    def docker_command(self, command: str, return_output: bool = False, use_connection: bool = True) -> Optional[str]:
+    def build_docker_command(self, command: str, use_connection: bool = True) -> str:
         docker_connection = self.docker_connection if use_connection else ''
 
-        cmd = f'{docker_connection} {command}'
+        return f'{docker_connection} {command}'.strip()
+
+    def docker_command(self, command: str, return_output: bool = False, use_connection: bool = True) -> Optional[str]:
+        cmd = self.build_docker_command(command, use_connection)
 
         if return_output:
             if self.dry_run:
@@ -889,6 +894,97 @@ class BaseManager(AbstractManager):
         prefix = self.get_project_by_service(service)
         return f'{prefix}{suffix}'.replace('_', '-')
 
+    def resolve_containers(self, names: List[str], project_containers: Optional[List[str]] = None) -> List[str]:
+        """
+        Resolves given names to project container names.
+        Exact container name has the highest priority, service name is used as a fallback,
+        i.e. "app" resolves to "<project>-app" (or its scaled containers "<project>-app-1", ...)
+        unless a container literally named "app" exists.
+        """
+        if project_containers is None:
+            project_containers = self.get_containers()
+
+        services = self.services()
+        resolved = []
+
+        for name in names:
+            # exact container name has the highest priority
+            if name in project_containers:
+                containers = [name]
+            else:
+                # service name, or a common name of numbered containers
+                containers = (self.get_containers_by_service(name, project_containers) if name in services else []) \
+                    or self.get_containers_by_name(name, project_containers)
+
+                if containers:
+                    CLI.info(f'{name} resolved to: {", ".join(containers)}')
+                else:
+                    # unknown name: keep it as given and let docker report it
+                    containers = [name]
+
+            # keep the order and avoid duplicates
+            resolved.extend(container for container in containers if container not in resolved)
+
+        return resolved
+
+    def resolve_container(self, name: str, project_containers: Optional[List[str]] = None) -> str:
+        """
+        Resolves given name to a single project container name (see resolve_containers).
+        Used by commands which can operate on one container only.
+        """
+        containers = self.resolve_containers([name], project_containers)
+
+        if len(containers) > 1:
+            CLI.warning(f'{name} matches {len(containers)} containers, using {containers[0]}')
+
+        return containers[0]
+
+    def get_containers_by_service(self, service: str, project_containers: Optional[List[str]] = None) -> List[str]:
+        """
+        Returns names of existing containers belonging to given service,
+        including scaled ones with numerical suffixes
+        """
+        if project_containers is None:
+            project_containers = self.get_containers()
+
+        # service can define its container name explicitly
+        defined_container_name = self.compose_config.get('services', {}).get(service, {}).get('container_name', None)
+
+        if defined_container_name and defined_container_name in project_containers:
+            return [defined_container_name]
+
+        return self.match_containers(self.get_container_name(service), project_containers)
+
+    def get_containers_by_name(self, name: str, project_containers: Optional[List[str]] = None) -> List[str]:
+        """
+        Returns names of existing project containers matching given name prefixed with a project name.
+        Covers names which are not declared services, i.e. "htmltopdf" for services "htmltopdf-1"
+        and "htmltopdf-2" running as containers "<project>-htmltopdf-1" and "<project>-htmltopdf-2"
+        """
+        if project_containers is None:
+            project_containers = self.get_containers()
+
+        containers = []
+
+        for project in self.project_services().keys():
+            container_name = f'{project}{self.get_container_suffix(name)}'.replace('_', '-')
+
+            containers.extend(
+                container
+                for container in self.match_containers(container_name, project_containers)
+                if container not in containers
+            )
+
+        return containers
+
+    def match_containers(self, container_name: str, project_containers: List[str]) -> List[str]:
+        """
+        Returns containers named exactly as given container name or its numbered variants
+        """
+        pattern = re.compile(rf'^{re.escape(container_name)}(-\d+)?$')
+
+        return [container for container in project_containers if pattern.match(container)]
+
     def get_service_containers(self, service: str) -> List[str]:
         """
         Prints container names of given service
@@ -954,7 +1050,10 @@ class BaseManager(AbstractManager):
         """
         Execute health-check of given project container
         """
-        if container not in self.get_containers():
+        project_containers = self.get_containers()
+        container = self.resolve_container(container, project_containers)
+
+        if container not in project_containers:
             CLI.error(f"Container {container} not found")
 
         console = Console()
@@ -1746,28 +1845,112 @@ class BaseManager(AbstractManager):
         """
         CLI.info('Reading logs...')
 
-        containers = params.split(' ') if params else self.get_containers()
-        lines = '--tail 1000 -f' if params else '--tail 10'
-        steps = len(containers)
+        if not params:
+            containers = self.get_containers()
+            steps = len(containers)
 
-        for index, container in enumerate(containers):
-            CLI.step(index + 1, steps, f'{container} logs')
-            self.docker(f'logs {container} {lines}')
+            for index, container in enumerate(containers):
+                CLI.step(index + 1, steps, f'{container} logs')
+                self.docker(f'logs {container} --tail 10')
+
+            return
+
+        containers = self.resolve_containers(params.split())
+
+        # following a single container does not need any output multiplexing
+        if len(containers) == 1:
+            self.docker(f'logs {containers[0]} --tail 1000 -f')
+            return
+
+        self.follow_logs(containers)
+
+    def follow_logs(self, containers: List[str], tail: int = 1000) -> None:
+        """
+        Follows logs of multiple containers at once, prefixing every line with a container name.
+        Following them one by one is not an option as the first one would never finish.
+        """
+        commands = {
+            container: self.build_docker_command(f'docker logs {container} --tail {tail} -f')
+            for container in containers
+        }
+
+        if self.dry_run:
+            for command in commands.values():
+                CLI.warning(f'[DRY-RUN] {command}')
+            return
+
+        processes = {}
+
+        for container, command in commands.items():
+            print(command)
+            processes[container] = subprocess.Popen(
+                command,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                # own process group, so Ctrl+C is handled here and kills the whole shell + docker tree
+                start_new_session=True
+            )
+
+        width = max(map(len, processes.keys()))
+
+        def stream(container: str, process: subprocess.Popen) -> None:
+            for line in process.stdout:
+                print(f'{container:<{width}} | {line}', end='', flush=True)
+
+        threads = [
+            threading.Thread(target=stream, args=(container, process), daemon=True)
+            for container, process in processes.items()
+        ]
+
+        for thread in threads:
+            thread.start()
+
+        try:
+            # wait for the processes rather than for the reader threads, so that Ctrl+C
+            # interrupts a plain sleep in the main thread and cleanup always runs
+            while any(process.poll() is None for process in processes.values()):
+                sleep(0.2)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            for process in processes.values():
+                self.terminate_process_group(process)
+
+            for thread in threads:
+                thread.join(timeout=1)
+
+    @staticmethod
+    def terminate_process_group(process: subprocess.Popen) -> None:
+        """
+        Terminates given process together with its children, i.e. the shell running a docker command
+        """
+        if process.poll() is not None:
+            return
+
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            process.terminate()
 
     def bash(self, params: str) -> None:
         """
         Runs bash in container
         """
+        container = self.resolve_container(params)
         CLI.info('Running bash...')
-        self.docker(f'exec -it --user root {params} /bin/bash')
+        self.docker(f'exec -it --user root {container} /bin/bash')
         # self.docker_compose(f'run --entrypoint /bin/bash {container}')
 
     def sh(self, params: str) -> None:
         """
         Runs sh in container
         """
+        container = self.resolve_container(params)
         CLI.info('Logging to container...')
-        self.docker(f'exec -it --user root {params} /bin/sh')
+        self.docker(f'exec -it --user root {container} /bin/sh')
 
     def ssh(self) -> None:
         if not self.connection:
@@ -1783,6 +1966,7 @@ class BaseManager(AbstractManager):
         """
         Executes command in container
         """
+        container = self.resolve_container(container)
         command = ' '.join(cmd)
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec {container} {command}')
@@ -1791,6 +1975,7 @@ class BaseManager(AbstractManager):
         """
         Executes command in container using interactive pseudo-TTY
         """
+        container = self.resolve_container(container)
         command = ' '.join(cmd)
         CLI.info(f'Executing command "{command}" in container {container}...')
         self.docker(f'exec -it {container} {command}')

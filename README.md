@@ -303,18 +303,18 @@ Run `mantis --help` to see all available commands with their descriptions.
 
 | Command / Shortcut                    | Description                                               |
 |---------------------------------------|-----------------------------------------------------------|
-| logs [CONTAINER] / l                  | Prints logs of containers                                 |
+| logs [CONTAINER\|SERVICE] / l          | Prints logs of containers                                 |
 | networks / n                          | Prints docker networks                                    |
-| healthcheck [CONTAINER] / hc          | Execute health-check of container                         |
+| healthcheck [CONTAINER\|SERVICE] / hc  | Execute health-check of container                         |
 | stop [CONTAINERS...]                  | Stops containers                                          |
 | start [CONTAINERS...]                 | Starts containers                                         |
 | kill [CONTAINERS...]                  | Kills containers                                          |
 | remove [CONTAINERS...] [--force]      | Removes containers                                        |
 | rename CONTAINER NEW_NAME             | Rename container                                          |
-| bash CONTAINER                        | Runs bash in container                                    |
-| sh CONTAINER                          | Runs sh in container                                      |
-| exec CONTAINER COMMAND...             | Executes command in container                             |
-| exec-it CONTAINER COMMAND...          | Executes command in container (interactive)               |
+| bash CONTAINER\|SERVICE               | Runs bash in container                                    |
+| sh CONTAINER\|SERVICE                 | Runs sh in container                                      |
+| exec CONTAINER\|SERVICE COMMAND...    | Executes command in container                             |
+| exec-it CONTAINER\|SERVICE COMMAND... | Executes command in container (interactive)               |
 | get-container-name SERVICE            | Gets container name for service                           |
 | remove-suffixes [PREFIX]              | Removes numerical suffixes from container names           |
 
@@ -497,6 +497,38 @@ If you need to follow logs of a specific container, you can do it by passing con
 ```bash
 mantis -e <ENVIRONMENT> logs <container-name>
 ```
+
+#### Container or service name
+
+Commands taking a container (`logs`, `healthcheck`, `bash`, `sh`, `exec`, `exec-it`) also accept a
+plain service name and mantis finds its container(s) for you, including scaled ones with numerical
+suffixes and services declaring their own `container_name`:
+
+```bash
+mantis -e production logs app   # reads logs of <project>-app container
+mantis -e production bash app   # same container, no need to type the project prefix
+```
+
+A name which is not a service is still matched against container names without their project
+prefix, which covers services numbered in the compose file:
+
+```bash
+mantis -e production logs htmltopdf  # reads <project>-htmltopdf-1 and <project>-htmltopdf-2
+```
+
+An exact container name always takes precedence: if a container literally named `app` exists,
+`logs app` reads that one instead of `<project>-app`. Names matching no container at all are
+passed to docker as they are.
+
+`logs` follows all matching containers at once, prefixing every line with a container name:
+
+```
+itfitness-htmltopdf-1 | POST /generate-pdf 200 3355.969 ms - 837045
+itfitness-htmltopdf-2 | POST /generate-pdf 200 889.662 ms - 747746
+```
+
+Commands which can only operate on one container (`bash`, `sh`, `exec`, `exec-it`, `healthcheck`)
+use the first match and warn about the rest.
 
 ### 5. Another useful commands
 

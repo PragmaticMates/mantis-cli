@@ -8,7 +8,7 @@ from mantis.app import command, state
 
 @command(shortcut="l", panel="Containers")
 def logs(
-    container: Optional[str] = typer.Argument(None, help="Container name"),
+    container: Optional[str] = typer.Argument(None, help="Container or service name"),
 ):
     """Prints logs of containers"""
     state.logs(container)
@@ -22,7 +22,7 @@ def networks():
 
 @command(shortcut="hc", panel="Containers")
 def healthcheck(
-    container: Optional[str] = typer.Argument(None, help="Container name"),
+    container: Optional[str] = typer.Argument(None, help="Container or service name"),
 ):
     """Execute health-check of container"""
     state.healthcheck(container)
@@ -72,7 +72,7 @@ def rename(
 
 @command(panel="Containers")
 def bash(
-    container: str = typer.Argument(..., help="Container name"),
+    container: str = typer.Argument(..., help="Container or service name"),
 ):
     """Runs bash in container"""
     state.bash(container)
@@ -80,7 +80,7 @@ def bash(
 
 @command(panel="Containers")
 def sh(
-    container: str = typer.Argument(..., help="Container name"),
+    container: str = typer.Argument(..., help="Container or service name"),
 ):
     """Runs sh in container"""
     state.sh(container)
@@ -88,7 +88,7 @@ def sh(
 
 @command(name="exec", panel="Containers")
 def exec_cmd(
-    container: str = typer.Argument(..., help="Container name"),
+    container: str = typer.Argument(..., help="Container or service name"),
     cmd: List[str] = typer.Argument(..., help="Command to execute"),
 ):
     """Executes command in container"""
@@ -97,7 +97,7 @@ def exec_cmd(
 
 @command(name="exec-it", panel="Containers")
 def exec_it(
-    container: str = typer.Argument(..., help="Container name"),
+    container: str = typer.Argument(..., help="Container or service name"),
     cmd: List[str] = typer.Argument(..., help="Command to execute"),
 ):
     """Executes command in container (interactive)"""

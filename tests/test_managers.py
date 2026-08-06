@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 from pathlib import Path
 
 from mantis.managers import (
+    BaseManager,
     validate_environment_for_commands,
     resolve_environment,
     SECRETS_COMMANDS,
@@ -403,3 +404,111 @@ class TestSecretsCommandsConstant:
         """Test that managers SECRETS_COMMANDS matches config module."""
         from mantis.config import SECRETS_COMMANDS as CONFIG_SECRETS_COMMANDS
         assert SECRETS_COMMANDS == CONFIG_SECRETS_COMMANDS
+
+
+class TestResolveContainers:
+    """Tests for resolving container names from container or service names."""
+
+    def _manager(self, containers, services, project='itfitness', compose_services=None):
+        manager = BaseManager.__new__(BaseManager)
+        manager.get_containers = lambda *args, **kwargs: list(containers)
+        manager.services = lambda *args, **kwargs: list(services)
+        manager.get_project_by_service = lambda service: project
+        manager.project_services = lambda: {project: list(services)}
+        manager.compose_config = {'services': compose_services or {}}
+        return manager
+
+    def test_exact_container_name_has_priority(self):
+        """A container named exactly like the argument wins over the service lookup."""
+        manager = self._manager(['itfitness-app', 'app'], ['app'])
+
+        assert manager.resolve_containers(['app']) == ['app']
+
+    def test_service_name_resolves_to_container(self):
+        """Service name is prefixed with the project name."""
+        manager = self._manager(['itfitness-app', 'itfitness-db'], ['app', 'db'])
+
+        assert manager.resolve_containers(['app']) == ['itfitness-app']
+
+    def test_service_name_resolves_to_scaled_containers(self):
+        """All containers of a scaled service are resolved."""
+        manager = self._manager(['itfitness-app-1', 'itfitness-app-2'], ['app'])
+
+        assert manager.resolve_containers(['app']) == ['itfitness-app-1', 'itfitness-app-2']
+
+    def test_service_name_does_not_match_similar_services(self):
+        """Service "app" must not pull in containers of service "app-worker"."""
+        manager = self._manager(['itfitness-app', 'itfitness-app-worker'], ['app', 'app-worker'])
+
+        assert manager.resolve_containers(['app']) == ['itfitness-app']
+
+    def test_explicit_container_name_of_service_is_used(self):
+        """Service defining its own container_name is resolved to that name."""
+        manager = self._manager(
+            ['legacy-app'],
+            ['app'],
+            compose_services={'app': {'container_name': 'legacy-app'}},
+        )
+
+        assert manager.resolve_containers(['app']) == ['legacy-app']
+
+    def test_common_name_of_numbered_services_resolves(self):
+        """"htmltopdf" matches containers of services "htmltopdf-1" and "htmltopdf-2"."""
+        manager = self._manager(
+            ['itfitness-htmltopdf-1', 'itfitness-htmltopdf-2', 'itfitness-app'],
+            ['htmltopdf-1', 'htmltopdf-2', 'app'],
+            compose_services={
+                'htmltopdf-1': {'container_name': 'itfitness-htmltopdf-1'},
+                'htmltopdf-2': {'container_name': 'itfitness-htmltopdf-2'},
+            },
+        )
+
+        assert manager.resolve_containers(['htmltopdf']) == ['itfitness-htmltopdf-1', 'itfitness-htmltopdf-2']
+
+    def test_numbered_service_still_resolves_to_its_own_container(self):
+        """The numbered service name keeps resolving to a single container."""
+        manager = self._manager(
+            ['itfitness-htmltopdf-1', 'itfitness-htmltopdf-2'],
+            ['htmltopdf-1', 'htmltopdf-2'],
+            compose_services={
+                'htmltopdf-1': {'container_name': 'itfitness-htmltopdf-1'},
+                'htmltopdf-2': {'container_name': 'itfitness-htmltopdf-2'},
+            },
+        )
+
+        assert manager.resolve_containers(['htmltopdf-2']) == ['itfitness-htmltopdf-2']
+
+    def test_unknown_name_is_kept_as_given(self):
+        """Names which are neither a container nor a service are passed to docker untouched."""
+        manager = self._manager(['itfitness-app'], ['app'])
+
+        assert manager.resolve_containers(['whatever']) == ['whatever']
+
+    def test_multiple_names_are_deduplicated(self):
+        """Service name and its container name resolve to a single container."""
+        manager = self._manager(['itfitness-app', 'itfitness-db'], ['app', 'db'])
+
+        assert manager.resolve_containers(['app', 'itfitness-app', 'db']) == ['itfitness-app', 'itfitness-db']
+
+    @patch('mantis.managers.CLI.warning')
+    def test_resolve_container_returns_single_name(self, mock_warning):
+        """Commands operating on one container get one container name."""
+        manager = self._manager(['itfitness-app', 'itfitness-db'], ['app', 'db'])
+
+        assert manager.resolve_container('app') == 'itfitness-app'
+        mock_warning.assert_not_called()
+
+    @patch('mantis.managers.CLI.warning')
+    def test_resolve_container_warns_on_multiple_matches(self, mock_warning):
+        """A scaled service picks the first container and warns about the rest."""
+        manager = self._manager(['itfitness-app-1', 'itfitness-app-2'], ['app'])
+
+        assert manager.resolve_container('app') == 'itfitness-app-1'
+        mock_warning.assert_called_once()
+
+    def test_resolve_container_accepts_prefetched_containers(self):
+        """Callers which already listed containers do not trigger another docker call."""
+        manager = self._manager([], ['app'])
+        manager.get_containers = lambda *args, **kwargs: pytest.fail('containers listed again')
+
+        assert manager.resolve_container('app', ['itfitness-app']) == 'itfitness-app'
