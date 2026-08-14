@@ -1,5 +1,12 @@
 # Release notes
 
+## v22.4.0 (2026-08-14)
+- `push` and `pull` pass `--quiet` to compose when stdout is not a terminal. Layer progress is
+  meant to be repainted in place; redirected to a log file or a CI pipe, docker prints every
+  progress event on its own line instead, so a single image buries the run in hundreds of
+  `<layer-id>  <bytes>/<bytes>` lines. On a terminal nothing changes. Errors and the final
+  result are not progress and still print.
+
 ## v22.3.0 (2026-08-06)
 - commands taking a container (`logs`, `healthcheck`, `bash`, `sh`, `exec`, `exec-it`) accept a
   service name too, so `logs app` reads `<project>-app`. An exact container name keeps the highest
