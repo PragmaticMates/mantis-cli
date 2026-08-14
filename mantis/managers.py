@@ -521,6 +521,16 @@ class AbstractManager(object):
         except OSError as e:
             CLI.error(f"{error_message}: {e}")
 
+    @property
+    def quiet_flag(self) -> str:
+        """
+        Layer progress is meant to be repainted in place, which needs a terminal. Redirected
+        to a log file or a CI pipe, docker prints every progress event on its own line
+        instead -- hundreds per image -- so ask for no progress at all when there is nobody
+        to watch it move. Errors and the final result are not progress and still print.
+        """
+        return '' if sys.stdout.isatty() else '--quiet'
+
     def build_docker_command(self, command: str, use_connection: bool = True) -> str:
         docker_connection = self.docker_connection if use_connection else ''
 
@@ -1229,7 +1239,7 @@ class BaseManager(AbstractManager):
         CLI.info(f'Services = {params}')
 
         # Push using docker compose
-        self.docker_compose(f'push {params}', use_connection=False)
+        self.docker_compose(f'push {self.quiet_flag} {params}', use_connection=False)
 
     def pull(self, services: Optional[List[str]] = None) -> None:
         """
@@ -1240,7 +1250,7 @@ class BaseManager(AbstractManager):
         CLI.info(f'Services = {params}')
 
         # Pull using docker compose
-        self.docker_compose(f'pull {params}')
+        self.docker_compose(f'pull {self.quiet_flag} {params}')
 
     def upload(self) -> None:
         """

@@ -512,3 +512,38 @@ class TestResolveContainers:
         manager.get_containers = lambda *args, **kwargs: pytest.fail('containers listed again')
 
         assert manager.resolve_container('app', ['itfitness-app']) == 'itfitness-app'
+
+
+class TestQuietProgress:
+    """Layer progress is repainted in place, which only works on a terminal."""
+
+    @staticmethod
+    def _manager():
+        manager = BaseManager.__new__(BaseManager)
+        manager.commands = []
+        manager.docker_compose = lambda command, **kwargs: manager.commands.append(
+            ' '.join(command.split())
+        )
+        return manager
+
+    @patch('sys.stdout', new_callable=MagicMock)
+    def test_push_and_pull_are_quiet_off_a_terminal(self, mock_stdout):
+        """A log file or a CI pipe would otherwise get every progress event as its own line."""
+        mock_stdout.isatty.return_value = False
+        manager = self._manager()
+
+        manager.push()
+        manager.pull()
+
+        assert manager.commands == ['push --quiet', 'pull --quiet']
+
+    @patch('sys.stdout', new_callable=MagicMock)
+    def test_push_and_pull_keep_progress_on_a_terminal(self, mock_stdout):
+        """Interactively the progress is the point, so nothing changes."""
+        mock_stdout.isatty.return_value = True
+        manager = self._manager()
+
+        manager.push(['app'])
+        manager.pull(['app'])
+
+        assert manager.commands == ['push app', 'pull app']
