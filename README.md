@@ -168,10 +168,39 @@ alone: `ssh -L` to a unix socket succeeds even when nothing listens on the far e
 tunnel only proves itself once the daemon has replied. Set `enabled` explicitly once
 `check-tunnel` (below) confirms a server, and that round-trip goes away.
 
-Requirements on the server: the connecting user must be able to read the docker socket
-(typically membership in the `docker` group), and `AllowStreamLocalForwarding` must not
-be disabled — it defaults to `yes`. Whenever the tunnel cannot be used, mantis warns and
-falls back to a connection per docker command, so deployments keep working either way.
+Requirements on the server: it must be an OpenSSH server (see below), the connecting user
+must be able to read the docker socket (typically membership in the `docker` group), and
+`AllowStreamLocalForwarding` must not be disabled — it defaults to `yes`. Whenever the
+tunnel cannot be used, mantis warns and falls back to a connection per docker command, so
+deployments keep working either way.
+
+#### Servers that cannot forward a unix socket
+
+Forwarding one is `direct-streamlocal@openssh.com`, an OpenSSH extension, and SSH front-ends
+built on other implementations do not have it. [ssh2incus](https://ssh2incus.com), which
+routes connections into Incus instances by login name, rejects the channel outright:
+
+```
+channel 2: open failed: unknown channel type: unsupported channel type
+```
+
+No `remote_socket` helps there — the socket is never reached. What works instead is
+multiplexing the per-command connections, which needs no forward at all:
+
+```
+Host <server>
+    ControlMaster auto
+    ControlPath ~/.ssh/mantis-%r@%h:%p
+    ControlPersist 5m
+```
+
+Docker spawns a plain `ssh` per command and passes it no options of its own, so the ssh
+client reads this block by itself and every command reuses one connection. Measured against
+an ssh2incus server, that took a docker command from 0.29 s to 0.09 s. This is a weaker
+guarantee than the tunnel — sessions do count against sshd's `MaxSessions`, where forwarded
+channels do not — so on OpenSSH prefer the tunnel and keep multiplexing for the servers that
+cannot offer it. Set `"tunnel": {"enabled": false}` there, so no run pays for a probe that
+cannot succeed.
 
 The check ignores `tunnel.enabled`, so it answers "would this work" rather than "is this
 on" — use it before setting `enabled` to `true`:

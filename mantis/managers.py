@@ -136,6 +136,10 @@ class AbstractManager(object):
     def tunnel_config(self) -> Dict[str, Any]:
         return self.config.get('tunnel', {})
 
+    @property
+    def tunnel_remote_socket(self) -> str:
+        return self.tunnel_config.get('remote_socket', '/var/run/docker.sock')
+
     def ensure_tunnel(self) -> Optional[str]:
         """
         Returns path of a local unix socket forwarded to the remote docker socket,
@@ -187,8 +191,9 @@ class AbstractManager(object):
                     CLI.success(f'Tunnel is available (docker {version}). '
                                 f'Enable it in config to skip this check.')
                 else:
+                    reason, remedy = self.diagnose_tunnel()
                     CLI.warning(
-                        'Docker daemon did not answer through the SSH tunnel.\n'
+                        f'{reason}\n{remedy}\n'
                         'Falling back to a separate SSH connection per docker command.'
                     )
                     self.stop_tunnel()
@@ -212,7 +217,7 @@ class AbstractManager(object):
         Opens a single backgrounded SSH master forwarding the remote docker socket.
         Every docker command then reuses it instead of opening its own connection.
         """
-        remote_socket = self.tunnel_config.get('remote_socket', '/var/run/docker.sock')
+        remote_socket = self.tunnel_remote_socket
         ssh_options = self.tunnel_config.get('ssh_options', [])
 
         # unix socket paths are limited to ~104 characters, so prefer a shallow base
@@ -224,7 +229,9 @@ class AbstractManager(object):
         control_socket = str(Path(self._tunnel_dir) / 'ssh.ctl')
 
         command = [
-            'ssh', '-f', '-N', '-M',
+            # -v, because a channel the server refuses is only reported at verbose level,
+            # and the master writes to a file nobody reads unless something goes wrong
+            'ssh', '-f', '-N', '-M', '-v',
             '-S', control_socket,
             '-o', 'ExitOnForwardFailure=yes',
             '-o', 'ServerAliveInterval=30',
@@ -251,7 +258,7 @@ class AbstractManager(object):
 
         if result.returncode != 0:
             CLI.warning(
-                f'Failed to open SSH tunnel: {output_file.read_text().strip()}\n'
+                f'Failed to open SSH tunnel: {self.ssh_log_errors(output_file.read_text())}\n'
                 f'Falling back to a separate SSH connection per docker command.'
             )
             self.remove_tunnel_dir()
@@ -281,6 +288,62 @@ class AbstractManager(object):
             shutil.rmtree(self._tunnel_dir, ignore_errors=True)
             self._tunnel_dir = None
 
+    @staticmethod
+    def ssh_log_errors(log: str) -> str:
+        """Keeps the lines worth showing, dropping the debug chatter -v produces."""
+        return '\n'.join(line for line in log.splitlines() if not line.startswith('debug')).strip()
+
+    def read_tunnel_log(self) -> str:
+        """
+        Returns whatever the SSH master has written so far.
+
+        The master is backgrounded with -f and keeps writing to the same file long after it
+        exited successfully, so a channel it refuses later is only ever reported there.
+        """
+        if not self._tunnel_dir:
+            return ''
+
+        try:
+            return (Path(self._tunnel_dir) / 'ssh.log').read_text()
+        except OSError:
+            return ''
+
+    def diagnose_tunnel(self) -> Tuple[str, str]:
+        """
+        Explains why nothing answered through the forward, as (reason, remedy).
+
+        Opening the forward proves nothing: `ssh -L` to a unix socket succeeds even when the
+        far end is dead, so the reason only appears once a connection is made through it.
+        Reads the master's log, and therefore has to run before the tunnel is stopped.
+        """
+        log = self.read_tunnel_log()
+
+        if 'unknown channel type' in log:
+            return (
+                'The server refused to forward a unix socket: it does not implement '
+                'direct-streamlocal, so it is not an OpenSSH server. SSH front-ends such as '
+                'ssh2incus reject that channel outright, and no remote_socket can help.',
+                'Share one connection without a forward instead, by adding to ~/.ssh/config:\n'
+                f'    Host {self.host}\n'
+                '        ControlMaster auto\n'
+                '        ControlPath ~/.ssh/mantis-%r@%h:%p\n'
+                '        ControlPersist 5m\n'
+                'Every docker command then reuses that connection, and setting '
+                '"tunnel": {"enabled": false} skips this check from now on.',
+            )
+
+        if 'administratively prohibited' in log:
+            return (
+                'The server refused the forward.',
+                'Check "AllowStreamLocalForwarding" in its sshd_config. It defaults to "yes", '
+                'so it has been turned off.',
+            )
+
+        return (
+            f'The forward works, but the docker daemon did not answer on {self.tunnel_remote_socket}.',
+            f'Make sure user "{self.user}" can access it (usually by being in the "docker" group).',
+        )
+
     def check_tunnel(self) -> bool:
         """
         Verifies the SSH tunnel can be used for this connection, regardless of whether it
@@ -297,7 +360,7 @@ class AbstractManager(object):
         if not self.connection.startswith('ssh://'):
             CLI.error(f'Tunnel requires an ssh:// connection, but this one is "{self.connection}".')
 
-        remote_socket = self.tunnel_config.get('remote_socket', '/var/run/docker.sock')
+        remote_socket = self.tunnel_remote_socket
 
         if self.tunnel_config.get('enabled') is False:
             CLI.warning('Tunnel is disabled in config, checking anyway...')
@@ -317,12 +380,14 @@ class AbstractManager(object):
 
         version = self.probe_tunnel()
 
+        # the master's log goes away with the tunnel directory
+        reason, remedy = ('', '') if version else self.diagnose_tunnel()
+
         self.stop_tunnel()
 
         if not version:
             CLI.danger('Tunnel is NOT available.')
-            CLI.info(f'The forward works, but the docker daemon did not answer on {remote_socket}. '
-                     f'Make sure user "{self.user}" can access it (usually by being in the "docker" group).')
+            CLI.info(f'{reason}\n{remedy}')
             return False
 
         CLI.success(f'Tunnel is available (docker {version}).')

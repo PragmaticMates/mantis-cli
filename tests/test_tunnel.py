@@ -114,6 +114,8 @@ class TestTunnelEnabled:
         assert command[0] == 'ssh'
         # backgrounded master with a control socket we can close deterministically
         assert '-f' in command and '-N' in command and '-M' in command
+        # a refused channel is only reported at verbose level, and only in the log file
+        assert '-v' in command
         assert command[command.index('-S') + 1] == f'{ssh.dir}/ssh.ctl'
         # a refused forward must fail loudly instead of yielding a dead socket
         assert 'ExitOnForwardFailure=yes' in command
@@ -207,6 +209,17 @@ class TestTunnelAutoDetection:
 
         assert 'did not answer' in warning.call_args[0][0]
 
+    def test_fallback_says_why(self, ssh):
+        ssh.result.stdout = ''
+        ssh.result.output = 'channel 2: open failed: unknown channel type: unsupported channel type\n'
+        manager = _manager(tunnel={})
+
+        with patch('mantis.managers.CLI.warning') as warning:
+            manager.docker_connection
+
+        assert 'direct-streamlocal' in warning.call_args[0][0]
+        assert 'ControlMaster' in warning.call_args[0][0]
+
     def test_failed_detection_closes_the_tunnel(self, ssh):
         ssh.result.stdout = ''
         manager = _manager(tunnel={})
@@ -259,7 +272,7 @@ class TestTunnelAutoDetection:
 
 
 class TestCheckTunnel:
-    """check-tunnel tells apart a refused forward from a missing socket access."""
+    """check-tunnel tells apart the reasons a tunnel can be unusable."""
 
     def test_reports_available(self, ssh):
         ssh.result.stdout = '24.0.6\n'
@@ -310,6 +323,62 @@ class TestCheckTunnel:
 
         assert 'docker' in info.call_args[0][0]
         assert 'deploy' in info.call_args[0][0]
+
+    def test_debug_chatter_is_not_reported_to_the_user(self, ssh):
+        """The master runs with -v, so its log cannot be shown as it is."""
+        ssh.result.returncode = 255
+        ssh.result.output = (
+            'debug1: Connecting to example.com port 2222.\n'
+            'ssh: connect to host example.com port 2222: Connection refused\n'
+        )
+        manager = _manager(tunnel={'enabled': True})
+
+        with patch('mantis.managers.CLI.warning') as warning, patch('mantis.managers.CLI.danger'), \
+                patch('mantis.managers.CLI.info'):
+            manager.check_tunnel()
+
+        message = warning.call_args[0][0]
+
+        assert 'Connection refused' in message
+        assert 'debug1' not in message
+
+    def test_unsupported_channel_points_at_multiplexing(self, ssh):
+        """Not every SSH server is OpenSSH: some reject the forward channel outright."""
+        ssh.result.stdout = ''
+        ssh.result.output = 'channel 2: open failed: unknown channel type: unsupported channel type\n'
+        manager = _manager(tunnel={'enabled': True})
+
+        with patch('mantis.managers.CLI.danger'), patch('mantis.managers.CLI.info') as info:
+            assert manager.check_tunnel() is False
+
+        message = info.call_args[0][0]
+
+        # no remote_socket can fix this, so the advice must not be about the socket
+        assert 'direct-streamlocal' in message
+        assert 'ControlMaster' in message
+        assert 'docker' not in message.split('ControlMaster')[0]
+
+    def test_prohibited_forward_points_at_sshd_config(self, ssh):
+        ssh.result.stdout = ''
+        ssh.result.output = 'channel 2: open failed: administratively prohibited: open failed\n'
+        manager = _manager(tunnel={'enabled': True})
+
+        with patch('mantis.managers.CLI.danger'), patch('mantis.managers.CLI.info') as info:
+            assert manager.check_tunnel() is False
+
+        assert 'AllowStreamLocalForwarding' in info.call_args[0][0]
+
+    def test_reason_is_read_before_the_tunnel_is_removed(self, ssh):
+        """The log lives in the tunnel directory, which stop_tunnel deletes."""
+        ssh.result.stdout = ''
+        ssh.result.output = 'channel 2: open failed: unknown channel type: unsupported channel type\n'
+        manager = _manager(tunnel={'enabled': True})
+
+        with patch('mantis.managers.CLI.danger'), patch('mantis.managers.CLI.info') as info:
+            manager.check_tunnel()
+
+        assert not ssh.dir.exists()
+        assert 'direct-streamlocal' in info.call_args[0][0]
 
     def test_non_ssh_connection_is_an_error(self, ssh):
         manager = _manager(connection='context://production', tunnel={'enabled': True})
