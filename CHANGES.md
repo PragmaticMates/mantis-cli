@@ -1,5 +1,18 @@
 # Release notes
 
+## v22.5.0 (2026-08-31)
+- `check-tunnel` and the per-run fallback say *why* the tunnel is unusable, instead of always
+  blaming access to the docker socket. Opening the forward proves nothing — `ssh -L` to a unix
+  socket succeeds even when the far end is dead — so the reason only appears once a connection is
+  made through it, as a channel failure in the SSH master's log. That log is now read before the
+  tunnel is torn down, and tells apart a server that does not implement `direct-streamlocal`
+  (SSH front-ends such as ssh2incus reject the channel: no `remote_socket` can help), a forward
+  turned off in `sshd_config`, and a socket the user cannot reach.
+- a server that cannot forward a unix socket is pointed at `ControlMaster` in `~/.ssh/config`
+  instead. Docker passes the `ssh` it spawns no options of its own, so the ssh client picks that
+  block up by itself and every docker command reuses one connection — measured against an
+  ssh2incus server, 0.29 s down to 0.09 s per command, without a forward.
+
 ## v22.4.0 (2026-08-14)
 - `push` and `pull` pass `--quiet` to compose when stdout is not a terminal. Layer progress is
   meant to be repainted in place; redirected to a log file or a CI pipe, docker prints every
