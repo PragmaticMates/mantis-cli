@@ -1,5 +1,22 @@
 # Release notes
 
+## v23.0.0 (2026-09-21)
+- new `--config`/`-c` option, so the config file no longer has to be exported as `$MANTIS_CONFIG`
+  before every command. It takes a path, or a string identifying one of the project's mantis.json
+  files, matched case-insensitively as a substring of the path: in a repository holding one config
+  per tenant, `-c fitness` selects `configs/tenants/itfitness/mantis/mantis.json`. A substring
+  rather than a prefix, which is what environments use, because the part that tells configs apart
+  is rarely at the start of a path — `fitness` is not a prefix of `itfitness`. An ambiguous string
+  is an error listing the candidates, never a guess: quietly operating on the wrong tenant is the
+  one outcome worth ruling out. The option wins over `$MANTIS_CONFIG`.
+- new `--set`/`-s` option, repeatable, overriding a single config value for one run, as in
+  `--set tunnel.enabled=false`. Values are parsed as JSON first so their types survive — the string
+  "false" is truthy and would quietly do the opposite of what was asked — and anything that is not
+  valid JSON stays a string, which is what values such as `project_path=~/public_html/web/` need.
+  The dotted key is expanded and deep-merged, so overriding one key of a section keeps the rest of
+  it, and the merged result is what the config schema validates, so a typo in the key fails instead
+  of being ignored.
+
 ## v22.5.0 (2026-08-31)
 - `check-tunnel` and the per-run fallback say *why* the tunnel is unusable, instead of always
   blaming access to the docker socket. Opening the forward proves nothing — `ssh -L` to a unix
