@@ -24,7 +24,7 @@ from rich.table import Table
 from mantis.cryptography import Crypto
 from mantis.environment import Environment
 from mantis.helpers import CLI, import_string, merge_defaults, merge_json
-from mantis.config import find_config, load_config, check_config, load_template_config, DEFAULT_ENV_FOLDER
+from mantis.config import find_config, load_config, check_config, load_template_config, apply_config_overrides, DEFAULT_ENV_FOLDER
 
 
 class AbstractManager(object):
@@ -33,10 +33,11 @@ class AbstractManager(object):
     """
     environment_id = None
 
-    def __init__(self, config_file: str = None, environment_id: str = None, mode: str = 'remote', dry_run: bool = False, use_tunnel: bool = True):
+    def __init__(self, config_file: str = None, environment_id: str = None, mode: str = 'remote', dry_run: bool = False, use_tunnel: bool = True, config_overrides: list = None):
         self.environment_id = environment_id
         self.mode = mode
         self.dry_run = dry_run
+        self.config_overrides = config_overrides
 
         # SSH tunnel state (see ensure_tunnel)
         self.use_tunnel = use_tunnel
@@ -52,7 +53,10 @@ class AbstractManager(object):
         if not config_file:
             self.config_file = find_config(self.environment_id)
 
-        config = load_config(self.config_file)
+        # --set overrides are applied before init_config, so the merged result is what
+        # check_config validates: a typo in an overridden key fails the schema instead of
+        # being silently ignored
+        config = apply_config_overrides(load_config(self.config_file), self.config_overrides, announce=False)
 
         # init config
         self.init_config(config)
@@ -2246,10 +2250,13 @@ def resolve_environment(environment_id: Optional[str], config: Dict[str, Any], c
         CLI.error(f'Environment "{environment_id}" not found. Available: {", ".join(sorted(available_envs))}')
 
 
-def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False, commands: list = None, use_tunnel: bool = True) -> BaseManager:
+def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False, commands: list = None, use_tunnel: bool = True, config_hint: str = None, config_overrides: list = None) -> BaseManager:
     # config file
-    config_file = find_config(environment_id, commands=commands)
-    config = load_config(config_file)
+    config_file = find_config(environment_id, commands=commands, config_hint=config_hint)
+
+    # --set overrides are applied before the environment is resolved, so that overriding
+    # connections or the environment folder takes effect for that resolution too
+    config = apply_config_overrides(load_config(config_file), config_overrides)
 
     # Resolve environment prefix to full ID
     first_command = commands[0] if commands else None
@@ -2275,7 +2282,7 @@ def get_manager(environment_id: Optional[str], mode: str, dry_run: bool = False,
     class MantisManager(*[manager_class] + extension_classes):
         pass
 
-    manager = MantisManager(config_file=config_file, environment_id=environment_id, mode=mode, dry_run=dry_run, use_tunnel=use_tunnel)
+    manager = MantisManager(config_file=config_file, environment_id=environment_id, mode=mode, dry_run=dry_run, use_tunnel=use_tunnel, config_overrides=config_overrides)
 
     # set extensions data
     for extension, extension_params in extensions.items():

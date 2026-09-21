@@ -148,6 +148,30 @@ class TestSplitArgs:
         assert global_opts == ['-e', 'prod']
         assert cmd_groups == [['b'], ['p'], ['d']]
 
+    def test_config_option(self):
+        """Test -c option consumes its value."""
+        args = ['-c', 'fitness', '-e', 'local', 'up']
+        global_opts, cmd_groups = split_args(args)
+
+        assert global_opts == ['-c', 'fitness', '-e', 'local']
+        assert cmd_groups == [['up']]
+
+    def test_config_path_is_not_mistaken_for_command(self):
+        """A config path must be consumed as a value, not parsed as the command name."""
+        args = ['--config', 'configs/tenants/itfitness/mantis/mantis.json', '-e', 'local', 'up']
+        global_opts, cmd_groups = split_args(args)
+
+        assert global_opts == ['--config', 'configs/tenants/itfitness/mantis/mantis.json', '-e', 'local']
+        assert cmd_groups == [['up']]
+
+    def test_set_option_with_chaining(self):
+        """Test --set values survive command chaining."""
+        args = ['-c', 'fitness', '-s', 'tunnel.enabled=false', 'build', '+', 'push']
+        global_opts, cmd_groups = split_args(args)
+
+        assert global_opts == ['-c', 'fitness', '-s', 'tunnel.enabled=false']
+        assert cmd_groups == [['build'], ['push']]
+
 
 class TestParseGlobalOptions:
     """Tests for parse_global_options function (used only for multi-command chaining)."""
@@ -197,6 +221,34 @@ class TestParseGlobalOptions:
         assert opts['env'] == 'prod'
         assert opts['mode'] == 'ssh'
         assert opts['dry_run'] is True
+
+    def test_config_short(self):
+        """Test -c option."""
+        opts = parse_global_options(['-c', 'fitness'])
+
+        assert opts['config'] == 'fitness'
+
+    def test_config_long(self):
+        """Test --config option."""
+        opts = parse_global_options(['--config', 'configs/tenants/hq/mantis/mantis.json'])
+
+        assert opts['config'] == 'configs/tenants/hq/mantis/mantis.json'
+
+    def test_set_is_repeatable(self):
+        """Test every --set occurrence is collected."""
+        opts = parse_global_options([
+            '-s', 'tunnel.enabled=false',
+            '--set', 'compose.command=docker compose',
+        ])
+
+        assert opts['set'] == ['tunnel.enabled=false', 'compose.command=docker compose']
+
+    def test_config_and_set_defaults(self):
+        """Test defaults: no config, and an empty list rather than None for --set."""
+        opts = parse_global_options(['-e', 'prod'])
+
+        assert opts['config'] is None
+        assert opts['set'] == []
 
     def test_defaults(self):
         """Test default values."""

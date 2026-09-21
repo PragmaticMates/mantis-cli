@@ -7,11 +7,13 @@ from pathlib import Path
 from mantis.config import (
     ConfigAnalysis,
     analyze_config,
+    apply_config_overrides,
     env_matches_for_command,
     env_matches_all_commands,
     get_valid_envs_for_commands,
     format_env_list,
     get_config_dir,
+    resolve_config_hint,
     SECRETS_COMMANDS,
     DEFAULT_ENV_FOLDER,
 )
@@ -386,3 +388,110 @@ class TestAnalyzeConfig:
         assert analysis.is_single_connection is False
         assert 'local' in analysis.folder_envs
         assert 'test' in analysis.folder_envs
+
+
+class TestResolveConfigHint:
+    """Tests for resolving the value of --config."""
+
+    def _make_configs(self, tmp_path, *names):
+        for name in names:
+            folder = tmp_path / 'configs' / 'tenants' / name / 'mantis'
+            folder.mkdir(parents=True)
+            (folder / 'mantis.json').write_text('{}')
+
+    def test_existing_path_is_used_as_given(self, tmp_path, monkeypatch):
+        """A full path keeps working, so existing callers are unaffected."""
+        self._make_configs(tmp_path, 'itfitness')
+        monkeypatch.chdir(tmp_path)
+        path = 'configs/tenants/itfitness/mantis/mantis.json'
+
+        assert resolve_config_hint(path) == path
+
+    def test_substring_match(self, tmp_path, monkeypatch):
+        """'fitness' is not a prefix of 'itfitness', so matching has to be a substring."""
+        self._make_configs(tmp_path, 'itfitness', 'onlinetest')
+        monkeypatch.chdir(tmp_path)
+
+        assert resolve_config_hint('fitness').endswith('itfitness/mantis/mantis.json')
+
+    def test_match_is_case_insensitive(self, tmp_path, monkeypatch):
+        """Test matching ignores case."""
+        self._make_configs(tmp_path, 'itfitness', 'onlinetest')
+        monkeypatch.chdir(tmp_path)
+
+        assert resolve_config_hint('FITNESS').endswith('itfitness/mantis/mantis.json')
+
+    def test_ambiguous_hint_is_an_error(self, tmp_path, monkeypatch):
+        """An ambiguous hint must fail rather than pick a tenant at random."""
+        self._make_configs(tmp_path, 'itfitness', 'onlinetest')
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(SystemExit):
+            resolve_config_hint('tenants')
+
+    def test_unknown_hint_is_an_error(self, tmp_path, monkeypatch):
+        """Test a hint matching nothing fails."""
+        self._make_configs(tmp_path, 'itfitness')
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(SystemExit):
+            resolve_config_hint('nosuchtenant')
+
+
+class TestApplyConfigOverrides:
+    """Tests for --set overrides."""
+
+    def test_no_overrides_returns_config_unchanged(self):
+        """Test that no overrides leave the config alone."""
+        config = {'tunnel': {'enabled': True}}
+
+        assert apply_config_overrides(config, None) == config
+        assert apply_config_overrides(config, []) == config
+
+    def test_boolean_is_parsed_as_json(self):
+        """"false" has to become a boolean: as a string it would be truthy."""
+        config = {'tunnel': {'enabled': True}}
+
+        result = apply_config_overrides(config, ['tunnel.enabled=false'])
+
+        assert result['tunnel']['enabled'] is False
+
+    def test_deep_merge_keeps_siblings(self):
+        """Overriding one key of a section must not drop the rest of it."""
+        config = {'compose': {'command': 'docker-compose', 'folder': '<MANTIS>/../compose'}}
+
+        result = apply_config_overrides(config, ['compose.command=docker compose'])
+
+        assert result['compose']['command'] == 'docker compose'
+        assert result['compose']['folder'] == '<MANTIS>/../compose'
+
+    def test_non_json_value_stays_a_string(self):
+        """Test values that are not valid JSON are kept verbatim."""
+        result = apply_config_overrides({}, ['project_path=~/public_html/web/'])
+
+        assert result['project_path'] == '~/public_html/web/'
+
+    def test_list_value(self):
+        """Test a JSON list is parsed as a list."""
+        config = {'zero_downtime': ['app']}
+
+        result = apply_config_overrides(config, ['zero_downtime=[]'])
+
+        assert result['zero_downtime'] == []
+
+    def test_overrides_are_applied_in_order(self):
+        """Test several overrides accumulate instead of replacing each other."""
+        result = apply_config_overrides({}, ['a.b=1', 'a.c=2'])
+
+        assert result['a'] == {'b': 1, 'c': 2}
+
+    def test_only_the_first_equals_sign_separates(self):
+        """Test a value may itself contain '='."""
+        result = apply_config_overrides({}, ['build.args=FOO=bar'])
+
+        assert result['build']['args'] == 'FOO=bar'
+
+    def test_missing_equals_sign_is_an_error(self):
+        """Test a malformed override fails instead of being ignored."""
+        with pytest.raises(SystemExit):
+            apply_config_overrides({}, ['tunnel.enabled'])

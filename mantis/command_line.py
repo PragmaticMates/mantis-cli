@@ -73,7 +73,7 @@ def split_args(args: List[str]) -> Tuple[List[str], List[List[str]]]:
         if arg.startswith('-'):
             global_opts.append(arg)
             # Handle options with values: -e prod, --env prod
-            if arg in ('-e', '--env', '-m', '--mode') and i + 1 < len(first_group):
+            if arg in ('-e', '--env', '-m', '--mode', '-c', '--config', '-s', '--set') and i + 1 < len(first_group):
                 i += 1
                 global_opts.append(first_group[i])
             i += 1
@@ -100,6 +100,8 @@ def parse_global_options(global_opts: List[str]) -> dict:
         'mode': 'remote',
         'dry_run': False,
         'use_tunnel': True,
+        'config': None,
+        'set': [],
     }
 
     i = 0
@@ -110,6 +112,13 @@ def parse_global_options(global_opts: List[str]) -> dict:
             i += 2
         elif opt in ('-m', '--mode') and i + 1 < len(global_opts):
             result['mode'] = global_opts[i + 1]
+            i += 2
+        elif opt in ('-c', '--config') and i + 1 < len(global_opts):
+            result['config'] = global_opts[i + 1]
+            i += 2
+        elif opt in ('-s', '--set') and i + 1 < len(global_opts):
+            # repeatable: every occurrence is collected
+            result['set'].append(global_opts[i + 1])
             i += 2
         elif opt in ('-n', '--dry-run'):
             result['dry_run'] = True
@@ -189,7 +198,10 @@ def run():
     all_commands = [group[0] for group in cmd_groups if group]
     state._mode = opts['mode']
     state._dry_run = opts['dry_run']
-    state._manager = get_manager(opts['env'], opts['mode'], dry_run=opts['dry_run'], commands=all_commands, use_tunnel=opts['use_tunnel'])
+    state._manager = get_manager(
+        opts['env'], opts['mode'], dry_run=opts['dry_run'], commands=all_commands,
+        use_tunnel=opts['use_tunnel'], config_hint=opts['config'], config_overrides=opts['set'],
+    )
 
     # Get Click app from Typer
     click_app = typer.main.get_command(app)

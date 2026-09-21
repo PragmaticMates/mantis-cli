@@ -108,8 +108,99 @@ def format_env_list(envs: list, environment_id: Optional[str]) -> str:
     return ', '.join(colored)
 
 
-def find_config(environment_id: Optional[str] = None, commands: Optional[list] = None) -> str:
+def resolve_config_hint(config_hint: str) -> str:
+    """Resolve the value of --config to a config file.
+
+    A path to an existing file is used as given, so a full path keeps working. Anything
+    else is treated as a string identifying one of the project's mantis.json files and is
+    matched case-insensitively as a substring of the path, so `-c fitness` selects
+    configs/tenants/itfitness/mantis/mantis.json.
+
+    Substring rather than prefix (which is what environments use), because the part of a
+    path that tells configs apart is rarely at its start: 'fitness' is not a prefix of
+    'itfitness'. An ambiguous hint is an error listing the candidates, never a guess -
+    silently operating on the wrong tenant is the one outcome worth ruling out.
+    """
+    if Path(config_hint).is_file():
+        return config_hint
+
+    paths = sorted([str(p) for p in Path('.').rglob('mantis.json')])
+
+    if not paths:
+        CLI.error(f'Config "{config_hint}" not found: no mantis.json file in the current directory tree.')
+
+    matches = [path for path in paths if config_hint.lower() in path.lower()]
+
+    if not matches:
+        CLI.error(
+            f'Config "{config_hint}" not found. '
+            f'Available: {", ".join(get_config_dir(path) for path in paths)}'
+        )
+
+    if len(matches) > 1:
+        CLI.error(
+            f'Config "{config_hint}" is ambiguous. '
+            f'Matching: {", ".join(get_config_dir(path) for path in matches)}'
+        )
+
+    CLI.info(f'Mantis config selected by --config "{config_hint}": {matches[0]}')
+    return matches[0]
+
+
+def apply_config_overrides(config: dict, overrides: Optional[list], announce: bool = True) -> dict:
+    """Apply --set overrides on top of a loaded config.
+
+    Values are parsed as JSON first so their types survive: `tunnel.enabled=false` has to
+    become a boolean, because the string "false" is truthy and would quietly do the
+    opposite of what was asked. Anything that is not valid JSON stays a string, which is
+    what values such as `project_path=~/public_html/web/` need.
+
+    The dotted key is expanded into a nested dict and deep-merged, so overriding one key
+    of a section keeps the rest of that section intact.
+    """
+    if not overrides:
+        return config
+
+    # imported here to keep mantis.config free of import cycles
+    from mantis.helpers import merge_defaults
+
+    for override in overrides:
+        if '=' not in override:
+            CLI.error(f'Invalid --set "{override}". Expected format: key.subkey=value')
+
+        key, _, raw_value = override.partition('=')
+        key = key.strip()
+
+        if not key:
+            CLI.error(f'Invalid --set "{override}": missing key.')
+
+        try:
+            value = json.loads(raw_value)
+        except JSONDecodeError:
+            value = raw_value
+
+        nested = value
+        for part in reversed(key.split('.')):
+            nested = {part: nested}
+
+        config = merge_defaults(config, nested)
+
+        # the overrides are applied twice per run - once to resolve the environment and
+        # once when the manager loads the config for itself - so only the first pass
+        # reports them, or every override would be printed twice
+        if announce:
+            CLI.info(f'Config override: {key} = {value!r}')
+
+    return config
+
+
+def find_config(environment_id: Optional[str] = None, commands: Optional[list] = None,
+                config_hint: Optional[str] = None) -> str:
     """Find and select a mantis config file."""
+    # An explicit --config wins over everything, including $MANTIS_CONFIG
+    if config_hint:
+        return resolve_config_hint(config_hint)
+
     # Check environment variable first
     env_path = os.environ.get('MANTIS_CONFIG', None)
     if env_path and env_path != '':
