@@ -39,12 +39,22 @@ EPILOG = """\
   mantis COMMAND --help
 """
 
+CONTEXT_SETTINGS = {"max_content_width": 120}
+
+# Commands whose arguments are a command line for some other tool (docker, compose, Django)
+# opt into this. Click otherwise reads anything starting with a dash as an option of its own
+# and refuses it, which is why `manage check --deploy` used to have to be written
+# `manage check -- --deploy`. Options the command declares itself are still its own: they are
+# known to the parser and taken wherever they appear, and `--` remains the way to force one
+# of those through to the wrapped tool.
+PASSTHROUGH_CONTEXT_SETTINGS = {**CONTEXT_SETTINGS, "ignore_unknown_options": True}
+
 app = typer.Typer(
     chain=True,
     no_args_is_help=True,
     rich_markup_mode="rich",
     epilog=EPILOG,
-    context_settings={"max_content_width": 120},
+    context_settings=CONTEXT_SETTINGS,
     add_completion=True,
 )
 
@@ -134,6 +144,7 @@ def command(
     shortcut: str = None,
     panel: str = None,
     no_env: bool = False,
+    passthrough: bool = False,
 ):
     """
     Enhanced command decorator with shortcut and no_env support.
@@ -143,6 +154,8 @@ def command(
         shortcut: Short alias for the command
         panel: Rich help panel name
         no_env: If True, command doesn't require environment
+        passthrough: If True, unknown options are passed on as arguments instead of being
+            rejected, for commands that forward a command line to another tool
     """
     def decorator(func: Callable) -> Callable:
         cmd_name = name or func.__name__.replace('_', '-')
@@ -162,11 +175,13 @@ def command(
         kwargs = {}
         if panel:
             kwargs['rich_help_panel'] = panel
+        if passthrough:
+            kwargs['context_settings'] = PASSTHROUGH_CONTEXT_SETTINGS
         registered = app.command(cmd_name, **kwargs)(wrapper)
 
         # Defer shortcut registration (to appear at end of help)
         if shortcut:
-            _DEFERRED_SHORTCUTS.append((shortcut, cmd_name, wrapper))
+            _DEFERRED_SHORTCUTS.append((shortcut, cmd_name, wrapper, passthrough))
 
         return registered
 
@@ -175,8 +190,16 @@ def command(
 
 def register_shortcuts():
     """Register all deferred shortcuts. Call after all commands are imported."""
-    for shortcut, cmd_name, wrapper in _DEFERRED_SHORTCUTS:
-        app.command(shortcut, rich_help_panel="Shortcuts", help=f"Alias for '{cmd_name}'")(wrapper)
+    for shortcut, cmd_name, wrapper, passthrough in _DEFERRED_SHORTCUTS:
+        kwargs = {'rich_help_panel': "Shortcuts", 'help': f"Alias for '{cmd_name}'"}
+
+        # a shortcut is registered as a command of its own, so it needs the passthrough
+        # settings too - otherwise `mantis up --build` would work and `mantis u --build`
+        # would not
+        if passthrough:
+            kwargs['context_settings'] = PASSTHROUGH_CONTEXT_SETTINGS
+
+        app.command(shortcut, **kwargs)(wrapper)
 
 
 def version_callback(value: bool):

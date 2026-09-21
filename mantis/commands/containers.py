@@ -86,7 +86,7 @@ def sh(
     state.sh(container)
 
 
-@command(name="exec", panel="Containers")
+@command(name="exec", panel="Containers", passthrough=True)
 def exec_cmd(
     container: str = typer.Argument(..., help="Container or service name"),
     cmd: List[str] = typer.Argument(..., help="Command to execute"),
@@ -95,7 +95,7 @@ def exec_cmd(
     state.exec(container=container, cmd=cmd)
 
 
-@command(name="exec-it", panel="Containers")
+@command(name="exec-it", panel="Containers", passthrough=True)
 def exec_it(
     container: str = typer.Argument(..., help="Container or service name"),
     cmd: List[str] = typer.Argument(..., help="Command to execute"),

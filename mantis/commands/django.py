@@ -12,7 +12,7 @@ def shell():
     state.shell()
 
 
-@command(panel="Django")
+@command(panel="Django", passthrough=True)
 def manage(
     cmd: str = typer.Argument(..., help="Django management command"),
     args: Optional[List[str]] = typer.Argument(None, help="Command arguments"),

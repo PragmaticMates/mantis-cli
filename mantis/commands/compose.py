@@ -6,7 +6,7 @@ import typer
 from mantis.app import command, state
 
 
-@command(panel="Compose")
+@command(panel="Compose", passthrough=True)
 def up(
     params: Optional[List[str]] = typer.Argument(None, help="Compose up parameters"),
 ):
@@ -14,7 +14,7 @@ def up(
     state.up(params=params)
 
 
-@command(panel="Compose")
+@command(panel="Compose", passthrough=True)
 def down(
     params: Optional[List[str]] = typer.Argument(None, help="Compose down parameters"),
 ):
@@ -22,7 +22,7 @@ def down(
     state.down(params=params)
 
 
-@command(name="run", panel="Compose")
+@command(name="run", panel="Compose", passthrough=True)
 def run_cmd(
     params: List[str] = typer.Argument(..., help="Compose run parameters"),
     rm: bool = typer.Option(False, "--rm", help="Remove container after run"),
