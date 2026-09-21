@@ -1,5 +1,18 @@
 # Release notes
 
+## v24.0.0 (2026-09-21)
+- commands that forward a command line to another tool - `up`, `down`, `run`, `exec`, `exec-it`
+  and `manage` - now accept unknown options instead of refusing them, so `manage check --deploy`,
+  `manage migrate --fake` and `up --build` work as written. Click reads anything starting with a
+  dash as an option of its own, so these used to fail with "No such option" and had to be spelled
+  with a `--` separator, and `up --build` had no spelling that worked at all. Options a command
+  declares itself are still its own and are taken wherever they appear, so `--if-healthy`,
+  `--healthy-timeout` and `--rm` keep their meaning, and `--` remains the way to force one of
+  those through to the wrapped tool.
+- commands taking container or service names - `stop`, `start`, `kill`, `remove`, `build`, `pull`,
+  `push` - keep rejecting unknown options on purpose: an unrecognised `--flag` there is a typo,
+  and passing it on would silently send docker looking for a service by that name.
+
 ## v23.0.0 (2026-09-21)
 - new `--config`/`-c` option, so the config file no longer has to be exported as `$MANTIS_CONFIG`
   before every command. It takes a path, or a string identifying one of the project's mantis.json
